@@ -2,11 +2,20 @@
 
 MatchRadar is a dark, compact Windows football widget built with Tauri 2, Rust and React. It follows Premier League scores and fixtures, keeps a local cache, and can stay in the system tray. The browser development view uses clearly marked sample data; the desktop app defaults to ESPN data.
 
-**Status:** This repository is an implementation in progress, not a verified 1.0 release. The Windows installer and native integration have not been built or tested in the current environment. See limitations below.
+**Status:** This repository is an implementation in progress, not a verified 1.0 release. Windows CI built an NSIS installer and passed the automated checks on commit `98b37df`; the installer and desktop integration have not yet been tested interactively. See limitations below.
 
 ## Requirements
 
-Windows 10/11, Node.js and npm, Rust (stable), Microsoft C++ build tools, and WebView2. Follow the [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/).
+To run the packaged app, use 64-bit Windows 10/11 and WebView2. Building from source also requires Node.js and npm, Rust (stable), and Microsoft C++ build tools. Follow the [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/).
+
+## Install and test the CI build
+
+1. Sign in to GitHub with access to this private repository. Open the [successful Windows run](https://github.com/awishtodiexz/MatchRadar/actions/runs/40518537386) and download **matchradar-windows-installer** from its Artifacts section. Artifacts expire; choose a later successful Windows run if it is no longer available.
+2. Extract the ZIP and run `MatchRadar_1.0.0_x64-setup.exe`. Follow the installer prompts and launch MatchRadar. This build has not been tested interactively; Windows may show a reputation prompt for an unsigned installer.
+3. Check the dark panel against light and dark wallpapers, and at 100%, 125%, and 150% display scaling. Check text, badges, scrolling, keyboard focus, resizing, dragging, and reduced motion. Use Settings → App → Demo data for an offline visual check; verify the footer says **DEMO DATA**.
+4. Hide the widget and restore it from the tray; open Settings from the tray and quit explicitly. Restart and check favorites, appearance, window position and size. Test launch at sign-in and single-instance behavior.
+5. With demo mode disabled, check live fixtures and refresh, then disconnect the network and confirm cached data and the offline indicator. Check kickoff reminders, start alerts, goal alerts and the test notification with Windows notification permissions enabled. These behaviors are not verified by the CI build.
+6. Test sleep/resume, a disconnected monitor, and uninstalling the app. Record any failures before considering the application ready for release.
 
 ## Development
 
@@ -35,7 +44,7 @@ ESPN's public JSON feed is unofficial and undocumented; format, access, rights a
 
 ## Known limitations
 
-- Native compilation, installer, notifications, tray, startup and multi-monitor restoration require Windows verification. The current environment lacks Rust.
+- CI compiled the native app and produced an installer, but installation, notifications, tray, startup, display scaling and multi-monitor restoration require interactive Windows verification.
 - ESPN date-range support could not be verified directly from this environment. The adapter requests the next 14 days; validate actual responses and coverage before relying on it.
 - Match events and statistics are not integrated. Demo fixtures are static, and demo notification transitions are not simulated.
 - Window off-screen recovery, sleep/resume detection, and HTTP-date `Retry-After` are not implemented. Notification deduplication and score correction handling need further validation.
