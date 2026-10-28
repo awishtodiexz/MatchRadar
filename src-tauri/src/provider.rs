@@ -3,6 +3,7 @@ use chrono::{DateTime, Duration, NaiveDate, Utc};
 use serde_json::Value;
 use std::time::Duration as StdDuration;
 
+#[derive(Debug)]
 pub struct FetchError { pub message:String, pub retry_after:Option<u64> }
 fn field<'a>(v:&'a Value,key:&str)-> &'a str { v.get(key).and_then(Value::as_str).unwrap_or("") }
 fn team(side:&Value)->Option<Team> { let t=side.get("team")?; let id=field(t,"id"); let name=field(t,"displayName"); if id.is_empty()||name.is_empty(){return None} let logo=field(t,"logo"); Some(Team{id:id.into(),name:name.into(),short:field(t,"abbreviation").into(),logo:if logo.starts_with("https://a.espncdn.com/"){Some(logo.into())}else{None}}) }
