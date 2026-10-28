@@ -15,7 +15,7 @@ describe('widget', () => {
     render(<App/>);
     await screen.findByText('DEMO DATA');
     fireEvent.click(screen.getByRole('button', {name:'Settings'}));
-    fireEvent.click(screen.getByLabelText(/Following only/));
+    fireEvent.click(screen.getByRole('checkbox', {name:/Following only/}));
     fireEvent.click(screen.getByRole('button', {name:'Back'}));
     await waitFor(() => expect(screen.queryByText('Brighton & Hove Albion')).toBeNull());
   });

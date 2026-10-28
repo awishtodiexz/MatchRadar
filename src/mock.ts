@@ -1,8 +1,7 @@
-import type { Match, Settings, Snapshot, Team } from './types';
-export const clubs: Team[] = [
-  ['359','Arsenal','ARS'],['363','Chelsea','CHE'],['364','Liverpool','LIV'],['382','Manchester City','MCI'],['360','Manchester United','MUN'],['367','Tottenham Hotspur','TOT'],['362','Everton','EVE'],['361','Aston Villa','AVL'],['331','Newcastle United','NEW'],['337','Brighton & Hove Albion','BHA'],['379','Wolverhampton Wanderers','WOL'],['371','West Ham United','WHU'],['384','Crystal Palace','CRY'],['376','Fulham','FUL'],['393','Brentford','BRE'],['349','Nottingham Forest','NFO'],['357','Leeds United','LEE'],['366','Sunderland','SUN'],['306','Burnley','BUR'],['3492','Bournemouth','BOU']
-].map(([id,name,short]) => ({id,name,short}));
-export const defaults: Settings = { favorites: ['359','363','364','382','360','367'], followedOnly: false, compact: false, alwaysOnTop: true, reducedMotion: false, opacity: 96, reminders: true, reminderMinutes: 15, starts: true, goals: false, mock: false };
+import type { Match, Settings, Snapshot } from './types';
+import { clubs } from './teams';
+export { clubs } from './teams';
+export const defaults: Settings = { favorites: ['359','363','364','382','360','367'], followedOnly: false, compact: false, alwaysOnTop: true, reducedMotion: false, opacity: 96, theme: 'dark', reminders: true, reminderMinutes: 15, starts: true, goals: false, mock: false };
 const time = (hours: number) => new Date(Date.now() + hours * 3600000).toISOString();
 export const mockMatches: Match[] = [
   {id:'demo-1',home:clubs[0],away:clubs[1],homeScore:2,awayScore:1,kickoff:time(-1),status:'live',detail:"67′",competition:'Premier League'},

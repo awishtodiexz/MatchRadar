@@ -2,13 +2,15 @@
 
 MatchRadar is a Windows 10/11 football desktop widget using Tauri 2, Rust,
 React, TypeScript, Vite, Tailwind CSS, and Zustand. Preserve its small, premium
-dark interface and stay within the requested v1.0 scope.
+dark-by-default interface with optional light mode and stay within the requested
+v1.0 scope.
 
 ## Architecture and repository map
 
 - `src/App.tsx`: widget, settings, details, and native event subscriptions.
 - `src/store.ts`: Zustand snapshots and native commands; `src/types.ts`: UI models.
 - `src/fixtures.ts`: grouping and ordering; `src/mock.ts`: browser demo data.
+- `src/teams.ts`: supported club IDs and validated crest candidates.
 - `src/styles.css`: shared visual styling.
 - `src-tauri/src/main.rs`: commands, polling, persistence, notifications, and lifecycle.
 - `src-tauri/src/provider.rs`: ESPN requests, normalization, merging, and tests.
@@ -62,14 +64,16 @@ infer completion from old roadmap text, configured plugins, or a passing build.
 
 ## Premium UI and accessibility
 
-- Preserve branding, rounded surfaces, dark glass, and the widget-first layout.
+- Preserve branding, rounded surfaces, dark-by-default glass, and the widget-first layout.
   Do not add dashboard chrome or remote scripts.
-- Reuse existing colors: `#090B12`, `#111621`, `#19212D`, `#F5F7FA`, `#94A3B8`,
-  and lime `#B8FF65`. Keep spacing consistent and scores tabular.
+- Reuse semantic theme variables in `src/styles.css`. Preserve charcoal/lime in
+  dark mode and pale surfaces/dark green accents in light mode. Keep spacing
+  consistent and scores tabular; do not duplicate layouts for each theme.
 - Inspect at 390px and the configured 320px minimum width. Keep headers compact,
   controls accessible, and one intended content scroll region per view; avoid
   nested Teams scrollbars and document overflow.
 - Keep text readable over bright wallpapers, including settings and details.
+  Inspect both themes at 70% and 100% panel opacity; fade backgrounds, never text.
   Use proportionate crests with initials-based fallbacks, not emojis.
 - Preserve keyboard navigation, visible focus, accessible names, and reduced
   motion. Avoid continuous decorative animation.
