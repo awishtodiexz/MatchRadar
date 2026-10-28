@@ -45,7 +45,7 @@ ESPN's public JSON feed is unofficial and undocumented; format, access, rights a
 ## Known limitations
 
 - CI compiled the native app and produced an installer, but installation, notifications, tray, startup, display scaling and multi-monitor restoration require interactive Windows verification.
-- ESPN date-range support could not be verified directly from this environment. The adapter requests the next 14 days; validate actual responses and coverage before relying on it.
+- ESPN's unofficial responses can change. Single-day and monthly responses were observed on 28 October 2026; verify live updates and fixture coverage in the packaged app.
 - Match events and statistics are not integrated. Demo fixtures are static, and demo notification transitions are not simulated.
 - Window off-screen recovery, sleep/resume detection, and HTTP-date `Retry-After` are not implemented. Notification deduplication and score correction handling need further validation.
 - No release performance measurements or visual screenshots are available. Do not infer performance claims from the design.

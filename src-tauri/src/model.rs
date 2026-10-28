@@ -11,4 +11,4 @@ pub struct Settings { pub favorites:Vec<String>, pub followed_only:bool, pub com
 impl Default for Settings { fn default()->Self { Self { favorites:["359","363","364","382","360","367"].iter().map(|s|s.to_string()).collect(), followed_only:false,compact:false,always_on_top:true,reduced_motion:false,opacity:96,reminders:true,reminder_minutes:15,starts:true,goals:false,mock:false } } }
 #[derive(Clone,Debug,Default,Serialize,Deserialize)]
 #[serde(default,rename_all="camelCase")]
-pub struct Snapshot { pub matches:Vec<Match>, pub updated_at:Option<String>, pub error:Option<String>, pub settings:Settings, pub sent_notifications:Vec<String> }
+pub struct Snapshot { pub matches:Vec<Match>, pub updated_at:Option<String>, pub fixture_updated_at:Option<String>, pub error:Option<String>, pub refreshing:bool, pub settings:Settings, pub sent_notifications:Vec<String> }

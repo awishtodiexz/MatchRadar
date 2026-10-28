@@ -3,22 +3,22 @@ mod model;
 mod provider;
 use chrono::{DateTime, Utc};
 use model::{Settings, Snapshot};
-use std::{collections::HashSet, fs, path::PathBuf, sync::Mutex, time::Duration};
+use std::{collections::HashSet, fs, io::Write, path::PathBuf, sync::{Mutex, atomic::{AtomicBool, Ordering}}, time::Duration};
 use tauri::{Emitter, Manager, menu::{Menu, MenuItem}, tray::TrayIconBuilder};
 use tauri_plugin_notification::NotificationExt;
 
-struct State { snapshot: Mutex<Snapshot>, path: PathBuf, wake: tokio::sync::Notify, refresh_lock: tokio::sync::Mutex<()> }
+struct State { snapshot: Mutex<Snapshot>, path: PathBuf, wake: tokio::sync::Notify, force_fixtures: AtomicBool, refresh_lock: tokio::sync::Mutex<()> }
 fn persist(state: &State) { if let Ok(snapshot) = state.snapshot.lock() { if let Ok(data) = serde_json::to_vec(&*snapshot) { let _ = fs::write(&state.path, data); } } }
 #[tauri::command]
 fn get_snapshot(state: tauri::State<'_, State>) -> Result<Snapshot,String> { state.snapshot.lock().map(|s|s.clone()).map_err(|e|e.to_string()) }
 #[tauri::command]
 fn save_settings(settings: Settings, app: tauri::AppHandle, state: tauri::State<'_, State>) -> Result<(),String> {
     if let Some(window)=app.get_webview_window("main") { let _=window.set_always_on_top(settings.always_on_top); }
-    { let mut snapshot=state.snapshot.lock().map_err(|e|e.to_string())?; if snapshot.settings.mock != settings.mock { snapshot.matches.clear(); snapshot.updated_at=None; snapshot.error=None; } snapshot.settings=settings; }
+    { let mut snapshot=state.snapshot.lock().map_err(|e|e.to_string())?; if snapshot.settings.mock != settings.mock { snapshot.matches.clear(); snapshot.updated_at=None; snapshot.fixture_updated_at=None; snapshot.error=None; state.force_fixtures.store(true,Ordering::Relaxed); } snapshot.settings=settings; }
     persist(&state); state.wake.notify_one(); Ok(())
 }
 #[tauri::command]
-fn refresh(state: tauri::State<'_, State>) { state.wake.notify_one(); }
+fn refresh(app:tauri::AppHandle, state: tauri::State<'_, State>) { state.force_fixtures.store(true,Ordering::Relaxed); if let Ok(mut s)=state.snapshot.lock(){s.refreshing=true;} let _=app.emit("snapshot-updated",()); state.wake.notify_one(); }
 #[tauri::command]
 fn test_notification(app: tauri::AppHandle) -> Result<(),String> { app.notification().builder().title("MatchRadar").body("You're all set for matchday.").show().map_err(|e|e.to_string()) }
 
@@ -41,16 +41,34 @@ fn notifications(app: &tauri::AppHandle, old: &Snapshot, next: &mut Snapshot) {
 
 async fn poll(app: tauri::AppHandle) {
     let mut failures=0u32;
+    let client=provider::client();
     loop {
         let state=app.state::<State>();
         let _guard=state.refresh_lock.lock().await;
-        let settings=state.snapshot.lock().unwrap().settings.clone();
+        let (settings,cached,fixture_updated_at)={let mut s=state.snapshot.lock().unwrap();s.refreshing=true;(s.settings.clone(),s.matches.clone(),s.fixture_updated_at.clone())};
+        let _=app.emit("snapshot-updated",());
         let mut retry_after=None;
-        if settings.mock { let mut s=state.snapshot.lock().unwrap(); s.matches=provider::mock(); s.updated_at=Some(Utc::now().to_rfc3339()); s.error=None; failures=0; }
-        else { match provider::fetch().await {
-            Ok(matches)=>{ let mut s=state.snapshot.lock().unwrap(); let old=s.clone(); s.matches=matches; s.updated_at=Some(Utc::now().to_rfc3339()); s.error=None; notifications(&app,&old,&mut s); failures=0; },
-            Err(e)=>{ retry_after=e.retry_after; let mut s=state.snapshot.lock().unwrap(); s.error=Some(e.message); failures=failures.saturating_add(1); }
-        }}
+        if settings.mock { let mut s=state.snapshot.lock().unwrap(); if s.settings.mock { s.matches=provider::mock(); s.updated_at=Some(Utc::now().to_rfc3339()); s.error=None; } failures=0; }
+        else {
+            let force=state.force_fixtures.swap(false,Ordering::Relaxed);
+            let due=force || fixture_updated_at.and_then(|v|DateTime::parse_from_rfc3339(&v).ok()).is_none_or(|t|Utc::now().signed_duration_since(t.with_timezone(&Utc)).num_minutes()>=360);
+            let result=async {
+                let client=client.as_ref().map_err(|e|provider::FetchError{message:e.message.clone(),retry_after:e.retry_after})?;
+                let today=Utc::now().date_naive();
+                let fixture_result=if due {provider::fixtures(client,today).await} else {Ok(cached.clone())};
+                // Continue refreshing scores when the less frequent fixture request fails,
+                // except when the provider explicitly rate-limits us.
+                if fixture_result.as_ref().err().is_some_and(|e|e.retry_after.is_some() || e.message.contains("HTTP 429")) { return Err(fixture_result.err().unwrap()); }
+                let fixtures=fixture_result.as_ref().cloned().unwrap_or_else(|_|cached.clone());
+                let scores=provider::scores(client,today,&fixtures).await?;
+                Ok::<_,provider::FetchError>((provider::merge(fixtures,scores),fixture_result.err()))
+            }.await;
+            match result {
+                Ok((matches,fixture_error))=>{ let mut s=state.snapshot.lock().unwrap(); if !s.settings.mock {let old=s.clone(); s.matches=matches; s.updated_at=Some(Utc::now().to_rfc3339()); if due && fixture_error.is_none() {s.fixture_updated_at=s.updated_at.clone();} s.error=fixture_error.as_ref().map(|e|e.message.clone()); notifications(&app,&old,&mut s);} if let Some(e)=fixture_error {eprintln!("MatchRadar: {}",e.message); if let Ok(mut f)=fs::OpenOptions::new().create(true).append(true).open(state.path.with_file_name("provider.log")){let _=writeln!(f,"{} {}",Utc::now().to_rfc3339(),e.message);} failures=failures.saturating_add(1);} else {failures=0;} },
+                Err(e)=>{ retry_after=e.retry_after; eprintln!("MatchRadar: {}",e.message); if let Ok(mut f)=fs::OpenOptions::new().create(true).append(true).open(state.path.with_file_name("provider.log")){let _=writeln!(f,"{} {}",Utc::now().to_rfc3339(),e.message);} let mut s=state.snapshot.lock().unwrap(); if !s.settings.mock {s.error=Some(e.message);} failures=failures.saturating_add(1); }
+            }
+        }
+        if let Ok(mut s)=state.snapshot.lock(){s.refreshing=false;}
         persist(&state); let _=app.emit("snapshot-updated",());
         let delay={let s=state.snapshot.lock().unwrap(); if failures>0 { retry_after.unwrap_or(60u64.saturating_mul(2u64.saturating_pow(failures.min(5)))).min(3600) } else if s.matches.iter().any(|m|m.status=="live"||m.status=="halftime") {60} else if s.matches.iter().any(|m|DateTime::parse_from_rfc3339(&m.kickoff).ok().is_some_and(|d| {let secs=(d.with_timezone(&Utc)-Utc::now()).num_seconds(); secs>0 && secs<24*3600})) {300} else {1800}};
         drop(_guard);
@@ -65,8 +83,8 @@ fn main() {
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .setup(|app| {
             let dir=app.path().app_data_dir()?; fs::create_dir_all(&dir)?; let path=dir.join("state.json");
-            let snapshot=fs::read(&path).ok().and_then(|b|serde_json::from_slice(&b).ok()).unwrap_or_default();
-            app.manage(State{snapshot:Mutex::new(snapshot),path,wake:tokio::sync::Notify::new(),refresh_lock:tokio::sync::Mutex::new(())});
+            let mut snapshot:Snapshot=fs::read(&path).ok().and_then(|b|serde_json::from_slice(&b).ok()).unwrap_or_default(); snapshot.refreshing=false;
+            app.manage(State{snapshot:Mutex::new(snapshot),path,wake:tokio::sync::Notify::new(),force_fixtures:AtomicBool::new(false),refresh_lock:tokio::sync::Mutex::new(())});
             let show=MenuItem::with_id(app,"show","Show / Hide",true,None::<&str>)?;
             let settings=MenuItem::with_id(app,"settings","Settings",true,None::<&str>)?;
             let quit=MenuItem::with_id(app,"quit","Quit",true,None::<&str>)?;
