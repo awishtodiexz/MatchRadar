@@ -1,4 +1,23 @@
 use serde::{Deserialize, Deserializer, Serialize};
+use std::collections::HashMap;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MatchAlert {
+    pub enabled: bool,
+    pub expires_at: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AlertBaseline {
+    #[serde(default)]
+    pub priming: bool,
+    pub status: String,
+    pub home: Option<u32>,
+    pub away: Option<u32>,
+    pub high_water: u64,
+    pub seen_at: String,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,6 +66,7 @@ fn opacity<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u8, D::Error> {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
+    pub match_alerts: HashMap<String, MatchAlert>,
     pub favorites: Vec<String>,
     pub followed_only: bool,
     pub compact: bool,
@@ -64,6 +84,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            match_alerts: HashMap::new(),
             favorites: ["359", "363", "364", "382", "360", "367"]
                 .iter()
                 .map(|s| s.to_string())
@@ -137,6 +158,7 @@ pub const TEAM_CATALOG_VERSION: u32 = 1;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Snapshot {
+    pub alert_baselines: HashMap<String, AlertBaseline>,
     pub matches: Vec<Match>,
     pub updated_at: Option<String>,
     pub fixture_updated_at: Option<String>,
@@ -152,6 +174,7 @@ pub struct Snapshot {
 impl Default for Snapshot {
     fn default() -> Self {
         Self {
+            alert_baselines: HashMap::new(),
             matches: Vec::new(),
             updated_at: None,
             fixture_updated_at: None,
@@ -212,9 +235,11 @@ impl SettingsEffects {
     }
 }
 pub fn apply_settings(snapshot: &mut Snapshot, mut settings: Settings) -> SettingsEffects {
+    crate::alerts::prepare_preferences(snapshot, &mut settings, chrono::Utc::now());
     settings.opacity = settings.opacity.clamp(70, 100);
     let effects = SettingsEffects::between(&snapshot.settings, &settings);
     if effects.mode_changed {
+        snapshot.alert_baselines.clear();
         snapshot.matches.clear();
         snapshot.updated_at = None;
         snapshot.fixture_updated_at = None;

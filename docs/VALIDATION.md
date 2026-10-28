@@ -1,5 +1,11 @@
 # Validation and Windows runtime checks
 
+## Match-bell usability update
+
+Targeted coverage adds separate accessible card actions, match override persistence, mute/reset behavior, compact compatibility, independent eligibility for unfollowed clubs, shared event deduplication, first-observation and offline suppression, score corrections, and conservative expiry. Local frontend lint, 18 tests, and production build pass. The 48-case browser layout matrix was rerun at both themes, 320px/390px, 70%/100% opacity, and expanded/compact views. Local Rust checking remains blocked by missing MSVC `link.exe`; Windows CI must execute the native regression tests before claiming they pass.
+
+On the new packaged Windows build, subscribe to a match with no followed clubs and verify reminder, start, and goal toasts; repeat with overlapping team alerts and verify one toast per event. Turn the bell off and verify team alerts are also muted for that match, then reset to team defaults in Alerts. Restart to check preferences/deduplication. Enable a bell mid-match and reconnect after an outage to check historical-event suppression. Test bell keyboard focus/activation separately from details, and confirm the footer filter matches Teams settings. Browser mocks and CI cannot verify Windows notification permissions or actual delivery.
+
 ## Evidence boundary
 
 The user installed and launched an earlier Windows build and observed real fixtures. That does not verify the revised native controls, compact sizing, theme persistence, or notifications in this change. Do not mark v1.0 complete solely because CI builds an installer.

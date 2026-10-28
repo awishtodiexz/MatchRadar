@@ -13,6 +13,40 @@ vi.mock('@tauri-apps/plugin-autostart', () => ({ isEnabled: vi.fn().mockResolved
 beforeEach(() => { bridge.native = false; bridge.invoke.mockReset(); bridge.minimize.mockReset(); useApp.setState({snapshot: {...mockSnapshot, settings: {...mockSnapshot.settings}}, loading: false, error: null}); });
 afterEach(cleanup);
 describe('widget controls', () => {
+ it('round-trips a match subscription through the native settings bridge', async () => {
+  bridge.native = true;
+  let persisted = {...mockSnapshot, settings:{...mockSnapshot.settings, matchAlerts:{}}};
+  bridge.invoke.mockImplementation((command: string, args?: {settings: typeof mockSnapshot.settings}) => {
+   if (command === 'save_settings' && args) persisted = {...persisted, settings:args.settings};
+   return Promise.resolve(command === 'get_snapshot' ? persisted : undefined);
+  });
+  render(<App/>);
+  fireEvent.click(screen.getByRole('button', {name:'Enable all alerts: Arsenal versus Chelsea'}));
+  await waitFor(() => expect(persisted.settings.matchAlerts).toHaveProperty('demo-1'));
+  await useApp.getState().load();
+  expect(screen.getByRole('button', {name:'Mute alerts: Arsenal versus Chelsea'}).getAttribute('aria-pressed')).toBe('true');
+  expect(bridge.invoke.mock.calls.some(([command]) => command === 'refresh')).toBe(false);
+ });
+ it('uses a separate match bell, persists its override, and can mute team alerts', async () => {
+  render(<App/>);
+  const bell = screen.getByRole('button', {name:'Enable all alerts: Arsenal versus Chelsea'});
+  expect(bell.closest('button button')).toBeNull();
+  fireEvent.click(bell);
+  await waitFor(() => expect(useApp.getState().snapshot?.settings.matchAlerts['demo-1'].enabled).toBe(true));
+  expect(screen.queryByText('Match details')).toBeNull();
+  const mute = screen.getByRole('button', {name:'Mute alerts: Arsenal versus Chelsea'});
+  expect(mute.getAttribute('aria-pressed')).toBe('true');
+  fireEvent.click(mute);
+  await waitFor(() => expect(useApp.getState().snapshot?.settings.matchAlerts['demo-1'].enabled).toBe(false));
+  await useApp.getState().load();
+  expect(screen.getByRole('button', {name:'Enable all alerts: Arsenal versus Chelsea'}).getAttribute('aria-pressed')).toBe('false');
+  expect(screen.getByRole('heading', {name:/LIVE NOW/})).toBeTruthy();
+  expect(screen.getByText(/approximately the next 14 days/)).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', {name:'Settings'}));
+  fireEvent.click(screen.getByText('Alerts', {exact:true}));
+  fireEvent.click(screen.getByText('Reset match bells to team defaults'));
+  await waitFor(() => expect(useApp.getState().snapshot?.settings.matchAlerts).toEqual({}));
+ });
  it('uses native minimize and leaves compact mode in Appearance', async () => {
   bridge.native = true; bridge.minimize.mockResolvedValue(undefined); bridge.invoke.mockImplementation((command: string) => command === 'get_snapshot' ? Promise.resolve(mockSnapshot) : Promise.resolve());
   render(<App/>); fireEvent.click(screen.getByRole('button', {name:'Minimize widget'}));

@@ -1,4 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod alerts;
 mod model;
 mod provider;
 use chrono::{DateTime, Utc};
@@ -6,7 +7,6 @@ use model::{
     apply_feed, apply_settings, feed_is_current, ExpandedSize, Settings, SettingsEffects, Snapshot,
 };
 use std::{
-    collections::HashSet,
     fs,
     io::Write,
     path::PathBuf,
@@ -187,74 +187,24 @@ fn test_notification(app: tauri::AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-fn notifications(app: &tauri::AppHandle, old: &Snapshot, next: &mut Snapshot) {
-    let now = Utc::now();
-    let settings = &next.settings;
-    let mut sent: HashSet<String> = old.sent_notifications.iter().cloned().collect();
-    for m in &next.matches {
-        if !settings.favorites.contains(&m.home.id) && !settings.favorites.contains(&m.away.id) {
-            continue;
-        }
-        let name = format!("{} vs {}", m.home.name, m.away.name);
-        let kickoff = DateTime::parse_from_rfc3339(&m.kickoff)
-            .ok()
-            .map(|d| d.with_timezone(&Utc));
-        let mut alerts = Vec::new();
-        if let Some(kickoff) = kickoff {
-            let minutes = (kickoff - now).num_seconds();
-            if settings.reminders
-                && m.status == "scheduled"
-                && minutes > 0
-                && minutes <= settings.reminder_minutes as i64 * 60
-            {
-                alerts.push((
-                    format!("{}:reminder", m.id),
-                    format!("{} kicks off soon", name),
-                ));
-            }
-        }
-        let previous = old.matches.iter().find(|p| p.id == m.id);
-        if settings.starts
-            && m.status == "live"
-            && previous.is_some_and(|p| p.status == "scheduled")
+fn notifications(app: &tauri::AppHandle, next: &mut Snapshot) {
+    for (id, body) in alerts::plan(next, Utc::now()) {
+        match app
+            .notification()
+            .builder()
+            .title("MatchRadar")
+            .body(&body)
+            .show()
         {
-            alerts.push((format!("{}:start", m.id), format!("{} is underway", name)));
-        }
-        if settings.goals && (m.status == "live" || m.status == "halftime") {
-            if let Some(p) = previous {
-                if let (Some(h), Some(a), Some(ph), Some(pa)) =
-                    (m.home_score, m.away_score, p.home_score, p.away_score)
-                {
-                    if h > ph || a > pa {
-                        alerts.push((
-                            format!("{}:score:{}:{}", m.id, h, a),
-                            format!("{} · {}–{}", name, h, a),
-                        ));
-                    }
-                }
-            }
-        }
-        for (id, body) in alerts {
-            if !sent.contains(&id)
-                && app
-                    .notification()
-                    .builder()
-                    .title("MatchRadar")
-                    .body(&body)
-                    .show()
-                    .is_ok()
-            {
-                sent.insert(id);
-            }
+            Ok(()) => next.sent_notifications.push(id),
+            Err(error) => eprintln!("MatchRadar notification delivery: {error}"),
         }
     }
-    next.sent_notifications = sent.into_iter().collect();
     if next.sent_notifications.len() > 1000 {
         next.sent_notifications
             .drain(..next.sent_notifications.len() - 1000);
     }
 }
-
 async fn poll(app: tauri::AppHandle) {
     let mut failures = 0u32;
     let client = provider::client();
@@ -341,7 +291,6 @@ async fn poll(app: tauri::AppHandle) {
                         generation,
                         state.mode_generation.load(Ordering::Relaxed),
                     ) {
-                        let old = s.clone();
                         apply_feed(
                             &mut s,
                             matches,
@@ -349,7 +298,7 @@ async fn poll(app: tauri::AppHandle) {
                             due && fixture_error.is_none(),
                             fixture_error.as_ref().map(|e| e.message.clone()),
                         );
-                        notifications(&app, &old, &mut s);
+                        notifications(&app, &mut s);
                     }
                     if let Some(e) = fixture_error {
                         eprintln!("MatchRadar: {}", e.message);
@@ -452,6 +401,7 @@ fn main() {
                 .unwrap_or_default();
             snapshot.refreshing = false;
             snapshot.migrate_catalog();
+            alerts::cleanup(&mut snapshot, Utc::now());
             if let Some(window) = app.get_webview_window("main") {
                 window.restore_state(StateFlags::all())?;
                 window.set_always_on_top(snapshot.settings.always_on_top)?;

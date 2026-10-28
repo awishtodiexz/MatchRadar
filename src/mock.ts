@@ -1,7 +1,7 @@
 import type { Match, Settings, Snapshot } from './types';
 import { clubs } from './teams';
 export { clubs } from './teams';
-export const defaults: Settings = { favorites: ['359','363','364','382','360','367'], followedOnly: false, compact: false, alwaysOnTop: true, reducedMotion: false, opacity: 96, theme: 'dark', reminders: true, reminderMinutes: 15, starts: true, goals: false, mock: false };
+export const defaults: Settings = { matchAlerts: {}, favorites: ['359','363','364','382','360','367'], followedOnly: false, compact: false, alwaysOnTop: true, reducedMotion: false, opacity: 96, theme: 'dark', reminders: true, reminderMinutes: 15, starts: true, goals: false, mock: false };
 const time = (hours: number) => new Date(Date.now() + hours * 3600000).toISOString();
 export const mockMatches: Match[] = [
   {id:'demo-1',home:clubs[0],away:clubs[1],homeScore:2,awayScore:1,kickoff:time(-1),status:'live',detail:"67′",competition:'Premier League'},
