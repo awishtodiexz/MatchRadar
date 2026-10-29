@@ -1,0 +1,255 @@
+use super::*;
+#[test]
+fn captured_summary_has_events_stats_and_rosters() {
+    let v: Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/summary-completed.json")).unwrap();
+    let d = normalize(&v, "401879268").unwrap();
+    assert!(!d.events.is_empty());
+    assert!(!d.statistics.is_empty());
+    assert!(!d.players.is_empty());
+}
+#[test]
+fn upcoming_does_not_show_season_totals() {
+    let v: Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/summary-upcoming.json")).unwrap();
+    let d = normalize(&v, "401879250").unwrap();
+    assert!(d.statistics.is_empty());
+    assert!(d.events.is_empty());
+    assert!(normalize(&serde_json::json!({}), "1").is_err());
+}
+#[test]
+fn ordering_duplicates_and_missing_values() {
+    let mut v: Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/summary-completed.json")).unwrap();
+    let event = v["keyEvents"][0].clone();
+    v["keyEvents"].as_array_mut().unwrap().reverse();
+    v["keyEvents"].as_array_mut().unwrap().push(event);
+    let d = normalize(&v, "401879268").unwrap();
+    assert!(d
+        .events
+        .windows(2)
+        .all(|w| w[0].period < w[1].period
+            || w[0].period == w[1].period && w[0].seconds <= w[1].seconds));
+    let ids: std::collections::HashSet<_> = d.events.iter().map(|e| &e.id).collect();
+    assert_eq!(ids.len(), d.events.len());
+    assert!(d.statistics.iter().any(|s| s.value == "0"));
+    v["boxscore"] = Value::Null;
+    v["rosters"] = Value::Null;
+    let d = normalize(&v, "401879268").unwrap();
+    assert!(d.statistics.is_empty());
+    assert!(d.players.is_empty());
+}
+#[test]
+fn old_state_and_detail_cache_roundtrip() {
+    let legacy: crate::model::Snapshot = serde_json::from_str("{}").unwrap();
+    assert!(legacy.detail_cache.is_empty());
+    let mut state = legacy;
+    let v: Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/summary-completed.json")).unwrap();
+    state.detail_cache.push(normalize(&v, "401879268").unwrap());
+    let restored: crate::model::Snapshot =
+        serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
+    assert_eq!(restored.detail_cache[0].match_id, "401879268");
+}
+fn clock() -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339("2026-10-29T12:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc)
+}
+fn example() -> Details {
+    let v: Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/summary-completed.json")).unwrap();
+    normalize(&v, "401879268").unwrap()
+}
+#[tokio::test]
+async fn cache_hit_failure_cooldown_and_recovery() {
+    let now = clock();
+    let mut cache = Cache::default();
+    let id = "401879268";
+    cache
+        .get_with(id, true, now, || async { Ok(example()) })
+        .await
+        .unwrap();
+    let hit = cache
+        .get_with(id, true, now + chrono::Duration::seconds(59), || async {
+            panic!("fresh cache must not fetch")
+        })
+        .await
+        .unwrap();
+    assert!(!hit.stale);
+    let saved = cache
+        .get_with(id, true, now + chrono::Duration::seconds(60), || async {
+            Err(Failure::temporary("timeout"))
+        })
+        .await
+        .unwrap();
+    assert!(saved.stale);
+    assert_eq!(saved.updated_at, now.to_rfc3339());
+    let deadline = cache.blocked_until;
+    cache
+        .get_with(id, true, now + chrono::Duration::seconds(90), || async {
+            panic!("cooldown must not fetch")
+        })
+        .await
+        .unwrap();
+    assert_eq!(cache.blocked_until, deadline);
+    let recovered = cache
+        .get_with(id, true, now + chrono::Duration::seconds(120), || async {
+            Ok(example())
+        })
+        .await
+        .unwrap();
+    assert!(!recovered.stale);
+    assert!(recovered.error.is_none());
+}
+#[tokio::test]
+async fn restart_offline_and_future_timestamps() {
+    let now = clock();
+    let mut d = example();
+    d.updated_at = (now - chrono::Duration::hours(1)).to_rfc3339();
+    let mut cache = Cache::default();
+    cache.seed(&[d]);
+    let d = cache
+        .get_with("401879268", false, now, || async {
+            Err(Failure::temporary("offline"))
+        })
+        .await
+        .unwrap();
+    assert!(d.stale);
+    assert!(!d.events.is_empty());
+    let mut future = Cache::default();
+    let mut d = example();
+    d.updated_at = (now + chrono::Duration::hours(1)).to_rfc3339();
+    future.seed(&[d]);
+    assert!(
+        future
+            .get_with("401879268", true, now, || async {
+                Err(Failure::temporary("clock changed"))
+            })
+            .await
+            .unwrap()
+            .stale
+    );
+}
+#[tokio::test]
+async fn rate_limit_deadline_and_empty_cache_errors() {
+    let now = clock();
+    let mut cache = Cache::default();
+    assert!(cache
+        .get_with("1", true, now, || async {
+            Err(Failure {
+                message: "HTTP 429".into(),
+                retry_after: Some(7200),
+            })
+        })
+        .await
+        .is_err());
+    assert_eq!(cache.blocked_until, now.timestamp() + 7200);
+    assert!(cache
+        .get_with("1", true, now + chrono::Duration::seconds(7199), || async {
+            panic!("must respect Retry-After")
+        })
+        .await
+        .is_err());
+    assert_eq!(cache.blocked_until, now.timestamp() + 7200);
+}
+#[test]
+fn malformed_http_and_stoppage_time() {
+    for status in [400, 429, 500] {
+        assert!(parse_response("1", status, Some(120), b"{}").is_err());
+    }
+    assert!(parse_response("1", 200, None, b"not JSON").is_err());
+    assert!(parse_response("1", 200, None, b"{}").is_err());
+    let mut v: Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/summary-completed.json")).unwrap();
+    v["keyEvents"][0]["clock"]["displayValue"] = Value::String("45+2'".into());
+    let d = normalize(&v, "401879268").unwrap();
+    assert!(d.events.iter().any(|e| e.minute == "45+2'"));
+    v["header"]["competitions"] = serde_json::json!([]);
+    assert!(normalize(&v, "401879268").is_err());
+}
+#[tokio::test]
+async fn serialized_simultaneous_requests_reuse_one_result() {
+    let cache = tokio::sync::Mutex::new(Cache::default());
+    let calls = std::sync::atomic::AtomicUsize::new(0);
+    let request = || async {
+        let mut c = cache.lock().await;
+        c.get_with("401879268", true, clock(), || async {
+            calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            tokio::task::yield_now().await;
+            Ok(example())
+        })
+        .await
+        .unwrap()
+    };
+    let (a, b) = tokio::join!(request(), request());
+    assert_eq!(a.updated_at, b.updated_at);
+    assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 1);
+}
+#[tokio::test]
+async fn bounded_cache_and_invalid_persisted_entries() {
+    let mut cache = Cache::default();
+    for i in 1..=25 {
+        let id = i.to_string();
+        cache
+            .get_with(
+                &id,
+                false,
+                clock() + chrono::Duration::seconds(i),
+                || async {
+                    let mut d = example();
+                    d.match_id = id.clone();
+                    Ok(d)
+                },
+            )
+            .await
+            .unwrap();
+    }
+    assert_eq!(cache.entries.len(), 24);
+    assert!(!cache.entries.contains_key("1"));
+    let mut invalid = example();
+    invalid.players[0].name = "x".repeat(501);
+    let value = serde_json::json!({"detailCache":[serde_json::to_value(invalid).unwrap(),serde_json::to_value(example()).unwrap(),{"broken":true}]});
+    let restored: crate::model::Snapshot = serde_json::from_value(value).unwrap();
+    assert_eq!(restored.detail_cache.len(), 1);
+}
+#[test]
+fn f01_recovery_preserves_details_preferences_and_pending_notifications() {
+    let now = clock();
+    let mut state = crate::model::Snapshot::default();
+    state.settings.theme = crate::model::Theme::Light;
+    state.settings.favorites = vec!["359".into()];
+    state.settings.compact = true;
+    state.detail_cache.push(example());
+    state.sent_notifications.push("legacy-submitted-id".into());
+    state
+        .pending_notifications
+        .push(crate::model::PendingNotification {
+            id: "401879268:score:1:0".into(),
+            match_id: "401879268".into(),
+            home_team: "Arsenal".into(),
+            away_team: "Leeds United".into(),
+            body: "Confirmed score update".into(),
+            kind: crate::model::NotificationKind::Goal { home: 1, away: 0 },
+            created_at: now.to_rfc3339(),
+            expires_at: (now + chrono::Duration::minutes(5)).to_rfc3339(),
+            next_attempt_at: now.to_rfc3339(),
+            attempts: 1,
+        });
+    let dir = std::env::temp_dir().join(format!(
+        "matchradar-detail-recovery-{}-{}",
+        std::process::id(),
+        Utc::now().timestamp_nanos_opt().unwrap()
+    ));
+    std::fs::create_dir(&dir).unwrap();
+    let path = dir.join("state.json");
+    crate::persistence::save(&path, &state).unwrap();
+    let expected = serde_json::to_value(&state).unwrap();
+    state.detail_cache.clear();
+    crate::persistence::save(&path, &state).unwrap();
+    std::fs::write(&path, b"damaged primary").unwrap();
+    let recovered = crate::persistence::load(&path).unwrap();
+    assert!(recovered.notice.is_some());
+    assert_eq!(serde_json::to_value(&recovered.snapshot).unwrap(), expected);
+    std::fs::remove_dir_all(dir).unwrap();
+}

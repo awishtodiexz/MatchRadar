@@ -5,3 +5,10 @@ dist/
 src-tauri/target/
 *.log
 .DS_Store
+
+# Local secrets and generated test/build caches
+.env
+.env.*
+!.env.example
+coverage/
+.vite/
