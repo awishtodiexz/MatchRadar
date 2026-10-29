@@ -5,6 +5,7 @@ import { mockSnapshot } from './mock';
 import { useApp } from './store';
 import App from './App';
 import type { Settings } from './types';
+import { isEnabled } from '@tauri-apps/plugin-autostart';
 
 const bridge = vi.hoisted(() => ({ native: false, invoke: vi.fn(), minimize: vi.fn(), hide: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => bridge.native, invoke: bridge.invoke }));
@@ -18,6 +19,17 @@ beforeEach(async () => {
 });
 afterEach(cleanup);
 describe('widget controls', () => {
+ it('keeps a Windows startup read failure visible when opening the App tab',async()=>{
+  bridge.native=true;
+  vi.mocked(isEnabled).mockRejectedValueOnce(new Error('Startup unavailable'));
+  bridge.invoke.mockImplementation((command:string)=>Promise.resolve(command==='get_snapshot'?mockSnapshot:undefined));
+  render(<App/>);
+  fireEvent.click(screen.getByRole('button',{name:'Settings'}));
+  await waitFor(()=>expect(isEnabled).toHaveBeenCalled());
+  fireEvent.click(screen.getByRole('tab',{name:'App'}));
+  expect(await screen.findByText('Could not read the Windows startup setting. Reopen Settings to try again.')).toBeTruthy();
+  expect(screen.getByRole('checkbox',{name:'Launch with Windows'}).hasAttribute('disabled')).toBe(true);
+ });
  it('shows partial fixture success and saved live scores without claiming they were freshly confirmed', async () => {
   bridge.native=true;
   const snapshot={...mockSnapshot,settings:{...mockSnapshot.settings,mock:false},partial:true,error:'Scores: HTTP 500',scoreError:'HTTP 500',updatedAt:'2026-10-28T11:00:00Z',fixtureUpdatedAt:'2026-10-28T12:00:00Z',matches:mockSnapshot.matches.map(m=>({...m,scoreStale:m.status==='live'||m.status==='halftime'}))};
@@ -26,6 +38,7 @@ describe('widget controls', () => {
   expect(await screen.findByText('Partial update · some data may be stale')).toBeTruthy();
   expect(screen.getByText('Saved · 67′').classList.contains('live-text')).toBe(false);
   expect(screen.getByRole('heading',{name:/SAVED LIVE SCORES/})).toBeTruthy();
+  expect(screen.getByRole('heading',{name:/SAVED LIVE SCORES/}).classList.contains('live-group')).toBe(false);
   expect(screen.getByText('SAVED LIVE',{exact:true})).toBeTruthy();
   expect(document.querySelector('footer')?.textContent).toContain('PARTIAL · SCORES SAVED');
   expect(bridge.invoke.mock.calls.every(([command])=>command==='get_snapshot')).toBe(true);
@@ -38,25 +51,25 @@ describe('widget controls', () => {
    return Promise.resolve(command === 'get_snapshot' ? persisted : args?.settings);
   });
   render(<App/>);
-  fireEvent.click(screen.getByRole('button', {name:'Enable all alerts: Arsenal versus Chelsea'}));
+  fireEvent.click(screen.getByRole('button', {name:'Enable all alerts (using team settings): Arsenal versus Chelsea'}));
   await waitFor(() => expect(persisted.settings.matchAlerts).toHaveProperty('demo-1'));
   await useApp.getState().load();
-  expect(screen.getByRole('button', {name:'Mute alerts: Arsenal versus Chelsea'}).getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByRole('button', {name:'Mute match alerts (all alerts on): Arsenal versus Chelsea'}).getAttribute('aria-pressed')).toBe('true');
   expect(bridge.invoke.mock.calls.some(([command]) => command === 'refresh')).toBe(false);
  });
  it('uses a separate match bell, persists its override, and can mute team alerts', async () => {
   render(<App/>);
-  const bell = screen.getByRole('button', {name:'Enable all alerts: Arsenal versus Chelsea'});
+  const bell = screen.getByRole('button', {name:'Enable all alerts (using team settings): Arsenal versus Chelsea'});
   expect(bell.closest('button button')).toBeNull();
   fireEvent.click(bell);
   await waitFor(() => expect(useApp.getState().snapshot?.settings.matchAlerts['demo-1'].enabled).toBe(true));
   expect(screen.queryByText('Match details')).toBeNull();
-  const mute = screen.getByRole('button', {name:'Mute alerts: Arsenal versus Chelsea'});
+  const mute = screen.getByRole('button', {name:'Mute match alerts (all alerts on): Arsenal versus Chelsea'});
   expect(mute.getAttribute('aria-pressed')).toBe('true');
   fireEvent.click(mute);
   await waitFor(() => expect(useApp.getState().snapshot?.settings.matchAlerts['demo-1'].enabled).toBe(false));
   await useApp.getState().load();
-  expect(screen.getByRole('button', {name:'Enable all alerts: Arsenal versus Chelsea'}).getAttribute('aria-pressed')).toBe('false');
+  expect(screen.getByRole('button', {name:'Enable all alerts (match muted): Arsenal versus Chelsea'}).getAttribute('aria-pressed')).toBe('false');
   expect(screen.getByRole('heading', {name:/LIVE NOW/})).toBeTruthy();
   expect(screen.getByText(/approximately the next 14 days/)).toBeTruthy();
   fireEvent.click(screen.getByRole('button', {name:'Settings'}));

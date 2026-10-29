@@ -1,63 +1,111 @@
-import { useEffect, useMemo, useState } from 'react';
-import { isTauri, invoke } from '@tauri-apps/api/core';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, KeyboardEvent } from 'react';
+import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
-import { ArrowLeft, Bell, Check, ChevronRight, CircleHelp, ListFilter, BellRing, BellOff, Minus, Pin, Radio, RefreshCw, Search, Settings2, Star, X } from 'lucide-react';
-import { clubs, crestCandidates } from './teams';
+import { ListFilter, Minus, Pin, Radio, RefreshCw, Settings2, X } from 'lucide-react';
 import { groupFixtures, isLive } from './fixtures';
 import { updateStatus } from './freshness';
 import { useApp } from './store';
-import type { Match, Settings, Team } from './types';
+import { useLocalDay } from './useLocalDay';
+import type { Match } from './types';
+import { LeagueMark } from './components/WidgetUi';
+import { dateLabel, matchButtonId, timeLabel } from './presentation';
+import { MatchCard } from './components/MatchCard';
+import { MatchDetails } from './components/MatchDetails';
+import { SettingsPanel } from './components/SettingsPanel';
 
-const dateLabel = (date: string) => new Intl.DateTimeFormat(undefined, { weekday:'short', day:'numeric', month:'short' }).format(new Date(date));
-const timeLabel = (date: string) => new Intl.DateTimeFormat(undefined, { hour:'2-digit', minute:'2-digit' }).format(new Date(date));
-function Badge({team}: {team: Team}) {
- const theme = useApp(state => state.snapshot?.settings.theme ?? 'dark');
- const candidates = useMemo(() => crestCandidates(team, theme), [team.id, team.logo, theme]);
- const [index, setIndex] = useState(0);
- useEffect(() => setIndex(0), [team.id, team.logo, theme]);
- const src = candidates[index];
- return <span className={'badge '+(src?'has-crest':'')}>{src ? <img src={src} onError={() => setIndex(i => i + 1)} alt="" /> : <span>{(team.short || team.name.slice(0,3)).slice(0,3).toUpperCase()}</span>}</span>;
-}
-function LeagueMark() { return <span className="league-mark" role="img" aria-label="Premier League competition emblem"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 7l4 3 3-5 4 4 4-4 3 5 4-3-2 8H7z" fill="currentColor"/><path d="M7 17h18v4c0 5-4 8-9 10-5-2-9-5-9-10z" fill="none" stroke="currentColor" strokeWidth="2"/><circle cx="16" cy="21" r="3.5" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M16 18v6m-3-4 6 2m0-2-6 2" stroke="currentColor" strokeWidth=".8"/></svg></span>; }
-function MatchRow({match, favorites, onClick}: {match:Match; favorites:string[]; onClick:()=>void}) {
- const {snapshot,save}=useApp(); const preference=snapshot?.settings.matchAlerts?.[match.id]; const enabled=preference?.enabled ?? false;
- const label=`${enabled ? "Mute alerts" : "Enable all alerts"}: ${match.home.name} versus ${match.away.name}`;
- return <article className="match-row match-card"><button className="match-open" onClick={onClick} aria-label={`Match details: ${match.home.name} versus ${match.away.name}`}>
-  <div className="teams"><div><Badge team={match.home}/><span>{match.home.name}</span>{favorites.includes(match.home.id) && <Star aria-label={`Following ${match.home.name}`} className="fav" size={11} fill="currentColor"/>}</div><div><Badge team={match.away}/><span>{match.away.name}</span>{favorites.includes(match.away.id) && <Star aria-label={`Following ${match.away.name}`} className="fav" size={11} fill="currentColor"/>}</div></div>
-  <div className="result">{match.status === 'scheduled' ? <strong className="kickoff">{timeLabel(match.kickoff)}</strong> : <div className="scores"><strong>{match.homeScore ?? '–'}</strong><strong>{match.awayScore ?? '–'}</strong></div>}<span className={isLive(match) && !match.scoreStale ? 'live-text' : ''}>{match.status === 'live' && !match.scoreStale && <i className="dot"/>}{match.scoreStale?'Saved · ':''}{match.detail || match.status}</span></div><ChevronRight size={14} className="row-arrow"/>
-  </button><button className="icon-button match-bell" aria-label={label} aria-pressed={enabled}
-    title={enabled ? 'Mute this match, including followed-team alerts' : preference ? 'Enable reminder, start and goal alerts for this match' : 'Enable reminder, start and goal alerts; currently using team settings'}
-    onClick={()=>void save({matchAlerts:{...snapshot?.settings.matchAlerts,[match.id]:{enabled:!enabled,expiresAt:new Date(Date.parse(match.kickoff)+30*86400000).toISOString()}}})}>
-    {enabled?<BellRing size={15}/>:preference?<BellOff size={15}/>:<Bell size={15}/>}
-  </button></article>; }
-function Toggle({label, description, value, onChange}: {label:string; description?:string; value:boolean; onChange:(v:boolean)=>void}) { return <label className="setting-row"><span><b>{label}</b>{description && <small>{description}</small>}</span><input type="checkbox" checked={value} onChange={e=>onChange(e.target.checked)}/><span className="switch"/></label>; }
-function SettingsPanel({settings, save, back, matches}: {settings:Settings; save:(s:Partial<Settings>)=>void; back:()=>void; matches:Match[]}) {
- const [section,setSection]=useState('Teams'); const [query,setQuery]=useState(''); const [notice,setNotice]=useState(''); const [autostart,setAutostart]=useState(false);
- useEffect(()=>{if(isTauri()) void isEnabled().then(setAutostart).catch(()=>{});},[]);
- const update = (value:Partial<Settings>) => save(value);
- const availableClubs = useMemo(() => { const teams = new Map(clubs.map(team => [team.id, team])); matches.flatMap(m => [m.home,m.away]).forEach(team => teams.set(team.id, team)); return [...teams.values()]; }, [matches]);
- const test = async () => { try { if (isTauri()) await invoke('test_notification'); setNotice(isTauri() ? 'Test notification requested.' : 'Notifications are available in the desktop app.'); } catch { setNotice('Could not send a notification.'); } };
- return <><div className="subhead"><button className="icon-button" onClick={back} aria-label="Back"><ArrowLeft size={18}/></button><div><span className="eyebrow">MAKE IT YOURS</span><h2>Settings</h2></div></div><div className="settings-tabs">{['Teams','Appearance','Alerts','App'].map(s=><button key={s} className={section===s?'active':''} onClick={()=>setSection(s)}>{s}</button>)}</div><div className="settings-body">
- {section==='Teams' && <><div className="section-intro"><h3>Your clubs</h3><p>Follow the teams you care about. Their matches appear first.</p></div><div className="search"><Search size={15}/><input aria-label="Search clubs" placeholder="Search clubs" value={query} onChange={e=>setQuery(e.target.value)}/></div><div className="club-list">{availableClubs.filter(c=>c.name.toLowerCase().includes(query.toLowerCase())).map(c=><button className="club" key={c.id} aria-pressed={settings.favorites.includes(c.id)} onClick={()=>update({favorites:settings.favorites.includes(c.id)?settings.favorites.filter(id=>id!==c.id):[...settings.favorites,c.id]})}><Badge team={matches.flatMap(m=>[m.home,m.away]).find(t=>t.id===c.id && t.logo) || c}/><span>{c.name}</span><span className={'check '+(settings.favorites.includes(c.id)?'selected':'')}>{settings.favorites.includes(c.id)&&<Check size={13}/>}</span></button>)}</div><Toggle label="Following only" description="Hide matches without a followed club" value={settings.followedOnly} onChange={followedOnly=>update({followedOnly})}/></>}
- {section==='Appearance' && <><div className="section-intro"><h3>Set the mood</h3><p>A little space for the beautiful game.</p></div><label className="select-row">Theme <select aria-label="Theme" value={settings.theme ?? 'dark'} onChange={e=>update({theme:e.target.value as Settings['theme']})}><option value="dark">Dark</option><option value="light">Light</option></select></label><Toggle label="Compact view" description="Use a smaller window; restore your expanded size" value={settings.compact} onChange={compact=>update({compact})}/><Toggle label="Always on top" description="Keep MatchRadar above other windows" value={settings.alwaysOnTop} onChange={alwaysOnTop=>update({alwaysOnTop})}/><Toggle label="Reduce motion" description="Keep transitions quiet" value={settings.reducedMotion} onChange={reducedMotion=>update({reducedMotion})}/><label className="range-label">Panel opacity <span>{Math.max(70,settings.opacity)}%</span><input type="range" min="70" max="100" value={Math.max(70,settings.opacity)} onChange={e=>update({opacity:Number(e.target.value)})}/></label></>}
- {section==='Alerts' && <><div className="section-intro"><h3>Stay in the loop</h3><p>Team alerts apply to followed clubs. A match bell enables all alerts, including goals, for that match. Turning it off mutes that match, including team alerts.</p></div><button className="outline-button" onClick={()=>update({matchAlerts:{}})}>Reset match bells to team defaults</button><Toggle label="Kickoff reminders" description="For your followed teams" value={settings.reminders} onChange={reminders=>update({reminders})}/><label className="select-row">Remind me <select value={settings.reminderMinutes} onChange={e=>update({reminderMinutes:Number(e.target.value)})}><option value="5">5 minutes before</option><option value="15">15 minutes before</option><option value="30">30 minutes before</option><option value="60">1 hour before</option></select></label><Toggle label="Match starting" value={settings.starts} onChange={starts=>update({starts})}/><Toggle label="Goals" description="Off by default" value={settings.goals} onChange={goals=>update({goals})}/><button className="outline-button" onClick={test}><Bell size={15}/> Send test notification</button>{notice && <p className="notice">{notice}</p>}</>}
- {section==='App' && <><div className="section-intro"><h3>MatchRadar <span className="version">1.0.0</span></h3><p>Your personal matchday companion.</p></div><Toggle label="Launch with Windows" description="Start MatchRadar when you sign in" value={autostart} onChange={value=>{if(isTauri()) void (value?enable():disable()).then(()=>setAutostart(value)).catch(()=>setNotice('Could not change startup setting.'));}}/><Toggle label="Demo data" description="Clearly labelled offline sample fixtures" value={settings.mock} onChange={mock=>update({mock})}/><div className="about"><CircleHelp size={17}/><p>Scores are supplied by ESPN’s unofficial public endpoints. Availability and data may change without notice. MatchRadar is not affiliated with ESPN or the Premier League.</p></div><button className="outline-button" onClick={()=>{void useApp.getState().refresh();}}><RefreshCw size={15}/> Refresh data</button><p className="notice">{notice || 'Closing the widget keeps it running in the system tray. Use Quit in the tray to exit.'}</p></>}
- </div></>; }
-function Detail({match,back}: {match:Match;back:()=>void}) { return <><div className="subhead"><button className="icon-button" onClick={back} aria-label="Back"><ArrowLeft size={18}/></button><div><span className="eyebrow">MATCH CENTRE</span><h2>Match details</h2></div></div><div className="detail-body"><div className="detail-league"><LeagueMark/> {match.competition}</div><div className="versus"><div><Badge team={match.home}/><b>{match.home.name}</b></div><div className="detail-score">{match.status==='scheduled'?timeLabel(match.kickoff):`${match.homeScore ?? '–'} : ${match.awayScore ?? '–'}`}<small className={isLive(match)&&!match.scoreStale?'live-text':''}>{match.detail}{match.scoreStale?' · saved':''}</small></div><div><Badge team={match.away}/><b>{match.away.name}</b></div></div><div className="detail-date">{dateLabel(match.kickoff)} · {timeLabel(match.kickoff)} local time</div><div className="detail-empty"><Radio size={21}/><b>Match events</b><p>Event details aren’t available from this feed yet.</p></div></div></>; }
 export default function App() {
- const {snapshot,loading,load,refresh,save,error}=useApp(); const [view,setView]=useState<'home'|'settings'|'detail'>('home'); const [selected,setSelected]=useState<Match|null>(null); const [refreshing,setRefreshing]=useState(false);
- useEffect(()=>{void load(); if (!isTauri()) return; let disposed=false; const listeners: Array<()=>void>=[]; for (const [event, callback] of [['snapshot-updated',()=>{void load();}],['open-settings',()=>setView('settings')]] as const) { void listen(event,callback).then(fn=>{if(disposed) fn(); else listeners.push(fn);}).catch(()=>useApp.setState({error:'Could not subscribe to desktop updates.'})); } return ()=>{disposed=true;listeners.forEach(fn=>fn());};},[load]);
- const settings=snapshot?.settings; const matches=useMemo(()=>{if(!snapshot)return []; const fav=(m:Match)=>snapshot.settings.favorites.includes(m.home.id)||snapshot.settings.favorites.includes(m.away.id); return snapshot.matches.filter(m=>!snapshot.settings.followedOnly||fav(m)).slice().sort((a,b)=>Number(isLive(b))-Number(isLive(a))||Number(fav(b))-Number(fav(a))||Date.parse(a.kickoff)-Date.parse(b.kickoff));},[snapshot]);
- const live=matches.filter(m=>isLive(m)&&!m.scoreStale).length;
- const status=updateStatus(snapshot);
- const groups=useMemo(()=>groupFixtures(matches,settings?.favorites || []),[matches,settings?.favorites]);
- const doRefresh=async()=>{setRefreshing(true);try{await refresh();}finally{setRefreshing(false);}};
- return <main className={'shell theme-'+(settings?.theme ?? 'dark')+' '+((settings?.opacity??96)<85?'transparent-panel ':'')+(settings?.compact?'compact-view ':'')+(settings?.reducedMotion?'reduced':'')} style={{'--panel-opacity':Math.min(100,Math.max(70,settings?.opacity??96))/100} as React.CSSProperties}>
- <header className="header" data-tauri-drag-region><div className="brand" data-tauri-drag-region><span className="brand-icon"><Radio size={19}/></span><div data-tauri-drag-region><h1>match<span>radar</span><i>®</i></h1><p>YOUR MATCHDAY COMPANION</p></div></div><div className="header-actions"><button className="icon-button" title={isTauri()?'Minimize':'Minimize is available in the desktop app'} onClick={()=>{if(isTauri()) void getCurrentWindow().minimize().catch(()=>useApp.setState({error:'Could not minimize the widget.'}));}} aria-label="Minimize widget"><Minus size={17}/></button><button className="icon-button close" title={isTauri()?'Hide widget':'Hide is available in the desktop app'} onClick={()=>{if(isTauri()) void getCurrentWindow().hide().catch(()=>useApp.setState({error:'Could not hide the widget.'}));}} aria-label="Hide widget"><X size={16}/></button></div></header>
- {view==='settings'&&settings?<SettingsPanel settings={settings} matches={snapshot?.matches || []} save={s=>void save(s)} back={()=>setView('home')}/>:view==='detail'&&selected?<Detail match={snapshot?.matches.find(m=>m.id===selected.id) || selected} back={()=>setView('home')}/>:<><div className={'hero '+(matches.length?'has-matches':'')}><div><span className="eyebrow"><span className="tiny-line"/> THE BEAUTIFUL GAME, AT A GLANCE</span><h2>Matchday<span>.</span></h2><p>{new Intl.DateTimeFormat(undefined,{weekday:'long',day:'numeric',month:'long'}).format(new Date())}</p></div><div className="hero-orbit"><span className="orbit-one"/><span className="orbit-two"/><span className="orbit-dot"/><Radio size={22}/></div></div><div className="summary"><div><LeagueMark/><span><b>Premier League</b><small>ENGLAND · MATCH CENTRE</small></span></div><span className={'live-pill '+(!live?'quiet':'')}><i className="dot"/>{live?`${live} LIVE`:matches.some(m=>isLive(m)&&m.scoreStale)?'SAVED LIVE':'NO LIVE MATCHES'}</span></div><div className={'match-list '+(settings?.compact?'compact':'')}><p className="schedule-note">Fixtures · approximately the next 14 days</p>
- {(loading || (!!snapshot?.refreshing && !snapshot.updatedAt && !snapshot.error))?<div className="skeletons" aria-label="Loading fixtures"><div/><div/><div/></div>:matches.length===0?<div className="empty"><Radio size={25}/><b>{snapshot?.error?(snapshot.partial?'Some updates are unavailable':'Unable to update matches'):'All quiet on the pitch'}</b><p>{snapshot?.error?(snapshot.partial?'Available data was saved, but some updates could not be confirmed.':'We couldn’t update the data feed. Check your connection and try again.'):'No matches to show right now. Check back soon.'}</p>{snapshot?.error&&<button className="outline-button" onClick={()=>void doRefresh()} disabled={refreshing||snapshot.refreshing}><RefreshCw size={14}/> Retry</button>}</div>:<>{snapshot?.error&&<div className="offline-banner" title={snapshot.error}>{snapshot.partial?'Partial update · some data may be stale':'Update failed · showing saved fixtures'} <button onClick={()=>void doRefresh()} disabled={refreshing||snapshot.refreshing}>Retry</button></div>}{groups.map(({key,label,matches:items})=><section key={key}><h3 className="group-title"><span>{label}</span><span>{items.length.toString().padStart(2,'0')}</span></h3>{items.map(m=><MatchRow key={m.id} match={m} favorites={settings?.favorites || []} onClick={()=>{setSelected(m);setView('detail');}}/>)}</section>)}</>}</div></>}
- {error && <div className="error-banner" role="alert">{error}</div>}<footer><div><span className={'connection '+(snapshot?.error?'error':'')}/><span>{!isTauri()||settings?.mock?'DEMO DATA':status.label+(status.timestamp?' · '+dateLabel(status.timestamp)+' '+timeLabel(status.timestamp):'')}</span></div><div className="footer-actions"><button className="icon-button" title="Settings" onClick={()=>setView(view==='settings'?'home':'settings')} aria-label="Settings" aria-pressed={view==='settings'}><Settings2 size={16}/></button><button className="icon-button" title="Always on top" onClick={()=>settings&&void save({alwaysOnTop:!settings.alwaysOnTop})} aria-label="Always on top" aria-pressed={!!settings?.alwaysOnTop}><Pin size={15}/></button><button className="icon-button" title={settings?.followedOnly?'Following only · show all Premier League matches':'All matches · filter to followed teams'} onClick={()=>settings&&void save({followedOnly:!settings.followedOnly})} aria-label="Following only" aria-pressed={!!settings?.followedOnly}><ListFilter size={16}/>{settings?.followedOnly&&<span className="filter-dot"/>}</button><button className="icon-button" title="Refresh" onClick={()=>void doRefresh()} disabled={refreshing||snapshot?.refreshing} aria-label="Refresh"><RefreshCw size={15} className={refreshing||snapshot?.refreshing?'spin':''}/></button></div></footer>
- </main>;
+  const {snapshot,loading,load,refresh,save,error} = useApp();
+  const [view,setView] = useState<'home'|'settings'|'detail'>('home');
+  const [selected,setSelected] = useState<Match|null>(null);
+  const [refreshing,setRefreshing] = useState(false);
+  const root = useRef<HTMLElement>(null);
+  const restoreFocus = useRef('settings-control');
+  const homeScroll = useRef(0);
+  const previousView = useRef(view);
+  const day = useLocalDay();
+  const native = isTauri();
+  const settings = snapshot?.settings;
+  const allMatches = snapshot?.matches;
+  const rememberHome = () => { homeScroll.current=root.current?.querySelector('.match-list')?.scrollTop??0; };
+  const back = () => setView('home');
+  const openSettings = () => {
+    if(view==='home') rememberHome();
+    restoreFocus.current='settings-control';setView('settings');
+  };
+  const openMatch = (match:Match) => {rememberHome();restoreFocus.current=matchButtonId(match.id);setSelected(match);setView('detail');};
+  useEffect(()=>{
+    void load();
+    if(!native) return;
+    let disposed=false;
+    const listeners:Array<()=>void>=[];
+    for(const [event,callback] of [['snapshot-updated',()=>{void load();}],['open-settings',()=>{homeScroll.current=root.current?.querySelector('.match-list')?.scrollTop??homeScroll.current;restoreFocus.current='settings-control';setView('settings');}]] as const) {
+      void listen(event,callback).then(fn=>{if(disposed) fn();else listeners.push(fn);}).catch(()=>useApp.setState({error:'Could not subscribe to desktop updates.'}));
+    }
+    return ()=>{disposed=true;listeners.forEach(fn=>fn());};
+  },[load,native]);
+  useEffect(()=>{
+    if(previousView.current===view) return;
+    previousView.current=view;
+    if(view==='home') {
+      const list=root.current?.querySelector('.match-list');if(list) list.scrollTop=homeScroll.current;
+      (document.getElementById(restoreFocus.current)??document.getElementById('settings-control'))?.focus({preventScroll:true});
+    } else root.current?.querySelector<HTMLElement>('[data-view-heading]')?.focus();
+  },[view]);
+  const matches = useMemo(()=>{
+    const favorites=settings?.favorites??[];
+    return (allMatches??[]).filter(m=>!settings?.followedOnly||favorites.includes(m.home.id)||favorites.includes(m.away.id));
+  },[allMatches,settings?.favorites,settings?.followedOnly]);
+  const groups = useMemo(()=>groupFixtures(matches,settings?.favorites??[],day),[matches,settings?.favorites,day]);
+  // League status is independent of the cards filter, and excludes saved/unconfirmed scores.
+  const live = (allMatches??[]).filter(m=>isLive(m)&&!m.scoreStale).length;
+  const savedLive = (allMatches??[]).some(m=>isLive(m)&&m.scoreStale);
+  const liveUnknown = !live&&!savedLive&&!!snapshot?.scoreError;
+  const filteredEmpty = !!settings?.followedOnly&&!!allMatches?.length&&!matches.length;
+  const waiting = !allMatches?.length&&(loading||!!snapshot?.refreshing&&!snapshot.updatedAt&&!snapshot.fixtureUpdatedAt&&!snapshot.error);
+  const busy = refreshing||!!snapshot?.refreshing;
+  const status = updateStatus(snapshot);
+  const demo = !native||!!settings?.mock;
+  const statusLabel = demo?'DEMO DATA':status.label;
+  const statusTime = !demo&&status.timestamp?`${dateLabel(status.timestamp)} ${timeLabel(status.timestamp)}`:undefined;
+  const doRefresh = async () => {setRefreshing(true);try{await refresh();}finally{setRefreshing(false);}};
+  const keyDown = (event:KeyboardEvent) => {
+    if(event.key==='Escape'&&!event.defaultPrevented&&view!=='home'&&!(event.target instanceof HTMLSelectElement)) {event.preventDefault();back();}
+  };
+  return <main ref={root} onKeyDown={keyDown} className={'shell theme-'+(settings?.theme??'dark')+' '+((settings?.opacity??96)<85?'transparent-panel ':'')+(settings?.compact?'compact-view ':'')+(settings?.reducedMotion?'reduced':'')} style={{'--panel-opacity':Math.min(100,Math.max(70,settings?.opacity??96))/100} as CSSProperties}>
+    <header className="header" data-tauri-drag-region>
+      <div className="brand" data-tauri-drag-region><span className="brand-icon"><Radio size={19}/></span><div data-tauri-drag-region><h1>match<span>radar</span><i>®</i></h1><p>YOUR MATCHDAY COMPANION</p></div></div>
+      <div className="header-actions">
+        <button className="icon-button" title={native?'Minimize to taskbar':'Minimize is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().minimize().catch(()=>useApp.setState({error:'Could not minimize the widget.'}))} aria-label="Minimize widget"><Minus size={17}/></button>
+        <button className="icon-button close" title={native?'Hide to system tray':'Hide is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().hide().catch(()=>useApp.setState({error:'Could not hide the widget.'}))} aria-label="Hide widget"><X size={16}/></button>
+      </div>
+    </header>
+    {view==='settings'&&settings?<SettingsPanel settings={settings} matches={allMatches??[]} save={save} back={back} refresh={()=>void doRefresh()} refreshing={busy}/>
+      :view==='detail'&&selected&&settings?<MatchDetails match={allMatches?.find(m=>m.id===selected.id)??selected} settings={settings} back={back}/>
+      :<>
+        <div className={'hero '+(allMatches?.length?'has-matches':'')}><div><span className="eyebrow"><span className="tiny-line"/>THE BEAUTIFUL GAME, AT A GLANCE</span><h2>Matchday<span>.</span></h2><p>{new Intl.DateTimeFormat(undefined,{weekday:'long',day:'numeric',month:'long'}).format(day)}</p></div><div className="hero-orbit" aria-hidden="true"><span className="orbit-one"/><span className="orbit-two"/><span className="orbit-dot"/><Radio size={22}/></div></div>
+        <div className="summary"><div><LeagueMark/><span><b>Premier League</b><small>ENGLAND · MATCH CENTRE</small></span></div><span className={'live-pill '+(!live?'quiet':'')} aria-label={`Premier League: ${live?`${live} live matches`:savedLive?'saved scores, awaiting live update':liveUnknown?'live status unavailable':'no confirmed live matches'}`} title="League-wide status, including matches hidden by your filter"><i className="dot"/>{live?`${live} LIVE`:savedLive?'SAVED LIVE':liveUnknown?'LIVE UNAVAILABLE':'NO LIVE MATCHES'}</span></div>
+        <div className="match-list">
+          <div className="schedule-context"><p className="schedule-note">Fixtures · approximately the next 14 days</p>{settings?.followedOnly&&<span className="filter-label"><ListFilter size={12}/>Following only</span>}</div>
+          {snapshot?.error&&!!allMatches?.length&&<div className="offline-banner" role="status" title={snapshot.error}><span>{snapshot.partial?'Partial update · some data may be stale':'Update failed · saved data is unchanged'}</span><button onClick={()=>void doRefresh()} disabled={busy}>Retry</button></div>}
+          {waiting?<div className="skeletons" role="status" aria-label="Loading fixtures"><div/><div/><div/></div>
+            :!matches.length?<div className="empty"><Radio size={25}/><h3>{filteredEmpty?'No followed-team matches':snapshot?.error?(snapshot.partial?'Some updates are unavailable':'Unable to update matches'):'No fixtures in this window'}</h3>
+              <p>{filteredEmpty?'Your filter hides the other Premier League matches. Show all matches or choose more clubs in Settings.':snapshot?.error?(snapshot.partial?'Available data was saved, but some updates could not be confirmed.':'We couldn’t update the feed. Any saved fixtures will appear here when available.'):'No Premier League fixtures are available for approximately the next 14 days.'}</p>
+              {filteredEmpty?<button className="outline-button" onClick={()=>void save({followedOnly:false})}>Show all matches</button>:snapshot?.error?<button className="outline-button" onClick={()=>void doRefresh()} disabled={busy}><RefreshCw size={14}/>Retry</button>:null}
+            </div>
+            :settings&&groups.map(({key,label,matches:items})=><section key={key} aria-labelledby={'date-group-'+key}><h3 id={'date-group-'+key} className={'group-title '+(key==='live'&&items.some(m=>!m.scoreStale)?'live-group':'')}><span>{label}</span><span>{items.length.toString().padStart(2,'0')}</span></h3>{items.map(match=><MatchCard key={match.id} match={match} settings={settings} onOpen={()=>openMatch(match)}/>)}</section>)}
+        </div>
+      </>}
+    {error&&<div className="error-banner" role="alert"><span>{error}</span><button className="icon-button" aria-label="Dismiss message" title="Dismiss message" onClick={()=>useApp.setState({error:null})}><X size={14}/></button></div>}
+    <footer>
+      <div className="connection-info" role="status" title={[statusLabel,statusTime].filter(Boolean).join(' · ')}><span className={'connection '+(snapshot?.error?'error':'')} aria-hidden="true"/><div className="status-copy"><span>{statusLabel}</span>{statusTime&&<time dateTime={status.timestamp??undefined}>{statusTime}</time>}</div></div>
+      <div className="footer-actions">
+        <button id="settings-control" className="icon-button" title={view==='settings'?'Return to matches (Esc)':'Open Settings'} onClick={()=>view==='settings'?back():openSettings()} aria-label="Settings" aria-pressed={view==='settings'}><Settings2 size={16}/></button>
+        <button className="icon-button" title={settings?.alwaysOnTop?'Always on top is on · unpin widget':'Always on top is off · keep widget above other windows'} disabled={!settings} onClick={()=>settings&&void save({alwaysOnTop:!settings.alwaysOnTop})} aria-label="Always on top" aria-pressed={!!settings?.alwaysOnTop}><Pin size={16}/></button>
+        <button className="icon-button" title={settings?.followedOnly?'Following only is on · show all Premier League matches':'Showing all matches · filter to followed clubs'} disabled={!settings} onClick={()=>settings&&void save({followedOnly:!settings.followedOnly})} aria-label="Following only" aria-pressed={!!settings?.followedOnly}><ListFilter size={16}/>{settings?.followedOnly&&<span className="filter-dot"/>}</button>
+        <button className="icon-button" title={busy?'Updating fixtures…':'Refresh fixtures and scores'} onClick={()=>void doRefresh()} disabled={busy} aria-label="Refresh" aria-busy={busy}><RefreshCw size={16} className={busy?'spin':''}/></button>
+      </div>
+    </footer>
+  </main>;
 }
