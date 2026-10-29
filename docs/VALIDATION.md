@@ -1,5 +1,7 @@
 # Validation and Windows runtime checks
 
+For the real-data campaign, current test results, request observations and remaining checks, see [Real data quality report](REAL_DATA_QUALITY_REPORT.md). Browser verification uses a test-only IPC bridge and does not verify a native installation.
+
 Demo mode has been removed; earlier demo references below describe historical checks. Browser checks now use test-only mocked IPC. Local Rust compilation requires the MSVC linker; Windows CI must validate the native migration and installer.
 
 For the latest feature-branch evidence and acceptance checklist, see [Match Centre integration report](MATCH_CENTRE_EVOLUTION_REPORT.md). Earlier sections below are historical checkpoints and do not validate later commits.

@@ -35,6 +35,8 @@ Direct HTTP checks returned 200 and `image/png` for all 23 canonical crest URLs 
 
 ## Match-summary observations (29 October 2026)
 
+The real-data quality campaign rechecked the completed `401879268` and scheduled `401879250` summaries. `gameInfo.venue.fullName` supplied Emirates Stadium and Villa Park respectively. MatchRadar now normalizes this optional name, rejects control characters and bounds it to 200 characters. Old cached summaries deserialize without it. Neither response supplied officials; the scheduled response had no player entries. No referee or lineup is invented when absent. The completed capture includes 11 starters and nine non-starters per team and provider-written goal, card and substitution text. These are point-in-time observations, not a guaranteed schema.
+
 Verified `eng.1/summary?event=401879268` (completed) and `401879250` (upcoming). Reduced response fixtures in `tests/fixtures/summary-*.json` retain events, team statistics and rosters, omitting articles, odds, assets and outbound links. Event text is provider-supplied; no goalscorer is inferred. Events deduplicate by provider event ID and sort by period/clock seconds, retaining stoppage-time display strings. Upcoming boxscore season totals are deliberately excluded. Live/halftime summary responses were not available for verification. Provider-owned text/data retain their licensing limitations; these test captures establish no redistribution permission.
 
 On-demand summaries are independently cached and bounded, never requested by card rendering or notifications. Numeric and RFC2822 HTTP-date Retry-After are now parsed for both scoreboards and summaries. Broader scoreboard manual-refresh cooldown hardening is still outstanding.
