@@ -35,6 +35,12 @@ describe('focused usability refinements',()=>{
     expect(screen.getByText('No followed clubs are live')).toBeTruthy();
     expect(screen.getByLabelText(/Premier League: .* live matches/)).toBeTruthy();
   });
+  it('explains when the Following view has no matching clubs',async()=>{
+    await load({...structuredClone(mockSnapshot),settings:{...mockSnapshot.settings,favorites:[]}});
+    render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Following'}));
+    expect(screen.getByText('No matches involving followed clubs')).toBeTruthy();
+    expect(screen.getByRole('button',{name:'Show all matches'})).toBeTruthy();
+  });
   it('suppresses surface context menus on cards, icons, details and settings',()=>{
     render(<App/>);
     expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Matchday .'}))).toBe(false);
