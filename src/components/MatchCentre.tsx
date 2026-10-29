@@ -2,8 +2,11 @@ import { useId, useState } from 'react';
 import type { Match } from '../types';
 import { isLive } from '../fixtures';
 import { useMatchSummary } from '../useMatchSummary';
+import { demoMatchSummary } from '../demoMatchSummary';
 export function MatchCentre({match,demo}:{match:Match;demo:boolean}) {
-  const {data,loading,error,retry}=useMatchSummary(match.id,isLive(match),demo);
+  const summary=useMatchSummary(match.id,isLive(match),demo);
+  const {loading,error,retry}=summary;
+  const data=demo?demoMatchSummary(match):summary.data;
   const [selected,setSelected]=useState('Overview');
   const tabs=['Overview',...(data?.events.length?['Timeline']:[]),...(data?.statistics.length?['Stats']:[]),...(data?.players.length?['Lineups']:[])];
   const tab=tabs.includes(selected)?selected:'Overview';
@@ -15,9 +18,10 @@ export function MatchCentre({match,demo}:{match:Match;demo:boolean}) {
       if(next===undefined)return;event.preventDefault();setSelected(tabs[next]);document.getElementById(sectionId+'-'+tabs[next])?.focus();
     }}>{name}</button>)}</div>
     <div role="tabpanel" id={sectionId+'-panel'} aria-labelledby={sectionId+'-'+tab} tabIndex={0}>
+    {demo&&data&&<p className="field-note">DEMO DATA ? fictional match, players and events. Not a historical result.</p>}
     {loading&&<div className="skeletons" role="status" aria-label="Loading match details"><div/></div>}
     {error&&<p role="status">{error} <button className="text-button" onClick={retry}>Retry details</button></p>}
-    {data&&<p className="field-note">{data.stale?'Saved details':'Details checked'} · {new Date(data.updatedAt).toLocaleString()}</p>}
+    {data&&<p className="field-note">{demo?'Demo sample':data.stale?'Saved details':'Details checked'} · {new Date(data.updatedAt).toLocaleString()}</p>}
     {tab==='Overview'&&(!loading||data)&&<><h3>Match events</h3><p>{demo?'Event details aren’t available from this feed yet.':data?.events.length?`${data.events.length} provider events available in Timeline.`:error?'Details could not be confirmed.':'No event timeline is available for this match.'}</p><p className="field-note">Scores come from the matchday scoreboard. Match details may update separately.</p></>}
     {tab==='Timeline'&&<ol className="event-list">{data?.events.map(e=><li key={e.id}><time>{e.minute||'—'}</time><div><small>{team(e.teamId)} · {e.kind.replaceAll('-',' ')}</small><p>{e.text}</p></div></li>)}</ol>}
     {tab==='Stats'&&<>{[match.home,match.away].map(t=><section key={t.id}><h3>{t.name}</h3><dl className="centre-stats">{data?.statistics.filter(s=>s.teamId===t.id).map(s=><div key={s.name}><dt>{s.label||s.name}</dt><dd>{s.value}</dd></div>)}</dl></section>)}</>}
