@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App from './App';
-import { mockSnapshot } from './demo/fixtures';
+import { mockSnapshot } from './test-fixtures/fixtures';
 import { useApp } from './store';
 import type { Snapshot } from './types';
 
@@ -28,7 +28,7 @@ describe('focused usability refinements',()=>{
     expect(fireEvent.contextMenu(screen.getByRole('button',{name:inheritName}).querySelector('svg')!)).toBe(false);
     fireEvent.click(card);
     expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Match details'}))).toBe(false);
-    expect(fireEvent.contextMenu(screen.getByText(/demo events available in Timeline/))).toBe(false);
+    expect(fireEvent.contextMenu(screen.getByText('Match events'))).toBe(false);
     fireEvent.click(screen.getByRole('button',{name:'Settings'}));
     expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Your clubs'}))).toBe(false);
     expect(fireEvent.contextMenu(screen.getByRole('searchbox',{name:'Search clubs'}))).toBe(true);

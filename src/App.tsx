@@ -32,8 +32,7 @@ export default function App() {
   const native = isTauri();
   const settings = snapshot?.settings;
   const allMatches = snapshot?.matches;
-  const demo = !native||!!settings?.mock;
-  const historyView=matchView==='Results'&&!demo;
+  const historyView=matchView==='Results';
   const recent=useRecentResults(historyView);
   const sourceMatches=useMemo(()=>historyView?[...new Map([...recent.data.matches,...(allMatches??[]).filter(m=>m.status==='fulltime')].map(m=>[m.id,m])).values()]:allMatches,[historyView,recent.data.matches,allMatches]);
   const listError=historyView?recent.data.error:snapshot?.error;
@@ -75,8 +74,8 @@ export default function App() {
   const waiting = historyView?recent.loading&&!matches.length:!allMatches?.length&&(loading||!!snapshot?.refreshing&&!snapshot.updatedAt&&!snapshot.fixtureUpdatedAt&&!snapshot.error);
   const busy = refreshing||!!snapshot?.refreshing;
   const status = updateStatus(snapshot);
-  const statusLabel = demo?'DEMO DATA':status.label;
-  const statusTime = !demo&&status.timestamp?`${dateLabel(status.timestamp)} ${timeLabel(status.timestamp)}`:undefined;
+  const statusLabel = status.label;
+  const statusTime = status.timestamp?`${dateLabel(status.timestamp)} ${timeLabel(status.timestamp)}`:undefined;
   const doRefresh = async () => {setRefreshing(true);try{await refresh();}finally{setRefreshing(false);}};
   const contextMenu = (event:MouseEvent) => {
     const target = event.target;

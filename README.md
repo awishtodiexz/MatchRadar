@@ -31,7 +31,7 @@ MatchRadar is a compact football widget for keeping Premier League fixtures and 
 
 <img src="docs/screenshots/match-centre-timeline.png" alt="Match Centre timeline with events from a completed Arsenal and Leeds United fixture" width="320">
 
-*Browser capture of the actual interface using a recorded completed-match response and mocked desktop IPC. It is not a live or packaged Windows screenshot. Timeline, Stats and Lineups appear only when the provider supplies data. The labelled Demo Data mode also includes a fictional completed match for offline testing.*
+*Browser capture of the interface using a recorded completed-match response and mocked desktop IPC. It is not a live or packaged Windows screenshot. Timeline, Stats and Lineups appear only when the provider supplies data.*
 
 ## Install a Windows test build
 
@@ -53,7 +53,7 @@ npm ci
 npm run tauri dev
 ```
 
-For an offline interface preview, run `npm run dev`. The browser view uses clearly labelled sample data and does not exercise native IPC, notifications, tray behavior, or window sizing.
+For a browser shell preview, run `npm run dev`. Match data and native controls require the desktop app. Browser verification injects test-only fixtures through mocked IPC and does not validate notifications, tray behavior, or native window sizing.
 
 ```powershell
 npm run lint
@@ -86,7 +86,7 @@ Tauri 2 and Rust handle the native window, background fetching, persistence, and
 
 The [Windows workflow](.github/workflows/windows.yml) runs lint, frontend tests, the TypeScript/Vite build, Rust formatting and tests, Tauri packaging, and installer upload. The [validation notes](docs/VALIDATION.md) record what has been tested and the remaining Windows checks. A passing build does not prove notification delivery, startup, tray restoration, scaling, sleep/resume, or multi-monitor recovery.
 
-- Match Centre events, statistics and lineups depend on provider availability; live/halftime summary shapes still need real-match validation. Demo Data provides fictional details and manual match progression, without sending synthetic match notifications. See [Demo Mode report](docs/DEMO_MODE_REPORT.md) for isolation limitations.
+- Match Centre events, statistics and lineups depend on provider availability; live/halftime summary shapes still need real-match validation.
 - Dedicated off-screen window recovery is not implemented. HTTP-date and numeric `Retry-After` are parsed; cooldowns are process-local. Sleep/resume behavior and real notification delivery need further validation.
 - Provider outages and changes can affect coverage. Cached data can be stale; the widget labels unconfirmed scores accordingly.
 - Performance has not been benchmarked for release.

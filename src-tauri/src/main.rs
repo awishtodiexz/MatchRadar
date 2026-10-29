@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod alerts;
 mod delivery;
+#[cfg(test)]
 mod demo;
 mod details;
 mod model;
@@ -11,13 +12,13 @@ mod results;
 mod scheduling;
 mod window;
 use chrono::{DateTime, Utc};
-use model::{apply_settings, feed_is_current, Settings, SettingsEffects, Snapshot};
+use model::{apply_settings, Settings, SettingsEffects, Snapshot};
 use std::{
     fs,
     io::Write,
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, Ordering},
         Mutex,
     },
     time::Duration,
@@ -33,12 +34,10 @@ use window::{logical_size, resize, rollback_window};
 
 struct State {
     snapshot: Mutex<Snapshot>,
-    demo_matches: Mutex<Vec<model::Match>>,
     path: PathBuf,
     wake: tokio::sync::Notify,
     notification_wake: tokio::sync::Notify,
     force_fixtures: AtomicBool,
-    mode_generation: AtomicU64,
     settings_lock: Mutex<()>,
     refresh_lock: tokio::sync::Mutex<()>,
 }
@@ -61,9 +60,6 @@ async fn get_match_details(
     let active = {
         let state = app.state::<State>();
         let snapshot = state.snapshot.lock().map_err(|e| e.to_string())?;
-        if snapshot.settings.mock {
-            return Err("Summary unavailable in demo mode".into());
-        }
         let m = snapshot
             .matches
             .iter()
@@ -86,11 +82,10 @@ async fn get_match_details(
     if !data.stale {
         let state = app.state::<State>();
         let mut snapshot = state.snapshot.lock().map_err(|e| e.to_string())?;
-        if !snapshot.settings.mock
-            && !snapshot
-                .detail_cache
-                .iter()
-                .any(|d| d.match_id == id && d.updated_at == data.updated_at)
+        if !snapshot
+            .detail_cache
+            .iter()
+            .any(|d| d.match_id == id && d.updated_at == data.updated_at)
         {
             let mut next = snapshot.clone();
             next.detail_cache.retain(|d| d.match_id != id);
@@ -113,15 +108,16 @@ async fn get_match_details(
 #[tauri::command]
 fn get_snapshot(state: tauri::State<'_, State>) -> Result<Snapshot, String> {
     let snapshot = state.snapshot.lock().map_err(|e| e.to_string())?;
-    let demo = state.demo_matches.lock().map_err(|e| e.to_string())?;
-    Ok(snapshot.view(&demo))
+    Ok(snapshot.clone())
 }
 #[tauri::command]
 fn save_settings(
-    settings: Settings,
+    mut settings: Settings,
     app: tauri::AppHandle,
     state: tauri::State<'_, State>,
 ) -> Result<Settings, String> {
+    // Ignore legacy clients attempting to select the removed mode.
+    settings.mock = false;
     let _settings_guard = state
         .settings_lock
         .lock()
@@ -168,15 +164,8 @@ fn save_settings(
         let mut next = snapshot.clone();
         apply_settings(&mut next, settings);
         next.expanded_size = expanded_size;
-        let mut demo = state.demo_matches.lock().map_err(|e| e.to_string())?;
         write_snapshot(&state, &next)?;
-        if effects.mode_changed && next.settings.mock {
-            *demo = crate::demo::mock();
-        }
         *snapshot = next;
-        if effects.mode_changed {
-            state.mode_generation.fetch_add(1, Ordering::Relaxed);
-        }
         Ok::<_, String>(())
     })();
     if let Err(error) = saved {
@@ -192,17 +181,12 @@ fn save_settings(
             error
         });
     }
-    if effects.mode_changed {
-        state.force_fixtures.store(true, Ordering::Relaxed);
-        state.wake.notify_one();
-    }
     state.notification_wake.notify_one();
     app.emit("snapshot-updated", ())
         .map_err(|e| format!("Notify widget of saved settings: {e}"))?;
     // Return Rust's persisted normalization, rather than echoing the IPC payload.
     let snapshot = state.snapshot.lock().map_err(|e| e.to_string())?;
-    let demo = state.demo_matches.lock().map_err(|e| e.to_string())?;
-    Ok(snapshot.view(&demo).settings)
+    Ok(snapshot.settings.clone())
 }
 #[tauri::command]
 fn refresh(app: tauri::AppHandle, state: tauri::State<'_, State>) {
@@ -317,42 +301,28 @@ async fn poll(app: tauri::AppHandle) {
     let mut gate = scheduling::RequestGate::default();
     loop {
         let state = app.state::<State>();
-        let mock = state
-            .snapshot
-            .lock()
-            .map(|s| s.settings.mock)
-            .unwrap_or(false);
-        if !mock {
-            if let Some(delay) = gate.remaining(tokio::time::Instant::now().into_std()) {
-                let changed = {
-                    let mut snapshot = state.snapshot.lock().unwrap();
-                    let changed = snapshot.refreshing;
-                    snapshot.refreshing = false;
-                    changed
-                };
-                if changed {
-                    let _ = app.emit("snapshot-updated", ());
-                }
-                tokio::select! {_=tokio::time::sleep(scheduling::sleep_chunk(delay))=>{},_=state.wake.notified()=>{}}
-                continue;
+        if let Some(delay) = gate.remaining(tokio::time::Instant::now().into_std()) {
+            let changed = {
+                let mut snapshot = state.snapshot.lock().unwrap();
+                let changed = snapshot.refreshing;
+                snapshot.refreshing = false;
+                changed
+            };
+            if changed {
+                let _ = app.emit("snapshot-updated", ());
             }
+            tokio::select! {_=tokio::time::sleep(scheduling::sleep_chunk(delay))=>{},_=state.wake.notified()=>{}}
+            continue;
         }
         let _guard = state.refresh_lock.lock().await;
-        let (settings, cached, fixture_updated_at, generation) = {
+        let (cached, fixture_updated_at) = {
             let mut s = state.snapshot.lock().unwrap();
             s.refreshing = true;
-            (
-                s.settings.clone(),
-                s.matches.clone(),
-                s.fixture_updated_at.clone(),
-                state.mode_generation.load(Ordering::Relaxed),
-            )
+            (s.matches.clone(), s.fixture_updated_at.clone())
         };
         let _ = app.emit("snapshot-updated", ());
         let mut retry_after = None;
-        if settings.mock {
-            failures = 0;
-        } else {
+        {
             let force = state.force_fixtures.swap(false, Ordering::Relaxed);
             let due = force
                 || fixture_updated_at
@@ -400,12 +370,7 @@ async fn poll(app: tauri::AppHandle) {
                 ),
             };
             let mut s = state.snapshot.lock().unwrap();
-            if feed_is_current(
-                &s,
-                false,
-                generation,
-                state.mode_generation.load(Ordering::Relaxed),
-            ) {
+            {
                 let applied = refresh::apply(&mut s, fixtures, scores, Utc::now());
                 retry_after = applied.retry_after;
                 delivery::revalidate(&mut s, &applied.score_ids, Utc::now());
@@ -466,12 +431,10 @@ async fn poll(app: tauri::AppHandle) {
                 1800
             }
         };
-        if !settings.mock {
-            if failures > 0 {
-                gate.defer(std::time::Instant::now(), delay);
-            } else {
-                gate.clear();
-            }
+        if failures > 0 {
+            gate.defer(std::time::Instant::now(), delay);
+        } else {
+            gate.clear();
         }
         drop(_guard);
         tokio::select! { _=tokio::time::sleep(scheduling::sleep_chunk(Duration::from_secs(delay)))=>{}, _=state.wake.notified()=>{} }
@@ -533,12 +496,10 @@ fn main() {
             app.manage(results::History::default());
             app.manage(State {
                 snapshot: Mutex::new(snapshot),
-                demo_matches: Mutex::new(crate::demo::mock()),
                 path,
                 wake: tokio::sync::Notify::new(),
                 notification_wake: tokio::sync::Notify::new(),
                 force_fixtures: AtomicBool::new(false),
-                mode_generation: AtomicU64::new(0),
                 settings_lock: Mutex::new(()),
                 refresh_lock: tokio::sync::Mutex::new(()),
             });
@@ -612,12 +573,10 @@ mod persistence_tests {
             .join("state.json");
         let state = State {
             snapshot: Mutex::new(Snapshot::default()),
-            demo_matches: Mutex::new(Vec::new()),
             path: path.clone(),
             wake: tokio::sync::Notify::new(),
             notification_wake: tokio::sync::Notify::new(),
             force_fixtures: AtomicBool::new(false),
-            mode_generation: AtomicU64::new(0),
             settings_lock: Mutex::new(()),
             refresh_lock: tokio::sync::Mutex::new(()),
         };

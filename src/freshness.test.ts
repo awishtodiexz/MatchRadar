@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { updateStatus } from './freshness';
-import { mockSnapshot } from './demo/fixtures';
+import { mockSnapshot } from './test-fixtures/fixtures';
 
 describe('independent source freshness', () => {
   it('does not label a fixture-only success as a fresh scoreboard', () => {

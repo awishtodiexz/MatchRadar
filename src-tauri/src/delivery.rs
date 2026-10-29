@@ -145,9 +145,6 @@ pub fn cleanup(snapshot: &mut Snapshot, now: DateTime<Utc>) {
 
 /// Called only with newly confirmed observations; retries never re-run the planner.
 pub fn enqueue(snapshot: &mut Snapshot, score_ids: &[String], now: DateTime<Utc>) -> usize {
-    if snapshot.settings.mock {
-        return 0;
-    }
     crate::alerts::cleanup(snapshot, now);
     cleanup(snapshot, now);
     let mut observed = crate::refresh::notification_view(snapshot, score_ids);
@@ -209,9 +206,6 @@ pub enum SubmissionError {
 
 /// Earliest retry/expiry deadline. Exhausted events remain as suppression records until expiry.
 pub fn next_due(snapshot: &Snapshot, now: DateTime<Utc>) -> Option<std::time::Duration> {
-    if snapshot.settings.mock {
-        return None;
-    }
     if snapshot.revalidate_pending {
         return snapshot
             .pending_notifications
@@ -247,9 +241,6 @@ pub fn submit_due(
     mut save: impl FnMut(&Snapshot) -> Result<(), String>,
     mut log: impl FnMut(&str),
 ) -> Result<(), String> {
-    if snapshot.settings.mock {
-        return Ok(());
-    }
     let now = clock();
     cleanup(snapshot, now);
     if snapshot.pending_notifications.is_empty() {
@@ -348,10 +339,9 @@ pub fn submit_due(
     Ok(())
 }
 
-// After demo mode, hold previously planned alerts until their matches are freshly
-// confirmed. Unconfirmed or offline observations can never release stale alerts.
+// Hold migrated pending alerts until their matches are freshly confirmed.
 pub fn revalidate(snapshot: &mut Snapshot, score_ids: &[String], now: DateTime<Utc>) {
-    if !snapshot.revalidate_pending || snapshot.settings.mock {
+    if !snapshot.revalidate_pending {
         return;
     }
     cleanup(snapshot, now);

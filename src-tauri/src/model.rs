@@ -104,6 +104,8 @@ pub struct Settings {
     pub reminder_minutes: u32,
     pub starts: bool,
     pub goals: bool,
+    // Read only to migrate preferences saved by older versions.
+    #[serde(skip_serializing)]
     pub mock: bool,
 }
 impl Default for Settings {
@@ -183,7 +185,6 @@ pub const TEAM_CATALOG_VERSION: u32 = 1;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Snapshot {
-    pub demo_match_alerts: HashMap<String, MatchAlert>,
     pub revalidate_pending: bool,
     pub recent_results: Vec<Match>,
     pub recent_updated_at: Option<String>,
@@ -213,7 +214,6 @@ pub struct Snapshot {
 impl Default for Snapshot {
     fn default() -> Self {
         Self {
-            demo_match_alerts: HashMap::new(),
             revalidate_pending: false,
             recent_results: Vec::new(),
             recent_updated_at: None,
@@ -241,22 +241,22 @@ impl Default for Snapshot {
 impl Snapshot {
     // Older demo builds stored synthetic subscriptions and fixtures in the real fields.
     pub fn migrate_demo_state(&mut self) {
+        // A legacy demo session must return to the live feed on upgrade. Keep
+        // pending real notifications paused until a fresh score confirms them.
+        if self.settings.mock {
+            self.settings.mock = false;
+            self.revalidate_pending |= !self.pending_notifications.is_empty();
+            crate::refresh::mark_cached(self);
+        }
         self.pending_notifications
             .retain(|event| !event.match_id.starts_with("demo-"));
         self.alert_baselines
             .retain(|id, _| !id.starts_with("demo-"));
         self.sent_notifications
             .retain(|id| !id.starts_with("demo-"));
-        self.settings.match_alerts.retain(|id, alert| {
-            if id.starts_with("demo-") {
-                self.demo_match_alerts
-                    .entry(id.clone())
-                    .or_insert_with(|| alert.clone());
-                false
-            } else {
-                true
-            }
-        });
+        self.settings
+            .match_alerts
+            .retain(|id, _| !id.starts_with("demo-"));
         if self.matches.iter().any(|m| m.id.starts_with("demo-")) {
             self.matches.retain(|m| !m.id.starts_with("demo-"));
             self.updated_at = None;
@@ -264,20 +264,6 @@ impl Snapshot {
         }
     }
 
-    pub fn view(&self, demo_matches: &[Match]) -> Self {
-        let mut view = self.clone();
-        if view.settings.mock {
-            view.matches = demo_matches.to_vec();
-            view.settings.match_alerts = view.demo_match_alerts.clone();
-            view.updated_at = None;
-            view.fixture_updated_at = None;
-            view.error = None;
-            view.fixture_error = None;
-            view.score_error = None;
-            view.partial = false;
-        }
-        view
-    }
     pub fn migrate_catalog(&mut self) {
         if self.team_catalog_version >= TEAM_CATALOG_VERSION {
             return;
@@ -311,14 +297,12 @@ impl Snapshot {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct SettingsEffects {
-    pub mode_changed: bool,
     pub pin_changed: bool,
     pub compact_changed: bool,
 }
 impl SettingsEffects {
     pub fn between(old: &Settings, next: &Settings) -> Self {
         Self {
-            mode_changed: old.mock != next.mock,
             pin_changed: old.always_on_top != next.always_on_top,
             compact_changed: old.compact != next.compact,
         }
@@ -332,38 +316,13 @@ pub(crate) fn apply_settings_at(
     mut settings: Settings,
     now: chrono::DateTime<chrono::Utc>,
 ) -> SettingsEffects {
-    let was_demo = snapshot.settings.mock;
-    if was_demo && settings.mock {
-        snapshot.demo_match_alerts = settings
-            .match_alerts
-            .iter()
-            .filter(|(id, alert)| {
-                id.starts_with("demo-")
-                    && id.len() <= 128
-                    && chrono::DateTime::parse_from_rfc3339(&alert.expires_at)
-                        .is_ok_and(|date| date.with_timezone(&chrono::Utc) > now)
-            })
-            .map(|(id, alert)| (id.clone(), alert.clone()))
-            .take(64)
-            .collect();
-    }
-    if was_demo || settings.mock {
-        settings.match_alerts = snapshot.settings.match_alerts.clone();
-    }
+    settings.mock = false;
     settings
         .match_alerts
         .retain(|id, _| !id.starts_with("demo-"));
-    if !was_demo && !settings.mock {
-        crate::alerts::prepare_preferences(snapshot, &mut settings, now);
-    }
+    crate::alerts::prepare_preferences(snapshot, &mut settings, now);
     settings.opacity = settings.opacity.clamp(70, 100);
     let effects = SettingsEffects::between(&snapshot.settings, &settings);
-    if effects.mode_changed && settings.mock && !snapshot.pending_notifications.is_empty() {
-        snapshot.revalidate_pending = true;
-    }
-    if effects.mode_changed && settings.mock {
-        crate::refresh::mark_cached(snapshot);
-    }
     snapshot.settings = settings;
     crate::delivery::cleanup(snapshot, now);
     effects
@@ -385,15 +344,6 @@ pub fn apply_feed(
     snapshot.fixture_error = None;
     snapshot.score_error = None;
     snapshot.partial = false;
-}
-
-pub fn feed_is_current(
-    snapshot: &Snapshot,
-    request_mock: bool,
-    request_generation: u64,
-    current_generation: u64,
-) -> bool {
-    snapshot.settings.mock == request_mock && request_generation == current_generation
 }
 
 #[cfg(test)]
@@ -418,12 +368,23 @@ mod tests {
         snapshot.sent_notifications = vec!["demo-1:start".into(), "123:start".into()];
         snapshot.migrate_demo_state();
         assert_eq!(snapshot.settings.match_alerts.get("123"), Some(&alert));
-        assert_eq!(snapshot.demo_match_alerts.get("demo-1"), Some(&alert));
+        assert!(!snapshot.settings.match_alerts.contains_key("demo-1"));
         assert!(snapshot.matches.is_empty());
         assert_eq!(snapshot.sent_notifications, ["123:start"]);
         let restarted: Snapshot =
             serde_json::from_slice(&serde_json::to_vec(&snapshot).unwrap()).unwrap();
-        assert_eq!(restarted.demo_match_alerts.get("demo-1"), Some(&alert));
+        assert_eq!(restarted.settings.match_alerts.get("123"), Some(&alert));
+    }
+    #[test]
+    fn saved_demo_preference_returns_to_live_feed() {
+        let mut snapshot: Snapshot = serde_json::from_str(r#"{"settings":{"mock":true}}"#).unwrap();
+        let mut real = crate::demo::mock().remove(0);
+        real.id = "123".into();
+        snapshot.matches.push(real);
+        snapshot.migrate_demo_state();
+        assert!(!snapshot.settings.mock);
+        assert_eq!(snapshot.matches[0].id, "123");
+        assert!(snapshot.matches[0].score_stale);
     }
     #[test]
     fn theme_migration_and_round_trip() {
@@ -473,7 +434,6 @@ mod tests {
         next.reminder_minutes = 30;
         next.reduced_motion = true;
         let effects = apply_settings(&mut snapshot, next.clone());
-        assert!(!effects.mode_changed);
         assert!(effects.pin_changed && effects.compact_changed);
         assert_eq!(snapshot.updated_at.as_deref(), Some("score time"));
         assert_eq!(snapshot.fixture_updated_at.as_deref(), Some("fixture time"));
@@ -489,12 +449,13 @@ mod tests {
         assert_eq!(snapshot.settings, next);
         assert_eq!(snapshot.fixture_updated_at.as_deref(), Some("fixture time"));
         next.mock = true;
-        assert!(apply_settings(&mut snapshot, next).mode_changed);
+        apply_settings(&mut snapshot, next);
+        assert!(!snapshot.settings.mock);
         assert_eq!(snapshot.updated_at.as_deref(), Some("new score time"));
         assert_eq!(snapshot.fixture_updated_at.as_deref(), Some("fixture time"));
     }
     #[test]
-    fn only_mode_changes_request_a_feed_refresh() {
+    fn settings_effects_identify_native_window_changes() {
         let original = Settings::default();
         let changes: [fn(&mut Settings); 11] = [
             |s| s.theme = Theme::Light,
@@ -513,38 +474,19 @@ mod tests {
             let mut next = original.clone();
             change(&mut next);
             let effects = SettingsEffects::between(&original, &next);
-            assert!(!effects.mode_changed);
             assert_eq!(
                 effects.pin_changed,
                 original.always_on_top != next.always_on_top
             );
             assert_eq!(effects.compact_changed, original.compact != next.compact);
         }
-        let mut mock = original.clone();
-        mock.mock = true;
-        assert!(SettingsEffects::between(&original, &mock).mode_changed);
-        assert!(SettingsEffects::between(&mock, &original).mode_changed);
         assert_eq!(
             SettingsEffects::between(&original, &original),
             SettingsEffects {
-                mode_changed: false,
                 pin_changed: false,
                 compact_changed: false
             }
         );
-    }
-    #[test]
-    fn in_flight_feed_cannot_cross_a_mode_round_trip() {
-        let mut snapshot = Snapshot::default();
-        assert!(feed_is_current(&snapshot, false, 0, 0));
-        let mut settings = snapshot.settings.clone();
-        settings.mock = true;
-        apply_settings(&mut snapshot, settings.clone());
-        assert!(!feed_is_current(&snapshot, false, 0, 1));
-        settings.mock = false;
-        apply_settings(&mut snapshot, settings);
-        assert!(!feed_is_current(&snapshot, false, 0, 2));
-        assert!(feed_is_current(&snapshot, false, 2, 2));
     }
     #[test]
     fn compact_preserves_logical_expanded_dimensions_across_restart() {

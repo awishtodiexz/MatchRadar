@@ -1,10 +1,13 @@
 ﻿import { test, expect } from '@playwright/test';
 
+import { installBridge } from './bridge';
+
 test.beforeEach(async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-29T12:00:00Z') });
   await page.route('https://**/*', route => route.abort());
+  await installBridge(page);
   await page.goto('/');
-  await expect(page.getByText('DEMO DATA', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Match details: Arsenal versus Chelsea' })).toBeVisible();
 });
 
 test('home filters show the appropriate fixtures', async ({ page }) => {
@@ -41,7 +44,7 @@ test('returning home restores scroll and the match-card focus', async ({ page })
   await expect.poll(() => page.locator('.match-list').evaluate(element => element.scrollTop)).toBe(scroll);
 });
 
-test('theme changes and demo progression/reset remain available in settings', async ({ page }) => {
+test('theme changes and demo controls are absent from settings', async ({ page }) => {
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
   for (const theme of ['light', 'dark']) {
@@ -49,10 +52,8 @@ test('theme changes and demo progression/reset remain available in settings', as
     await expect(page.locator('main')).toHaveClass(new RegExp('theme-' + theme));
   }
   await page.getByRole('tab', { name: 'App', exact: true }).click();
-  await page.getByRole('button', { name: 'Advance match', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Demo controls' })).toContainText('First half');
-  await page.getByRole('button', { name: 'Reset demo', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Demo controls' })).toContainText('Scheduled');
+  await expect(page.getByText('Demo data', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Demo controls' })).toHaveCount(0);
 });
 
 test('upcoming match honestly omits unavailable detail tabs', async ({ page }) => {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { mockSnapshot } from './demo/fixtures';
+import { mockSnapshot } from './test-fixtures/fixtures';
 import type { Settings, Snapshot } from './types';
 
 const bridge = vi.hoisted(() => ({ invoke: vi.fn() }));
@@ -14,7 +14,7 @@ function deferred<T>() {
 let store: typeof import('./store')['useApp'];
 let reads: ReturnType<typeof deferred<Snapshot>>[];
 let writes: { settings: Settings; task: ReturnType<typeof deferred<Settings>> }[];
-const initial = (): Snapshot => structuredClone({ ...mockSnapshot, updatedAt:'2026-10-28T12:00:00Z', settings: { ...mockSnapshot.settings, mock: false } });
+const initial = (): Snapshot => structuredClone({ ...mockSnapshot, updatedAt:'2026-10-28T12:00:00Z', settings: { ...mockSnapshot.settings } });
 const fresh = (): Snapshot => ({ ...initial(), matches: [{ ...mockSnapshot.matches[0], homeScore: 4, scoreStale: true }], updatedAt: '2026-10-28T12:01:00Z', fixtureUpdatedAt:'2026-10-28T12:02:00Z', scoreError:'Daily scores unavailable', partial:true, error: 'Partial feed failure', refreshing: true });
 
 beforeEach(async () => {
@@ -49,16 +49,6 @@ describe('native snapshot and preference ordering', () => {
     reads[0].resolve(fresh());await recovered;
     expect(store.getState().error).toBeNull();
     expect(bridge.invoke.mock.calls.filter(([name])=>name==='refresh')).toHaveLength(2);
-  });
-  it('isolates F03 freshness during an optimistic mode change and restores it on failure', async () => {
-    const load = store.getState().load(); reads[0].resolve(fresh()); await load;
-    const save = store.getState().save({mock:true});
-    expect(store.getState().snapshot).toMatchObject({matches:[],updatedAt:null,fixtureUpdatedAt:null,error:null,fixtureError:null,scoreError:null,partial:false,refreshing:true});
-    await vi.waitFor(() => expect(writes).toHaveLength(1));
-    writes[0].task.reject(new Error('Mode save denied')); await save;
-    expect(store.getState().snapshot).toMatchObject({matches:[{homeScore:4,scoreStale:true}],fixtureUpdatedAt:'2026-10-28T12:02:00Z',scoreError:'Daily scores unavailable',partial:true,settings:{mock:false}});
-    reads[1].resolve(fresh()); // Complete failure reconciliation before the next test.
-    await Promise.resolve();
   });
   it('F02: accepts a fresh event snapshot finishing after a cosmetic save', async () => {
     const save = store.getState().save({opacity:80});

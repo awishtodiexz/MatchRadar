@@ -1,23 +1,14 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, expect, it } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
 import App from './App';
+import { useApp } from './store';
+
 afterEach(cleanup);
-describe('widget', () => {
-  it('labels browser demo data and opens match details', async () => {
-    render(<App/>);
-    expect(await screen.findByText('DEMO DATA')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', {name: /Match details: Arsenal versus Chelsea/}));
-    expect(screen.getByText('Match details')).toBeTruthy();
-    expect(screen.getByText(/demo events available in Timeline/)).toBeTruthy();
-    expect(screen.getByRole('tab',{name:'Timeline'})).toBeTruthy();
-  });
-  it('allows filtering to followed teams', async () => {
-    render(<App/>);
-    await screen.findByText('DEMO DATA');
-    fireEvent.click(screen.getByRole('button', {name:'Settings'}));
-    fireEvent.click(screen.getByRole('checkbox', {name:/Following only/}));
-    fireEvent.click(screen.getByRole('button', {name:'Back to matches'}));
-    await waitFor(() => expect(screen.queryByText('Brighton & Hove Albion')).toBeNull());
-  });
+it('shows a desktop-only message instead of fictional fixtures in a browser', async () => {
+  useApp.setState({snapshot:null,loading:true,error:null});
+  render(<App/>);
+  expect(await screen.findByText('Match data is available in the desktop app.')).toBeTruthy();
+  expect(screen.queryByText('DEMO DATA')).toBeNull();
+  expect(screen.queryByRole('button', {name:/Match details:/})).toBeNull();
 });

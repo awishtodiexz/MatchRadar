@@ -79,18 +79,10 @@ pub async fn get_recent_results(
     history: tauri::State<'_, History>,
 ) -> Result<Results, String> {
     let _guard = history.0.lock().await;
-    let (generation, fetch) = {
+    let fetch = {
         let state = app.state::<State>();
         let s = state.snapshot.lock().map_err(|e| e.to_string())?;
-        if s.settings.mock {
-            return Err("Recent results unavailable in demo mode".into());
-        }
-        (
-            state
-                .mode_generation
-                .load(std::sync::atomic::Ordering::Relaxed),
-            due(&s, Utc::now()),
-        )
+        due(&s, Utc::now())
     };
     if fetch {
         let outcome = match provider::client() {
@@ -102,11 +94,6 @@ pub async fn get_recent_results(
         }
         let state = app.state::<State>();
         let mut s = state.snapshot.lock().map_err(|e| e.to_string())?;
-        if !s.settings.mock
-            && generation
-                == state
-                    .mode_generation
-                    .load(std::sync::atomic::Ordering::Relaxed)
         {
             let mut next = s.clone();
             apply(&mut next, outcome, Utc::now());
@@ -119,9 +106,6 @@ pub async fn get_recent_results(
     }
     let state = app.state::<State>();
     let s = state.snapshot.lock().map_err(|e| e.to_string())?;
-    if s.settings.mock {
-        return Err("Results source changed".into());
-    }
     Ok(view(&s))
 }
 #[cfg(test)]

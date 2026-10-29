@@ -1,5 +1,7 @@
 # Architecture
 
+Demo mode has been removed. References to it in the historical checkpoint sections below describe earlier versions, not current behavior. Legacy saved demo preferences and synthetic records are migrated away; pending real alerts require fresh confirmation before delivery. Browser checks use test-only mocked IPC.
+
 ## Responsibility map
 
 | Boundary | Owner |
@@ -31,7 +33,7 @@ F01 tests cover legacy/full snapshot round trips, corruption, unreadable state, 
 
 The poller targets 60 seconds for live fixtures, five minutes when a fixture is within a day and 30 minutes otherwise. Fixture snapshots use monthly queries refreshed every six hours; daily score updates are merged by stable match ID. Manual refresh forces both. Failure delays grow exponentially; numeric Retry-After is honored up to one hour. Failures leave the previous snapshot intact and write diagnostic details to `provider.log`. The implementation has not yet been tested against actual sleep/resume or rate-limit responses.
 
-Settings saves are separate from data refresh. Appearance, pinning, favorites/filtering, and notification preferences persist and emit a snapshot event without waking the poller or changing feed timestamps. A demo/live mode transition wakes refresh while preserving the real feed; a generation counter prevents older requests from repopulating a different mode. The frontend queues partial preference edits, overlays pending edits on snapshots, and rolls back failed saves without discarding later unrelated edits. Rust remains authoritative after persistence.
+Settings saves are separate from data refresh. Appearance, pinning, favorites/filtering, and notification preferences persist and emit a snapshot event without waking the poller or changing feed timestamps. The frontend queues partial preference edits, overlays pending edits on snapshots, and rolls back failed saves without discarding later unrelated edits. Rust remains authoritative after persistence.
 
 The root window participates in the taskbar (`skipTaskbar: false`); the permitted frontend minimize command is separate from hide-to-tray. Rust applies pin changes and compact sizing. Compact mode targets a logical height of 460px and width no greater than 390px, respecting narrower windows; expanded dimensions are stored in the snapshot and restored when compact is disabled. The window-state plugin restores first, then compact sizing is applied explicitly to avoid competing startup restores. Native operation/persistence errors are returned to the UI.
 

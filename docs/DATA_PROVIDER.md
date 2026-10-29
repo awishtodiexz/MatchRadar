@@ -1,5 +1,7 @@
 # Data provider
 
+The app no longer includes demo mode; historical references to demo data below describe older versions. Provider failures do not substitute fictional fixtures.
+
 The ESPN scoreboard is an unofficial source: `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard`. On 28 October 2026, a date-range request returned HTTP 400; a single-day request (`dates=20261031`) returned HTTP 200 with eight events, and a monthly request (`dates=202610`) returned HTTP 200 with 38 events. These observations are not a provider guarantee.
 
 The adapter fetches the current and, when needed, next calendar month for a two-week fixture window, at most every six hours unless the user refreshes. It separately requests today's scoreboard at the adaptive live polling cadence (and yesterday if a cached match from that day is still live). Matches are merged by provider ID, with the daily score taking precedence. ESPN timestamps without seconds are normalized to UTC. An empty events array is a successful empty schedule; errors preserve the existing snapshot and include the query and status in `provider.log` in the app data directory. Malformed individual fixtures are skipped. The source is unofficial, may change, and carries no licensing or availability guarantee. Demo data is never used to fill gaps in the live feed.

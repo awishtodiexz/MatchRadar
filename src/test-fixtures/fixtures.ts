@@ -1,7 +1,7 @@
 import type { Match, Settings, Snapshot } from '../types';
 import { clubs } from '../teams';
 export { clubs } from '../teams';
-export const defaults: Settings = { matchAlerts: {}, favorites: ['359','363','364','382','360','367'], followedOnly: false, compact: false, alwaysOnTop: true, reducedMotion: false, opacity: 96, theme: 'dark', reminders: true, reminderMinutes: 15, starts: true, goals: false, mock: false };
+export const defaults: Settings = { matchAlerts: {}, favorites: ['359','363','364','382','360','367'], followedOnly: false, compact: false, alwaysOnTop: true, reducedMotion: false, opacity: 96, theme: 'dark', reminders: true, reminderMinutes: 15, starts: true, goals: false };
 const time = (hours: number) => new Date(Date.now() + hours * 3600000).toISOString();
 const tomorrow = () => { const date = new Date(); date.setDate(date.getDate() + 1); date.setHours(20, 0, 0, 0); return date.toISOString(); };
 export const mockMatches: Match[] = [
@@ -18,4 +18,4 @@ export const mockMatches: Match[] = [
   {id:'demo-11',home:clubs[5],away:clubs[6],homeScore:0,awayScore:0,kickoff:time(-2),status:'suspended',detail:'Suspended',competition:'Premier League'},
   {id:'demo-12',home:clubs[11],away:clubs[12],kickoff:time(72),status:'unknown',detail:'Status unavailable',competition:'Premier League'}
 ];
-export const mockSnapshot: Snapshot = { matches: mockMatches, updatedAt: new Date().toISOString(), settings: {...defaults, mock: true} };
+export const mockSnapshot: Snapshot = { matches: mockMatches, updatedAt: new Date().toISOString(), settings: defaults };

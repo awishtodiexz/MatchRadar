@@ -1,11 +1,9 @@
 import { create } from 'zustand';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { Settings, Snapshot } from './types';
-import { mockSnapshot } from './demo/fixtures';
-import { progressDemo } from './demo/scenario';
 
 type Patch = Partial<Settings>;
-type Store = { demoStep:number; demoControl:(action:'advance'|'reset')=>void; snapshot: Snapshot | null; loading: boolean; error: string | null; load: () => Promise<void>; refresh: () => Promise<void>; save: (patch: Patch) => Promise<void> };
+type Store = { snapshot: Snapshot | null; loading: boolean; error: string | null; load: () => Promise<void>; refresh: () => Promise<void>; save: (patch: Patch) => Promise<void> };
 const pending: Patch[] = [];
 let queue: Promise<void> = Promise.resolve();
 let readSequence = 0;
@@ -13,7 +11,6 @@ let acceptedRead = 0;
 let settingsRevision = 0;
 let confirmed: Settings | null = null;
 let feed: Snapshot | null = null;
-let demoStep=0;
 const loadError = 'Could not load the widget state.';
 const refreshError = 'Could not refresh matches.';
 const recoveredError = (error:string|null) => error===loadError||error===refreshError?null:error;
@@ -21,26 +18,17 @@ const recoveredError = (error:string|null) => error===loadError||error===refresh
 function projected(): Snapshot | null {
   if (!feed || !confirmed) return null;
   const settings: Settings = Object.assign({}, confirmed, ...pending);
-  // Keep the source mode with the feed, separate from optimistic settings.
-  // A failed mode save can then restore its data without restoring stale scores.
-  return settings.mock === feed.settings.mock ? {...feed, settings, matches:settings.mock?progressDemo(feed.matches,demoStep):feed.matches} : {
-    ...feed, settings, matches: [], updatedAt: null, fixtureUpdatedAt: null,
-    error: null, fixtureError: null, scoreError: null, partial: false, refreshing: true
-  };
+  return {...feed, settings};
 }
 
 export const useApp = create<Store>((set, get) => ({
-  snapshot: null, loading: true, error: null, demoStep:0,
-  demoControl: action => {
-    if(!get().snapshot?.settings.mock || !feed?.settings.mock)return;
-    demoStep=action==='reset'?0:Math.min(4,demoStep+1);
-    set({demoStep,snapshot:projected()});
-  },
+  snapshot: null, loading: true, error: null,
   load: async () => {
     const sequence = ++readSequence;
     const revision = settingsRevision;
     try {
-      const snapshot = isTauri() ? await invoke<Snapshot>('get_snapshot') : get().snapshot ?? mockSnapshot;
+      const snapshot = isTauri() ? await invoke<Snapshot>('get_snapshot') : get().snapshot;
+      if (!snapshot) throw new Error('Desktop app required');
       if (sequence <= acceptedRead) return;
       acceptedRead = sequence;
       feed = snapshot;
@@ -49,7 +37,7 @@ export const useApp = create<Store>((set, get) => ({
       if (revision === settingsRevision || !confirmed) confirmed = snapshot.settings;
       set(state=>({snapshot: projected(), loading:false, error:recoveredError(state.error)}));
     } catch {
-      if (sequence > acceptedRead) set(state=>({loading:false, error:state.error??loadError}));
+      if (sequence > acceptedRead) set(state=>({loading:false, error:state.error??(isTauri()?loadError:'Match data is available in the desktop app.')}));
     }
   },
   refresh: async () => {
@@ -72,7 +60,6 @@ export const useApp = create<Store>((set, get) => ({
         // to authoritative state or copy a whole old snapshot on completion.
         const saved = isTauri() ? await invoke<Settings>('save_settings', {settings:next}) : next;
         confirmed = saved;
-        if(!saved.mock){demoStep=0;set({demoStep:0});}
         ++settingsRevision;
         pending.shift();
         set({snapshot:projected()});

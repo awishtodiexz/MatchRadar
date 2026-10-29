@@ -1,13 +1,16 @@
 import { test, expect } from '@playwright/test';
 
+import { installBridge } from './bridge';
+
 test.beforeEach(async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-29T12:00:00Z') });
   await page.route('https://**/*', route => route.abort());
+  await installBridge(page);
   await page.goto('/');
-  await expect(page.getByText('DEMO DATA', { exact:true })).toBeVisible();
+  await expect(page.getByRole('button',{name:'Match details: Arsenal versus Chelsea'})).toBeVisible();
 });
 
-test('explores filters, bells, search, simulation and details', async ({ page }) => {
+test('explores filters, bells, search and details', async ({ page }) => {
   for (const name of ['All','Live','Following','Upcoming','Results']) {
     await page.getByRole('button',{name,exact:true}).click();
     await expect(page.getByRole('button',{name,exact:true})).toHaveAttribute('aria-pressed','true');
@@ -38,22 +41,7 @@ test('explores filters, bells, search, simulation and details', async ({ page })
   await expect(page.getByRole('button',{name:'Arsenal',exact:true})).toBeVisible();
   await page.getByRole('tab',{name:'Teams'}).press('End');
   await expect(page.getByRole('tab',{name:'App',exact:true})).toBeFocused();
-  const controls=page.getByRole('region',{name:'Demo controls'});
-  for (const stage of ['First half','Half-time','Second half','Full-time']) {
-    await page.getByRole('button',{name:'Advance match'}).click();
-    await expect(controls).toContainText(stage);
-  }
-  await expect(page.getByRole('button',{name:'Advance match'})).toBeDisabled();
-  await page.getByRole('button',{name:'Back to matches'}).click();
-  await page.getByRole('button',{name:'Results',exact:true}).click();
-  await page.getByRole('button',{name:'Match details: Manchester City versus Manchester United'}).click();
-  await expect(page.locator('.detail-score')).toContainText('2 : 1');
-  await page.getByRole('tab',{name:'Timeline'}).click();
-  await expect(page.getByText(/scores a penalty/)).toBeVisible();
-  await page.getByRole('button',{name:'Settings',exact:true}).click();
-  await page.getByRole('tab',{name:'App',exact:true}).click();
-  await page.getByRole('button',{name:'Reset demo'}).click();
-  await expect(controls).toContainText('Scheduled');
+  await expect(page.getByRole('region',{name:'Demo controls'})).toHaveCount(0);
   await page.getByRole('button',{name:'Back to matches'}).click();
   await page.getByRole('button',{name:'Upcoming',exact:true}).click();
   await page.getByRole('button',{name:'Match details: Manchester City versus Manchester United'}).click();
@@ -92,8 +80,8 @@ for (const width of [320,390]) for (const theme of ['dark','light']) for (const 
         expect(await page.locator('.settings-body').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
         await expect(page.getByRole('button',{name:'Settings',exact:true})).toBeInViewport();
       }
-      const advance=page.getByRole('button',{name:'Advance match'});
-      await advance.scrollIntoViewIfNeeded(); await expect(advance).toBeInViewport();
+      const refresh=page.getByRole('button',{name:'Refresh data'});
+      await refresh.scrollIntoViewIfNeeded(); await expect(refresh).toBeInViewport();
       await page.screenshot({path:info.outputPath(`${width}-${theme}-${compact}-${opacity}-settings.png`),animations:'disabled'});
       await page.getByRole('button',{name:'Back to matches'}).click();
       await page.screenshot({path:info.outputPath(`${width}-${theme}-${compact}-${opacity}-home.png`),animations:'disabled'});

@@ -7,14 +7,14 @@ export interface MatchSummary {
   players:Array<{teamId:string;name:string;position:string;starter:boolean}>;
 }
 type SummaryState={id:string;data:MatchSummary|null;loading:boolean;error:string|null};
-export function useMatchSummary(id:string, active:boolean, demo:boolean) {
-  const [state,setState]=useState<SummaryState>({id,data:null,loading:!demo,error:null});
+export function useMatchSummary(id:string, active:boolean) {
+  const [state,setState]=useState<SummaryState>({id,data:null,loading:true,error:null});
   const [retry,setRetry]=useState(0);
   useEffect(()=>{
     let disposed=false;let inFlight=false;let timer:ReturnType<typeof setTimeout>|undefined;
     const visible=()=>document.visibilityState!=='hidden';
     const native=isTauri();
-    setState(old=>({id,data:!demo&&old.id===id?old.data:null,loading:!demo&&native,error:!demo&&!native?'Match details are available in the desktop app.':null}));
+    setState(old=>({id,data:old.id===id?old.data:null,loading:native,error:!native?'Match details are available in the desktop app.':null}));
     const read=async()=>{
       if(disposed||inFlight||!visible())return;
       inFlight=true;
@@ -29,11 +29,11 @@ export function useMatchSummary(id:string, active:boolean, demo:boolean) {
         if(!disposed&&active&&visible())timer=setTimeout(()=>void read(),60000);
       }
     };
-    const visibility=()=>{clearTimeout(timer);if(visible()&&!demo&&native)void read();};
-    if(!demo&&native)void read();
+    const visibility=()=>{clearTimeout(timer);if(visible()&&native)void read();};
+    if(native)void read();
     document.addEventListener('visibilitychange',visibility);
     return ()=>{disposed=true;clearTimeout(timer);document.removeEventListener('visibilitychange',visibility);};
-  },[id,active,demo,retry]);
-  const visible=demo?{id,data:null,loading:false,error:null}:state.id===id?state:{id,data:null,loading:true,error:null};
+  },[id,active,retry]);
+  const visible=state.id===id?state:{id,data:null,loading:true,error:null};
   return {...visible,retry:()=>setRetry(n=>n+1)};
 }

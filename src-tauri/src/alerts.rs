@@ -55,9 +55,6 @@ pub fn cleanup(snapshot: &mut Snapshot, now: DateTime<Utc>) {
 // Sent IDs are recorded by the delivery queue only after the native API returns success.
 pub fn plan(snapshot: &mut Snapshot, now: DateTime<Utc>) -> Vec<(String, String)> {
     cleanup(snapshot, now);
-    if snapshot.settings.mock {
-        return Vec::new();
-    }
     let mut alerts = Vec::new();
     for m in &snapshot.matches {
         if m.score_stale {
@@ -267,7 +264,6 @@ mod tests {
         settings.opacity = 80;
         prepare_preferences(&mut s, &mut settings, now());
         assert!(s.alert_baselines.contains_key("match-1"));
-        assert!(!crate::model::SettingsEffects::between(&s.settings, &settings).mode_changed);
         assert_eq!(s.updated_at.as_deref(), Some(now().to_rfc3339().as_str()));
         s.matches[0].home_score = Some(1);
         assert_eq!(plan(&mut s, now() + Duration::minutes(1)).len(), 1);

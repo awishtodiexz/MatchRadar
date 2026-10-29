@@ -1,7 +1,7 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { mockSnapshot } from './demo/fixtures';
+import { mockSnapshot } from './test-fixtures/fixtures';
 import { useApp } from './store';
 import App from './App';
 import type { Settings } from './types';
@@ -32,7 +32,7 @@ describe('widget controls', () => {
  });
  it('shows partial fixture success and saved live scores without claiming they were freshly confirmed', async () => {
   bridge.native=true;
-  const snapshot={...mockSnapshot,settings:{...mockSnapshot.settings,mock:false},partial:true,error:'Scores: HTTP 500',scoreError:'HTTP 500',updatedAt:'2026-10-28T11:00:00Z',fixtureUpdatedAt:'2026-10-28T12:00:00Z',matches:mockSnapshot.matches.map(m=>({...m,scoreStale:m.status==='live'||m.status==='halftime'}))};
+  const snapshot={...mockSnapshot,settings:{...mockSnapshot.settings},partial:true,error:'Scores: HTTP 500',scoreError:'HTTP 500',updatedAt:'2026-10-28T11:00:00Z',fixtureUpdatedAt:'2026-10-28T12:00:00Z',matches:mockSnapshot.matches.map(m=>({...m,scoreStale:m.status==='live'||m.status==='halftime'}))};
   bridge.invoke.mockImplementation((command: string)=>Promise.resolve(command==='get_snapshot'?snapshot:undefined));
   render(<App/>);
   expect(await screen.findByText('Partial update · some data may be stale')).toBeTruthy();
@@ -171,21 +171,5 @@ describe('widget controls', () => {
   expect(persisted.settings).toMatchObject({alwaysOnTop:true, theme:'light'});
   expect(useApp.getState().snapshot?.settings).toMatchObject({alwaysOnTop:true, theme:'light'});
   expect(useApp.getState().error).toMatch(/Could not save/);
- });
- it('does not relabel demo fixtures as live during a mode save or stale snapshot load', async () => {
-  bridge.native = true;
-  let releaseSave: (() => void) | undefined;
-  bridge.invoke.mockImplementation((command: string, args?: {settings: Settings}) => {
-   if (command === 'get_snapshot') return Promise.resolve(mockSnapshot);
-   if (!args) throw new Error('Missing settings payload');
-   return new Promise<Settings>(resolve => {releaseSave=()=>resolve(args.settings);});
-  });
-  const save = useApp.getState().save({mock:false});
-  expect(useApp.getState().snapshot?.matches).toEqual([]);
-  await useApp.getState().load();
-  expect(useApp.getState().snapshot?.settings.mock).toBe(false);
-  expect(useApp.getState().snapshot?.matches).toEqual([]);
-  expect(useApp.getState().snapshot?.updatedAt).toBeNull();
-  releaseSave?.(); await save;
  });
 });
