@@ -525,7 +525,7 @@ fn slow_persistence_cannot_submit_an_event_that_expired_during_the_write() {
 }
 
 #[test]
-fn queue_round_trips_through_f01_repository_and_demo_switch_drops_live_pending_work() {
+fn queue_round_trips_through_f01_repository_and_demo_switch_preserves_live_pending_work() {
     let s = goal();
     let dir = std::env::temp_dir().join(format!(
         "matchradar-delivery-{}-{}",
@@ -540,11 +540,140 @@ fn queue_round_trips_through_f01_repository_and_demo_switch_drops_live_pending_w
     assert_eq!(loaded.alert_baselines["match-1"].home, Some(1));
     let mut settings = loaded.settings.clone();
     settings.mock = true;
-    crate::model::apply_settings(&mut loaded, settings);
-    assert!(loaded.pending_notifications.is_empty());
-    loaded.matches = s.matches;
+    crate::model::apply_settings_at(&mut loaded, settings, now());
+    assert_eq!(loaded.pending_notifications, s.pending_notifications);
     enqueue(&mut loaded, &["match-1".into()], now());
-    assert!(loaded.pending_notifications.is_empty());
-    assert!(loaded.alert_baselines.is_empty());
+    assert_eq!(loaded.pending_notifications, s.pending_notifications);
+    assert_eq!(loaded.alert_baselines["match-1"].home, Some(1));
     std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn demo_mode_preserves_real_alerts_through_restart_and_requires_fresh_confirmation() {
+    let mut s = goal();
+    s.sent_notifications.push("previous:reminder".into());
+    let original_preferences = s.settings.match_alerts.clone();
+    let original_match = s.matches[0].clone();
+    let original_baseline = serde_json::to_value(&s.alert_baselines).unwrap();
+    let mut settings = s.settings.clone();
+    settings.mock = true;
+    crate::model::apply_settings_at(&mut s, settings, now());
+    let mut settings = s.view(&crate::demo::mock()).settings;
+    settings.match_alerts.insert(
+        "demo-0".into(),
+        MatchAlert {
+            enabled: true,
+            expires_at: (now() + Duration::days(2)).to_rfc3339(),
+        },
+    );
+    settings.match_alerts.insert(
+        "match-1".into(),
+        MatchAlert {
+            enabled: false,
+            expires_at: (now() + Duration::days(2)).to_rfc3339(),
+        },
+    );
+    crate::model::apply_settings_at(&mut s, settings, now());
+    assert_eq!(s.settings.match_alerts, original_preferences);
+    assert_eq!(s.demo_match_alerts.len(), 1);
+    assert_eq!(s.matches[0].id, original_match.id);
+    assert_eq!(s.matches[0].home_score, original_match.home_score);
+    assert!(s.matches[0].score_stale);
+    assert_eq!(
+        serde_json::to_value(&s.alert_baselines).unwrap(),
+        original_baseline
+    );
+    let mut s = reload(&s);
+    let mut sink = Sink::default();
+    run(&mut s, now() + Duration::seconds(30), &mut sink);
+    assert!(sink.calls.is_empty());
+    assert_eq!(s.pending_notifications.len(), 1);
+    let mut settings = s.view(&crate::demo::mock()).settings;
+    settings.mock = false;
+    crate::model::apply_settings_at(&mut s, settings, now() + Duration::seconds(30));
+    assert_eq!(s.settings.match_alerts, original_preferences);
+    assert_eq!(s.sent_notifications, ["previous:reminder"]);
+    run(&mut s, now() + Duration::seconds(31), &mut sink);
+    assert!(sink.calls.is_empty());
+    revalidate(&mut s, &[], now() + Duration::seconds(32));
+    assert!(s.revalidate_pending);
+    revalidate(&mut s, &["match-1".into()], now() + Duration::seconds(33));
+    assert!(!s.revalidate_pending);
+    run(&mut s, now() + Duration::seconds(34), &mut sink);
+    assert_eq!(sink.calls, ["match-1:score:1:0"]);
+}
+
+#[test]
+fn demo_mode_does_not_deliver_expired_real_alerts_on_return() {
+    let mut s = goal();
+    let mut settings = s.settings.clone();
+    settings.mock = true;
+    crate::model::apply_settings_at(&mut s, settings, now());
+    let mut s = reload(&s);
+    let mut sink = Sink::default();
+    run(&mut s, now() + Duration::minutes(10), &mut sink);
+    assert!(sink.calls.is_empty());
+    let mut settings = s.view(&crate::demo::mock()).settings;
+    settings.mock = false;
+    crate::model::apply_settings_at(&mut s, settings, now() + Duration::minutes(10));
+    revalidate(&mut s, &["match-1".into()], now() + Duration::minutes(10));
+    run(&mut s, now() + Duration::minutes(10), &mut sink);
+    assert!(sink.calls.is_empty());
+    assert!(s.pending_notifications.is_empty());
+}
+
+#[test]
+fn confirmed_score_correction_cancels_a_retained_goal() {
+    let mut s = goal();
+    let mut settings = s.settings.clone();
+    settings.mock = true;
+    crate::model::apply_settings_at(&mut s, settings, now());
+    let mut settings = s.view(&crate::demo::mock()).settings;
+    settings.mock = false;
+    crate::model::apply_settings_at(&mut s, settings, now() + Duration::seconds(30));
+    s.alert_baselines.get_mut("match-1").unwrap().home = Some(0);
+    revalidate(&mut s, &["match-1".into()], now() + Duration::seconds(31));
+    let mut sink = Sink::default();
+    run(&mut s, now() + Duration::seconds(32), &mut sink);
+    assert!(sink.calls.is_empty());
+    assert!(s.pending_notifications.is_empty());
+}
+
+#[test]
+fn synthetic_pending_events_cannot_reach_native_delivery() {
+    let mut s = goal();
+    s.pending_notifications[0].match_id = "demo-0".into();
+    s.pending_notifications[0].id = "demo-0:score:1:0".into();
+    let mut sink = Sink::default();
+    run(&mut s, now(), &mut sink);
+    assert!(sink.calls.is_empty());
+    assert!(s.pending_notifications.is_empty());
+}
+
+#[test]
+fn rapid_mode_switches_keep_pending_state_and_reject_old_feed_generations() {
+    let mut s = goal();
+    for generation in 0..3 {
+        let mut settings = s.settings.clone();
+        settings.mock = true;
+        crate::model::apply_settings_at(&mut s, settings, now());
+        assert!(!crate::model::feed_is_current(
+            &s,
+            false,
+            generation * 2,
+            generation * 2 + 1
+        ));
+        let mut settings = s.view(&crate::demo::mock()).settings;
+        settings.mock = false;
+        crate::model::apply_settings_at(&mut s, settings, now());
+        assert!(!crate::model::feed_is_current(
+            &s,
+            false,
+            generation * 2,
+            generation * 2 + 2
+        ));
+        assert_eq!(s.pending_notifications.len(), 1);
+        assert_eq!(s.alert_baselines["match-1"].home, Some(1));
+        assert!(s.revalidate_pending);
+    }
 }

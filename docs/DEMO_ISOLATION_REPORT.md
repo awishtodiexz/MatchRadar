@@ -8,9 +8,9 @@
 
 ## Isolation is not complete
 
-These moves are an organizational boundary, **not** a production exclusion mechanism. There is currently no supported demo-disabled build: both the native binary and frontend bundle still include demo code and data. A saved demo preference can still activate it. The existing mode switch clears real pending notification candidates and baselines, and demo match-bell preferences use the shared settings map. Switching back while offline does not guarantee restoration of the prior live fixture feed. Do not use this checkpoint as a public-release configuration.
+These moves are an organizational boundary, **not** a production exclusion mechanism. There is currently no supported demo-disabled build: both the native binary and frontend bundle still include demo code and data. A saved demo preference can still activate it. The later targeted mode-switch change separates demo bell preferences and retains real feed and notification state; see [Demo Mode report](DEMO_MODE_REPORT.md). Do not use this checkpoint as a public-release configuration.
 
-Completing isolation requires a jointly configured frontend/native build gate, conservative legacy-state migration, independently retained real feed and notification state, transient demo alert overrides, and regression tests for in-flight mode switches and restarts. Those changes affect F01–F04 persistence and delivery guarantees and need native compilation and Windows CI. They have not been implemented in this checkpoint.
+Completing public-build isolation still requires a jointly configured frontend/native build gate and verification of the resulting binaries. The later mode-switch change affects F01–F04 persistence and delivery guarantees and needs native compilation and Windows CI.
 
 ## Validation and remaining checks
 

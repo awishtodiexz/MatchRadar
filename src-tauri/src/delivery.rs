@@ -66,7 +66,7 @@ pub fn deserialize_pending<'de, D: Deserializer<'de>>(
 }
 
 fn eligible(snapshot: &Snapshot, event: &PendingNotification) -> bool {
-    if snapshot.settings.mock {
+    if event.match_id.starts_with("demo-") {
         return false;
     }
     if let Some(preference) = snapshot.settings.match_alerts.get(&event.match_id) {
@@ -145,11 +145,11 @@ pub fn cleanup(snapshot: &mut Snapshot, now: DateTime<Utc>) {
 
 /// Called only with newly confirmed observations; retries never re-run the planner.
 pub fn enqueue(snapshot: &mut Snapshot, score_ids: &[String], now: DateTime<Utc>) -> usize {
-    crate::alerts::cleanup(snapshot, now);
-    cleanup(snapshot, now);
     if snapshot.settings.mock {
         return 0;
     }
+    crate::alerts::cleanup(snapshot, now);
+    cleanup(snapshot, now);
     let mut observed = crate::refresh::notification_view(snapshot, score_ids);
     let candidates = crate::alerts::plan(&mut observed, now);
     snapshot.alert_baselines = observed.alert_baselines;
@@ -209,6 +209,17 @@ pub enum SubmissionError {
 
 /// Earliest retry/expiry deadline. Exhausted events remain as suppression records until expiry.
 pub fn next_due(snapshot: &Snapshot, now: DateTime<Utc>) -> Option<std::time::Duration> {
+    if snapshot.settings.mock {
+        return None;
+    }
+    if snapshot.revalidate_pending {
+        return snapshot
+            .pending_notifications
+            .iter()
+            .filter_map(|event| date(&event.expires_at))
+            .min()
+            .map(|expiry| (expiry - now).to_std().unwrap_or_default());
+    }
     let blocked = snapshot.notification_retry_after.as_deref().and_then(date);
     snapshot
         .pending_notifications
@@ -236,9 +247,18 @@ pub fn submit_due(
     mut save: impl FnMut(&Snapshot) -> Result<(), String>,
     mut log: impl FnMut(&str),
 ) -> Result<(), String> {
+    if snapshot.settings.mock {
+        return Ok(());
+    }
     let now = clock();
     cleanup(snapshot, now);
+    if snapshot.pending_notifications.is_empty() {
+        snapshot.revalidate_pending = false;
+    }
     save(snapshot)?;
+    if snapshot.revalidate_pending {
+        return Ok(());
+    }
     if snapshot
         .notification_retry_after
         .as_deref()
@@ -326,6 +346,22 @@ pub fn submit_due(
         save(snapshot)?;
     }
     Ok(())
+}
+
+// After demo mode, hold previously planned alerts until their matches are freshly
+// confirmed. Unconfirmed or offline observations can never release stale alerts.
+pub fn revalidate(snapshot: &mut Snapshot, score_ids: &[String], now: DateTime<Utc>) {
+    if !snapshot.revalidate_pending || snapshot.settings.mock {
+        return;
+    }
+    cleanup(snapshot, now);
+    if snapshot
+        .pending_notifications
+        .iter()
+        .all(|event| score_ids.contains(&event.match_id))
+    {
+        snapshot.revalidate_pending = false;
+    }
 }
 
 #[cfg(test)]

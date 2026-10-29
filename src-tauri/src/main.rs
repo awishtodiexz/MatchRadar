@@ -11,7 +11,7 @@ mod results;
 mod scheduling;
 mod window;
 use chrono::{DateTime, Utc};
-use model::{apply_feed, apply_settings, feed_is_current, Settings, SettingsEffects, Snapshot};
+use model::{apply_settings, feed_is_current, Settings, SettingsEffects, Snapshot};
 use std::{
     fs,
     io::Write,
@@ -33,6 +33,7 @@ use window::{logical_size, resize, rollback_window};
 
 struct State {
     snapshot: Mutex<Snapshot>,
+    demo_matches: Mutex<Vec<model::Match>>,
     path: PathBuf,
     wake: tokio::sync::Notify,
     notification_wake: tokio::sync::Notify,
@@ -111,11 +112,9 @@ async fn get_match_details(
 }
 #[tauri::command]
 fn get_snapshot(state: tauri::State<'_, State>) -> Result<Snapshot, String> {
-    state
-        .snapshot
-        .lock()
-        .map(|s| s.clone())
-        .map_err(|e| e.to_string())
+    let snapshot = state.snapshot.lock().map_err(|e| e.to_string())?;
+    let demo = state.demo_matches.lock().map_err(|e| e.to_string())?;
+    Ok(snapshot.view(&demo))
 }
 #[tauri::command]
 fn save_settings(
@@ -169,7 +168,11 @@ fn save_settings(
         let mut next = snapshot.clone();
         apply_settings(&mut next, settings);
         next.expanded_size = expanded_size;
+        let mut demo = state.demo_matches.lock().map_err(|e| e.to_string())?;
         write_snapshot(&state, &next)?;
+        if effects.mode_changed && next.settings.mock {
+            *demo = crate::demo::mock();
+        }
         *snapshot = next;
         if effects.mode_changed {
             state.mode_generation.fetch_add(1, Ordering::Relaxed);
@@ -197,11 +200,9 @@ fn save_settings(
     app.emit("snapshot-updated", ())
         .map_err(|e| format!("Notify widget of saved settings: {e}"))?;
     // Return Rust's persisted normalization, rather than echoing the IPC payload.
-    state
-        .snapshot
-        .lock()
-        .map(|s| s.settings.clone())
-        .map_err(|e| e.to_string())
+    let snapshot = state.snapshot.lock().map_err(|e| e.to_string())?;
+    let demo = state.demo_matches.lock().map_err(|e| e.to_string())?;
+    Ok(snapshot.view(&demo).settings)
 }
 #[tauri::command]
 fn refresh(app: tauri::AppHandle, state: tauri::State<'_, State>) {
@@ -314,7 +315,6 @@ async fn poll(app: tauri::AppHandle) {
     let mut failures = 0u32;
     let client = provider::client();
     let mut gate = scheduling::RequestGate::default();
-    let mut demo_fixtures: Option<(u64, Vec<model::Match>)> = None;
     loop {
         let state = app.state::<State>();
         let mock = state
@@ -351,33 +351,8 @@ async fn poll(app: tauri::AppHandle) {
         let _ = app.emit("snapshot-updated", ());
         let mut retry_after = None;
         if settings.mock {
-            if demo_fixtures
-                .as_ref()
-                .is_none_or(|(version, _)| *version != generation)
-            {
-                demo_fixtures = Some((generation, crate::demo::mock()));
-            }
-            let mut s = state.snapshot.lock().unwrap();
-            if feed_is_current(
-                &s,
-                true,
-                generation,
-                state.mode_generation.load(Ordering::Relaxed),
-            ) {
-                apply_feed(
-                    &mut s,
-                    demo_fixtures
-                        .as_ref()
-                        .map(|(_, fixtures)| fixtures.clone())
-                        .unwrap_or_default(),
-                    Utc::now().to_rfc3339(),
-                    false,
-                    None,
-                );
-            }
             failures = 0;
         } else {
-            demo_fixtures = None;
             let force = state.force_fixtures.swap(false, Ordering::Relaxed);
             let due = force
                 || fixture_updated_at
@@ -433,6 +408,7 @@ async fn poll(app: tauri::AppHandle) {
             ) {
                 let applied = refresh::apply(&mut s, fixtures, scores, Utc::now());
                 retry_after = applied.retry_after;
+                delivery::revalidate(&mut s, &applied.score_ids, Utc::now());
                 if applied.any_response {
                     let overflow = delivery::enqueue(&mut s, &applied.score_ids, Utc::now());
                     if overflow > 0 {
@@ -537,6 +513,7 @@ fn main() {
             let mut snapshot = loaded.snapshot;
             snapshot.refreshing = false;
             snapshot.migrate_catalog();
+            snapshot.migrate_demo_state();
             refresh::mark_cached(&mut snapshot);
             alerts::cleanup(&mut snapshot, Utc::now());
             delivery::cleanup(&mut snapshot, Utc::now());
@@ -556,6 +533,7 @@ fn main() {
             app.manage(results::History::default());
             app.manage(State {
                 snapshot: Mutex::new(snapshot),
+                demo_matches: Mutex::new(crate::demo::mock()),
                 path,
                 wake: tokio::sync::Notify::new(),
                 notification_wake: tokio::sync::Notify::new(),
@@ -634,6 +612,7 @@ mod persistence_tests {
             .join("state.json");
         let state = State {
             snapshot: Mutex::new(Snapshot::default()),
+            demo_matches: Mutex::new(Vec::new()),
             path: path.clone(),
             wake: tokio::sync::Notify::new(),
             notification_wake: tokio::sync::Notify::new(),

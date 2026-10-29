@@ -4,6 +4,8 @@ For the latest feature-branch evidence and acceptance checklist, see [Match Cent
 
 ## Verification Lite
 
+The subsequent targeted demo/live isolation change adds native regression tests for persisted pending alerts, separate demo preferences, restart, expiry, score corrections, synthetic event suppression and rapid mode changes. `verify:fast` passed 69 frontend tests and `verify:ui` passed seven Edge tests; Rust formatting passed. Local `cargo check --locked` stopped because MSVC `link.exe` is unavailable, so those new native tests and packaged notification behavior still require Windows CI and runtime verification.
+
 Run `npm ci`, then use these commands from the repository root (`npm.cmd` if needed in PowerShell):
 
 - `npm run verify:fast`: existing ESLint, all frontend tests, and TypeScript/production build. Stops on failure.
