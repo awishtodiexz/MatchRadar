@@ -183,6 +183,8 @@ pub const TEAM_CATALOG_VERSION: u32 = 1;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Snapshot {
+    #[serde(deserialize_with = "crate::details::deserialize_cache")]
+    pub detail_cache: Vec<crate::details::Details>,
     #[serde(deserialize_with = "crate::delivery::deserialize_pending")]
     pub pending_notifications: Vec<PendingNotification>,
     pub notification_retry_after: Option<String>,
@@ -205,6 +207,7 @@ pub struct Snapshot {
 impl Default for Snapshot {
     fn default() -> Self {
         Self {
+            detail_cache: Vec::new(),
             pending_notifications: Vec::new(),
             notification_retry_after: None,
             fixture_error: None,

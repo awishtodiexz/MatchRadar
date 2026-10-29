@@ -1,14 +1,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod alerts;
 mod delivery;
+mod details;
 mod model;
 mod persistence;
 mod provider;
 mod refresh;
+mod window;
 use chrono::{DateTime, Utc};
-use model::{
-    apply_feed, apply_settings, feed_is_current, ExpandedSize, Settings, SettingsEffects, Snapshot,
-};
+use model::{apply_feed, apply_settings, feed_is_current, Settings, SettingsEffects, Snapshot};
 use std::{
     fs,
     io::Write,
@@ -26,6 +26,7 @@ use tauri::{
 };
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_window_state::{StateFlags, WindowExt};
+use window::{logical_size, resize, rollback_window};
 
 struct State {
     snapshot: Mutex<Snapshot>,
@@ -47,21 +48,62 @@ fn persist(state: &State) -> Result<(), String> {
         .map_err(|e| format!("Lock MatchRadar state: {e}"))?;
     write_snapshot(state, &snapshot)
 }
-fn logical_size(window: &tauri::WebviewWindow) -> Result<ExpandedSize, String> {
-    let size = window
-        .inner_size()
-        .map_err(|e| format!("Read widget dimensions: {e}"))?;
-    let scale = window
-        .scale_factor()
-        .map_err(|e| format!("Read widget display scale: {e}"))?;
-    ExpandedSize::from_physical(size.width, size.height, scale)
-        .ok_or_else(|| "Invalid widget dimensions or display scale".into())
-}
-fn resize(window: &tauri::WebviewWindow, size: ExpandedSize) -> Result<(), String> {
-    let size = size.bounded();
-    window
-        .set_size(tauri::LogicalSize::new(size.width, size.height))
-        .map_err(|e| format!("Resize widget: {e}"))
+#[tauri::command]
+async fn get_match_details(
+    id: String,
+    app: tauri::AppHandle,
+    cache: tauri::State<'_, tokio::sync::Mutex<details::Cache>>,
+) -> Result<details::Details, String> {
+    let active = {
+        let state = app.state::<State>();
+        let snapshot = state.snapshot.lock().map_err(|e| e.to_string())?;
+        if snapshot.settings.mock {
+            return Err("Summary unavailable in demo mode".into());
+        }
+        let m = snapshot
+            .matches
+            .iter()
+            .find(|m| m.id == id)
+            .ok_or("Match not in Premier League fixture cache")?;
+        matches!(m.status.as_str(), "live" | "halftime")
+    };
+    if id.is_empty() || !id.bytes().all(|b| b.is_ascii_digit()) {
+        return Err("Invalid match ID".into());
+    }
+    let saved = {
+        let state = app.state::<State>();
+        let snapshot = state.snapshot.lock().map_err(|e| e.to_string())?;
+        snapshot.detail_cache.clone()
+    };
+    let mut cache = cache.lock().await;
+    cache.seed(&saved);
+    let mut data = cache.get(&id, active).await?;
+    if !data.stale {
+        let state = app.state::<State>();
+        let mut snapshot = state.snapshot.lock().map_err(|e| e.to_string())?;
+        if !snapshot.settings.mock
+            && !snapshot
+                .detail_cache
+                .iter()
+                .any(|d| d.match_id == id && d.updated_at == data.updated_at)
+        {
+            let mut next = snapshot.clone();
+            next.detail_cache.retain(|d| d.match_id != id);
+            next.detail_cache.push(data.clone());
+            next.detail_cache
+                .sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+            next.detail_cache.truncate(24);
+            match write_snapshot(&state, &next) {
+                Ok(()) => *snapshot = next,
+                Err(e) => {
+                    data.error = Some(format!(
+                        "Details available, but offline cache could not be saved: {e}"
+                    ));
+                }
+            }
+        }
+    }
+    Ok(data)
 }
 #[tauri::command]
 fn get_snapshot(state: tauri::State<'_, State>) -> Result<Snapshot, String> {
@@ -156,25 +198,6 @@ fn save_settings(
         .lock()
         .map(|s| s.settings.clone())
         .map_err(|e| e.to_string())
-}
-fn rollback_window(
-    window: &tauri::WebviewWindow,
-    settings: &Settings,
-    pin_changed: bool,
-    size: Option<ExpandedSize>,
-    mut error: String,
-) -> String {
-    if pin_changed {
-        if let Err(e) = window.set_always_on_top(settings.always_on_top) {
-            error.push_str(&format!("; restore always on top: {e}"));
-        }
-    }
-    if let Some(size) = size {
-        if let Err(e) = resize(window, size) {
-            error.push_str(&format!("; restore dimensions: {e}"));
-        }
-    }
-    error
 }
 #[tauri::command]
 fn refresh(app: tauri::AppHandle, state: tauri::State<'_, State>) {
@@ -485,6 +508,7 @@ fn main() {
                     resize(&window, current.compact())?;
                 }
             }
+            app.manage(tokio::sync::Mutex::new(details::Cache::default()));
             app.manage(State {
                 snapshot: Mutex::new(snapshot),
                 path,
@@ -540,6 +564,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
+            get_match_details,
             save_settings,
             refresh,
             test_notification

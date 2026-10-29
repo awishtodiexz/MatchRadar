@@ -1,4 +1,4 @@
-import { Radio } from 'lucide-react';
+import { MatchCentre } from './MatchCentre';
 import type { Match, Settings } from '../types';
 import { isLive } from '../fixtures';
 import { Badge, LeagueMark, ViewHeading } from './WidgetUi';
@@ -17,7 +17,7 @@ export function MatchDetails({match, settings, back}: {match:Match; settings:Set
       </div>
       <p className="detail-date"><time dateTime={match.kickoff}>{dateLabel(match.kickoff)} · {timeLabel(match.kickoff)}</time> local time</p>
       <MatchAlertPanel match={match} settings={settings}/>
-      <section className="detail-empty" aria-labelledby="events-heading"><Radio size={19}/><div><h3 id="events-heading">Match events</h3><p>Event details aren’t available from this feed yet.</p></div></section>
+      <MatchCentre key={match.id} match={match} demo={settings.mock || match.id.startsWith("demo-")}/>
     </div>
   </>;
 }

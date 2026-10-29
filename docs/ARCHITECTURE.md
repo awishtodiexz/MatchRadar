@@ -1,5 +1,23 @@
 # Architecture
 
+## Responsibility map
+
+| Boundary | Owner |
+| --- | --- |
+| Native commands, state locks, task wakes, polling/delivery loops and tray lifecycle | `src-tauri/src/main.rs` |
+| Logical window sizing, resize calls and best-effort settings rollback | `src-tauri/src/window.rs` |
+| Serialized state, defaults, preference normalization and feed application | `src-tauri/src/model.rs` |
+| ESPN transport/normalization and source-result reconciliation | `src-tauri/src/provider.rs`, `src-tauri/src/refresh.rs` |
+| Atomic state storage and recovery | `src-tauri/src/persistence.rs` |
+| Notification eligibility and durable submission queue | `src-tauri/src/alerts.rs`, `src-tauri/src/delivery.rs` |
+| Delivery regression tests (private child module, same test names/access) | `src-tauri/src/delivery_tests.rs` |
+| Native event subscriptions, view navigation and focus restoration | `src/App.tsx` |
+| Optimistic preference queue and ordered snapshot reads | `src/store.ts` |
+| Shared IPC types, presentation helpers and local-date timer | `src/types.ts`, `src/presentation.ts`, `src/useLocalDay.ts` |
+| Cards, details, settings and shared controls; semantic theme/spacing rules | `src/components/`, `src/styles.css` |
+
+`get_snapshot` returns the Rust snapshot serialized in camelCase; TypeScript models its UI-facing subset, not internal persisted notification/window fields. Rust `Option` values can serialize as null. `save_settings` accepts a complete Settings object assembled by the frontend's partial-update queue and returns normalized authoritative Settings. Snapshot events signal a new read rather than transporting an additional state model. Keep these names, nullability and defaults aligned when changing the IPC contract. The window-helper and delivery-test extractions do not change it.
+
 The Tauri process owns a normalized snapshot, preferences, a local JSON cache and a single asynchronous refresh loop. React reads snapshots through commands and refreshes on native events. The window can be hidden while the process continues running. The ESPN adapter validates each fixture independently, and failed requests preserve the previous snapshot. Settings and notification identifiers are persisted together.
 
 The frontend shell and native event listeners stay in `src/App.tsx`. Focused presentation components in `src/components/` own settings tabs, match cards/alert shortcuts, details, crests and shared controls. They call the existing store with partial settings patches; the Rust preference/notification model is unchanged. League status derives from the complete snapshot, separately from filtered card groups. `src/useLocalDay.ts` supplies one local-midnight timer plus focus/visibility reconciliation for date headings, independent of networking. Successful snapshot reads clear obsolete load/refresh errors while retaining unrelated save/action failures and provider diagnostics.
@@ -37,3 +55,7 @@ Acknowledgments are persisted after a successful API return. If that save fails,
 Important boundary: the locked `tauri-plugin-notification` **2.8.0** Windows implementation prepares a notification, dispatches `notify-rust::Notification::show()` on a background task, and discards that task's result. Its desktop `permission_state()` also always returns Granted. MatchRadar can retry preparation/submission errors exposed by the plugin, but cannot observe later OS failures or infer real Windows permission status from it. Successful plugin dispatch does not prove OS acceptance, display, or user attention; Focus Assist/system-disabled notifications can remain invisible. No dependency or native API replacement is included in F04. See the [official notification plugin guide](https://v2.tauri.app/plugin/notification/); this finer acknowledgment limitation was verified against the locked crate's `src/desktop.rs`.
 
 F04 adds 15 deterministic sink/clock/persistence tests for fail-once, repeated failures and retry limits, pending restarts, expiry (including stalled writes), repeated observations, subscription overlap/muting, corrections, first observations, service unavailability, F03 stale data, queue validation/capacity, legacy state, and F01 repository round trips. These Rust tests remain **unexecuted locally** because MSVC `link.exe` is missing. Consolidated Windows CI must compile/run them; packaged Windows tests must separately cover native failures, restart/crash boundaries, real notification settings, hidden-tray operation, and sleep/resume. No installer was built for F04.
+
+## Match Centre evolution checkpoint
+
+`details.rs` normalizes eng.1 summaries into events, statistics and players. `get_match_details` accepts only numeric IDs already in the widget fixture cache and rejects demo requests. A separate async cache lock serializes summary requests independently of scoreboard operations. The bounded 24-entry cache is saved in `Snapshot.detailCache` through F01; old state defaults to an empty cache and malformed individual entries are skipped. Summary fields never change scores or notification observations. Active details refresh at 60 seconds only while mounted; other entries reuse a 15-minute cache. Failures retain cached data and impose a minimum 60-second cooldown. `useMatchSummary` ignores responses after cleanup/navigation; `MatchCentre` renders supported sections inside the existing Details scroll region. Home view filters use existing fixture data only.

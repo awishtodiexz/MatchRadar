@@ -1,0 +1,93 @@
+{
+  "header": {
+    "id": "401879250",
+    "competitions": [
+      {
+        "status": {
+          "type": {
+            "id": "1",
+            "name": "STATUS_SCHEDULED",
+            "state": "pre",
+            "completed": false,
+            "description": "Scheduled",
+            "detail": "Sat, October 31st at 4:00 PM EDT",
+            "shortDetail": "10/31 - 4:00 PM EDT"
+          }
+        }
+      }
+    ]
+  },
+  "keyEvents": [],
+  "boxscore": {
+    "teams": [
+      {
+        "team": {
+          "id": "362"
+        },
+        "statistics": [
+          {
+            "name": "goalDifference",
+            "displayValue": "-3",
+            "label": "Goal Difference"
+          },
+          {
+            "name": "totalGoals",
+            "displayValue": "9",
+            "label": "Total Goals"
+          },
+          {
+            "name": "goalAssists",
+            "displayValue": "8",
+            "label": "Assists"
+          },
+          {
+            "name": "goalsConceded",
+            "displayValue": "12",
+            "label": "Goals Against"
+          }
+        ]
+      },
+      {
+        "team": {
+          "id": "370"
+        },
+        "statistics": [
+          {
+            "name": "goalDifference",
+            "displayValue": "-2",
+            "label": "Goal Difference"
+          },
+          {
+            "name": "totalGoals",
+            "displayValue": "8",
+            "label": "Total Goals"
+          },
+          {
+            "name": "goalAssists",
+            "displayValue": "3",
+            "label": "Assists"
+          },
+          {
+            "name": "goalsConceded",
+            "displayValue": "10",
+            "label": "Goals Against"
+          }
+        ]
+      }
+    ]
+  },
+  "rosters": [
+    {
+      "team": {
+        "id": "362"
+      },
+      "roster": []
+    },
+    {
+      "team": {
+        "id": "370"
+      },
+      "roster": []
+    }
+  ]
+}

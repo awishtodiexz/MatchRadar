@@ -256,6 +256,13 @@ pub fn client() -> Result<reqwest::Client, FetchError> {
             retry_after: None,
         })
 }
+pub fn retry_after(value: &str, now: DateTime<Utc>) -> Option<u64> {
+    value.trim().parse::<u64>().ok().or_else(|| {
+        DateTime::parse_from_rfc2822(value)
+            .ok()
+            .map(|t| (t.with_timezone(&Utc) - now).num_seconds().max(0) as u64)
+    })
+}
 async fn query(client: &reqwest::Client, dates: &str) -> Result<Vec<Match>, FetchError> {
     let response = client
         .get("https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard")
@@ -271,7 +278,7 @@ async fn query(client: &reqwest::Client, dates: &str) -> Result<Vec<Match>, Fetc
         .headers()
         .get("retry-after")
         .and_then(|h| h.to_str().ok())
-        .and_then(|s| s.parse().ok());
+        .and_then(|s| retry_after(s, Utc::now()));
     let body = response.text().await.map_err(|e| FetchError {
         message: format!("ESPN scoreboard dates={dates}: response read failed: {e}"),
         retry_after: None,
@@ -575,5 +582,20 @@ mod crest_tests {
         ] {
             assert_eq!(teams.get(name).copied(), Some(id));
         }
+    }
+}
+
+#[cfg(test)]
+mod retry_header_tests {
+    use super::*;
+    #[test]
+    fn numeric_and_http_date() {
+        let now = DateTime::parse_from_rfc3339("2026-10-29T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        assert_eq!(retry_after("120", now), Some(120));
+        assert_eq!(retry_after("Thu, 29 Oct 2026 12:02:00 GMT", now), Some(120));
+        assert_eq!(retry_after("Thu, 29 Oct 2026 11:00:00 GMT", now), Some(0));
+        assert_eq!(retry_after("bad", now), None);
     }
 }

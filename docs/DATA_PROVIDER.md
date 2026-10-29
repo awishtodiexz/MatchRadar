@@ -21,7 +21,7 @@ Only active matches present in successful daily response data are shown as confi
 | Failure | Success | Retain cached schedule, merge daily updates, advance scoreboard time only, show fixture failure |
 | Failure | Failure | Retain cache and source times, show failure and retain backoff |
 
-Deterministic Rust tests cover these result combinations, empty-cache fixture success, saved live data, rescheduling/cancellation, empty schedules, multi-query partial results, malformed responses, UTC boundaries/deduplication, and numeric Retry-After propagation. They still require execution in the consolidated Windows validation because local MSVC `link.exe` is missing. Frontend tests cover partial status labels and saved-score presentation. No installer or GitHub run was triggered for F03.
+Deterministic Rust tests cover these result combinations, empty-cache fixture success, saved live data, rescheduling/cancellation, empty schedules, multi-query partial results, malformed responses, UTC boundaries/deduplication, and numeric Retry-After propagation. The consolidated Windows workflow passed the Rust suite in [run 40846643935](https://github.com/awishtodiexz/MatchRadar/actions/runs/40846643935). Frontend tests cover partial status labels and saved-score presentation; see [validation notes](VALIDATION.md) for the limits of this evidence.
 
 ## Club identities and crests
 
@@ -30,3 +30,9 @@ On 28 October 2026, the monthly scoreboard returned `team.logo`, while the leagu
 The previous static catalog contained incorrect IDs: Fulham was `376` (Southampton) instead of `370`, and several other clubs were similarly mismatched. The corrected catalog uses ESPN IDs, merges additional fixture teams by ID, and includes crests even for clubs without a current fixture. Legacy saved favorites are migrated once from the old catalog mapping to preserve the clubs users selected; fresh selections are not remapped. Some supported clubs may be outside the current Premier League season and therefore have no fixtures.
 
 Direct HTTP checks returned 200 and `image/png` for all 23 canonical crest URLs in the corrected catalog, including Fulham `370` and West Ham United `371`. This verifies asset availability at the time of the probe, not perpetual availability or Windows WebView delivery. Keep the image-error fallback. These are externally loaded ESPN/provider-owned assets, not bundled artwork or a grant of redistribution rights. Review licensing before public distribution or replacing the provider. The competition shield is original MatchRadar artwork, not the official Premier League logo.
+
+## Match-summary observations (29 October 2026)
+
+Verified `eng.1/summary?event=401879268` (completed) and `401879250` (upcoming). Reduced response fixtures in `tests/fixtures/summary-*.json` retain events, team statistics and rosters, omitting articles, odds, assets and outbound links. Event text is provider-supplied; no goalscorer is inferred. Events deduplicate by provider event ID and sort by period/clock seconds, retaining stoppage-time display strings. Upcoming boxscore season totals are deliberately excluded. Live/halftime summary responses were not available for verification. Provider-owned text/data retain their licensing limitations; these test captures establish no redistribution permission.
+
+On-demand summaries are independently cached and bounded, never requested by card rendering or notifications. Numeric and RFC2822 HTTP-date Retry-After are now parsed for both scoreboards and summaries. Broader scoreboard manual-refresh cooldown hardening is still outstanding.

@@ -8,6 +8,8 @@ import { groupFixtures, isLive } from './fixtures';
 import { updateStatus } from './freshness';
 import { useApp } from './store';
 import { useLocalDay } from './useLocalDay';
+import { matchesView } from './matchViews';
+import type { MatchView } from './matchViews';
 import type { Match } from './types';
 import { LeagueMark } from './components/WidgetUi';
 import { dateLabel, matchButtonId, timeLabel } from './presentation';
@@ -18,6 +20,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 export default function App() {
   const {snapshot,loading,load,refresh,save,error} = useApp();
   const [view,setView] = useState<'home'|'settings'|'detail'>('home');
+  const [matchView,setMatchView] = useState<MatchView>('All');
   const [selected,setSelected] = useState<Match|null>(null);
   const [refreshing,setRefreshing] = useState(false);
   const root = useRef<HTMLElement>(null);
@@ -55,14 +58,14 @@ export default function App() {
   },[view]);
   const matches = useMemo(()=>{
     const favorites=settings?.favorites??[];
-    return (allMatches??[]).filter(m=>!settings?.followedOnly||favorites.includes(m.home.id)||favorites.includes(m.away.id));
-  },[allMatches,settings?.favorites,settings?.followedOnly]);
+    return matchesView(allMatches??[],matchView,favorites).filter(m=>!settings?.followedOnly||favorites.includes(m.home.id)||favorites.includes(m.away.id));
+  },[allMatches,matchView,settings?.favorites,settings?.followedOnly]);
   const groups = useMemo(()=>groupFixtures(matches,settings?.favorites??[],day),[matches,settings?.favorites,day]);
   // League status is independent of the cards filter, and excludes saved/unconfirmed scores.
   const live = (allMatches??[]).filter(m=>isLive(m)&&!m.scoreStale).length;
   const savedLive = (allMatches??[]).some(m=>isLive(m)&&m.scoreStale);
   const liveUnknown = !live&&!savedLive&&!!snapshot?.scoreError;
-  const filteredEmpty = !!settings?.followedOnly&&!!allMatches?.length&&!matches.length;
+  const filteredEmpty = (!!settings?.followedOnly||matchView!=='All')&&!!allMatches?.length&&!matches.length;
   const waiting = !allMatches?.length&&(loading||!!snapshot?.refreshing&&!snapshot.updatedAt&&!snapshot.fixtureUpdatedAt&&!snapshot.error);
   const busy = refreshing||!!snapshot?.refreshing;
   const status = updateStatus(snapshot);
@@ -96,12 +99,13 @@ export default function App() {
         <div className={'hero '+(allMatches?.length?'has-matches':'')}><div><span className="eyebrow"><span className="tiny-line"/>THE BEAUTIFUL GAME, AT A GLANCE</span><h2>Matchday<span>.</span></h2><p>{new Intl.DateTimeFormat(undefined,{weekday:'long',day:'numeric',month:'long'}).format(day)}</p></div><div className="hero-orbit" aria-hidden="true"><span className="orbit-one"/><span className="orbit-two"/><span className="orbit-dot"/><Radio size={22}/></div></div>
         <div className="summary"><div><LeagueMark/><span><b>Premier League</b><small>ENGLAND · MATCH CENTRE</small></span></div><span className={'live-pill '+(!live?'quiet':'')} aria-label={`Premier League: ${live?`${live} live matches`:savedLive?'saved scores, awaiting live update':liveUnknown?'live status unavailable':'no confirmed live matches'}`} title="League-wide status, including matches hidden by your filter"><i className="dot"/>{live?`${live} LIVE`:savedLive?'SAVED LIVE':liveUnknown?'LIVE UNAVAILABLE':'NO LIVE MATCHES'}</span></div>
         <div className="match-list">
+          <nav className="centre-tabs" aria-label="Fixture views">{(['All','Live','Following','Upcoming','Results'] as const).map(name=><button key={name} aria-pressed={matchView===name} onClick={()=>setMatchView(name)}>{name}</button>)}</nav>
           <div className="schedule-context"><p className="schedule-note">Fixtures · approximately the next 14 days</p>{settings?.followedOnly&&<span className="filter-label"><ListFilter size={12}/>Following only</span>}</div>
           {snapshot?.error&&!!allMatches?.length&&<div className="offline-banner" role="status" title={snapshot.error}><span>{snapshot.partial?'Partial update · some data may be stale':'Update failed · saved data is unchanged'}</span><button onClick={()=>void doRefresh()} disabled={busy}>Retry</button></div>}
           {waiting?<div className="skeletons" role="status" aria-label="Loading fixtures"><div/><div/><div/></div>
-            :!matches.length?<div className="empty"><Radio size={25}/><h3>{filteredEmpty?'No followed-team matches':snapshot?.error?(snapshot.partial?'Some updates are unavailable':'Unable to update matches'):'No fixtures in this window'}</h3>
-              <p>{filteredEmpty?'Your filter hides the other Premier League matches. Show all matches or choose more clubs in Settings.':snapshot?.error?(snapshot.partial?'Available data was saved, but some updates could not be confirmed.':'We couldn’t update the feed. Any saved fixtures will appear here when available.'):'No Premier League fixtures are available for approximately the next 14 days.'}</p>
-              {filteredEmpty?<button className="outline-button" onClick={()=>void save({followedOnly:false})}>Show all matches</button>:snapshot?.error?<button className="outline-button" onClick={()=>void doRefresh()} disabled={busy}><RefreshCw size={14}/>Retry</button>:null}
+            :!matches.length?<div className="empty"><Radio size={25}/><h3>{filteredEmpty?(matchView==='All'?'No followed-team matches':`No ${matchView.toLowerCase()} matches`):snapshot?.error?(snapshot.partial?'Some updates are unavailable':'Unable to update matches'):'No fixtures in this window'}</h3>
+              <p>{filteredEmpty?'Your active filters hide the other Premier League matches. Show all matches or choose another view.':snapshot?.error?(snapshot.partial?'Available data was saved, but some updates could not be confirmed.':'We couldn’t update the feed. Any saved fixtures will appear here when available.'):'No Premier League fixtures are available for approximately the next 14 days.'}</p>
+              {filteredEmpty?<button className="outline-button" onClick={()=>{setMatchView('All');void save({followedOnly:false});}}>Show all matches</button>:snapshot?.error?<button className="outline-button" onClick={()=>void doRefresh()} disabled={busy}><RefreshCw size={14}/>Retry</button>:null}
             </div>
             :settings&&groups.map(({key,label,matches:items})=><section key={key} aria-labelledby={'date-group-'+key}><h3 id={'date-group-'+key} className={'group-title '+(key==='live'&&items.some(m=>!m.scoreStale)?'live-group':'')}><span>{label}</span><span>{items.length.toString().padStart(2,'0')}</span></h3>{items.map(match=><MatchCard key={match.id} match={match} settings={settings} onOpen={()=>openMatch(match)}/>)}</section>)}
         </div>

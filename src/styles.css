@@ -247,3 +247,18 @@ footer { min-height: 52px; display: flex; align-items: center; justify-content: 
 @keyframes shimmer { to { background-position: -200% 0; } }
 .reduced * { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* Match Centre stays entirely within the existing details scroll region. */
+.match-centre { margin-top:12px; font-size:12px; color:var(--muted); }
+.centre-tabs {display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px;}
+.centre-tabs button {min-height:32px;padding:5px 8px;border-radius:8px;}
+.centre-tabs button[aria-pressed=true] {background:var(--accent-soft);color:var(--accent);}
+.match-centre h3 {color:var(--text);font-size:13px;margin:10px 0 6px;}
+.match-centre h4 {font-size:12px;margin:8px 0;}
+.event-list,.lineup-list {list-style:none;margin:0;padding:0;}
+.event-list li {display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
+.event-list time {flex:none;width:38px;font-variant-numeric:tabular-nums;color:var(--accent);}
+.event-list p {color:var(--text);overflow-wrap:anywhere;}
+.centre-stats {margin:0;}
+.centre-stats>div,.lineup-list li {display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--border);}
+.centre-stats dd {margin:0;color:var(--text);font-variant-numeric:tabular-nums;}
