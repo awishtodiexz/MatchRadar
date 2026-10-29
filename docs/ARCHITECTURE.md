@@ -11,7 +11,7 @@
 | ESPN transport/normalization and source-result reconciliation | `src-tauri/src/provider.rs`, `src-tauri/src/refresh.rs` |
 | Atomic state storage and recovery | `src-tauri/src/persistence.rs` |
 | Notification eligibility and durable submission queue | `src-tauri/src/alerts.rs`, `src-tauri/src/delivery.rs` |
-| Delivery regression tests (private child module, same test names/access) | `src-tauri/src/delivery_tests.rs` |
+| Delivery and summary regression tests (private child modules) | `src-tauri/src/delivery_tests.rs`, `src-tauri/src/details_tests.rs` |
 | Native event subscriptions, view navigation and focus restoration | `src/App.tsx` |
 | Optimistic preference queue and ordered snapshot reads | `src/store.ts` |
 | Shared IPC types, presentation helpers and local-date timer | `src/types.ts`, `src/presentation.ts`, `src/useLocalDay.ts` |

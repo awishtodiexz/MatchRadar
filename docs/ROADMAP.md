@@ -1,9 +1,7 @@
 # Roadmap
 
-Before release: compile and test the Windows installer; verify tray, notifications, startup, DPI and monitor recovery; test ESPN date ranges and rate limits; add event details and deterministic demo transitions; strengthen notification correction handling and scheduler tests; measure performance and inspect the widget visually at Windows scaling levels.
+Before public release: validate the latest Windows installer and new recent-results implementation; test tray, notifications, startup, DPI, sleep/resume and monitor recovery on actual Windows installations; confirm live/halftime summary fields and score corrections against real provider responses; and measure performance.
 
-Potential v1.1: a licensed provider adapter, richer event details, configurable competitions, and more robust offline and monitor recovery.
+Review software licensing, data/crest permissions and installer signing before distribution. Keep future data work scoped to the Premier League; a properly licensed replacement provider and stronger offline or monitor recovery are possible later improvements.
 
-## Match Centre evolution checkpoint
-
-Implemented on-demand summaries and local fixture views; broader scheduler modernization, enriched notification wording and optional standings/history remain deferred. Preserve Premier League-only scope and complete the acceptance checks in MATCH_CENTRE_EVOLUTION_REPORT.md before Windows acceptance.
+The [Match Centre evolution report](MATCH_CENTRE_EVOLUTION_REPORT.md) records earlier checkpoints and current acceptance gaps. The [Windows checklist](VALIDATION.md) distinguishes CI from runtime verification.
