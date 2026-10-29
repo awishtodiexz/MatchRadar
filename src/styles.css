@@ -26,8 +26,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focu
   background: rgba(var(--panel-rgb),var(--panel-opacity)); color: var(--text);
   border: 1px solid var(--border-strong); border-radius: 20px; overflow: hidden; isolation: isolate;
   box-shadow: 0 22px 70px #0009, inset 0 1px var(--border);
-  font-size: 13px; line-height: 1.4;
+  font-size: 13px; line-height: 1.4; user-select: none;
 }
+/* Static widget chrome does not select on drag; editing and diagnostic copying do. */
+.shell input, .shell textarea, .shell select,
+.shell [contenteditable=""], .shell [contenteditable="true"], .shell [contenteditable="plaintext-only"],
+.shell [data-copyable], .shell [data-copyable] * { user-select: text; }
+.shell [contenteditable="false"] { user-select: none; }
 .shell.theme-light {
   --panel-rgb: 244,248,241; --text: #18251e; --muted: #52665a; --accent: #286c35;
   --accent-soft: #286c3515; --accent-border: #286c3540;

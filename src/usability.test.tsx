@@ -20,6 +20,42 @@ beforeEach(async()=>{await load(structuredClone(mockSnapshot));});
 afterEach(cleanup);
 
 describe('focused usability refinements',()=>{
+  it('suppresses surface context menus on cards, icons, details and settings',()=>{
+    render(<App/>);
+    expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Matchday .'}))).toBe(false);
+    const card=screen.getByRole('button',{name:detailName});
+    expect(fireEvent.contextMenu(card)).toBe(false);
+    expect(fireEvent.contextMenu(screen.getByRole('button',{name:inheritName}).querySelector('svg')!)).toBe(false);
+    fireEvent.click(card);
+    expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Match details'}))).toBe(false);
+    expect(fireEvent.contextMenu(screen.getByText('Event details aren’t available from this feed yet.'))).toBe(false);
+    fireEvent.click(screen.getByRole('button',{name:'Settings'}));
+    expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Your clubs'}))).toBe(false);
+    expect(fireEvent.contextMenu(screen.getByRole('searchbox',{name:'Search clubs'}))).toBe(true);
+    fireEvent.change(screen.getByRole('searchbox',{name:'Search clubs'}),{target:{value:'Arsenal'}});
+    expect(screen.getByRole('button',{name:'Arsenal'})).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab',{name:'Appearance'}));
+    expect(fireEvent.contextMenu(screen.getByRole('combobox',{name:'Theme'}))).toBe(true);
+  });
+
+  it('preserves context menus for copyable errors and editable descendants',()=>{
+    render(<App/>);
+    act(()=>useApp.setState({error:'Could not save settings. Please try again.'}));
+    expect(fireEvent.contextMenu(screen.getByText('Could not save settings. Please try again.'))).toBe(true);
+    const main=screen.getByRole('main');
+    const textarea=document.createElement('textarea');main.append(textarea);
+    expect(fireEvent.contextMenu(textarea)).toBe(true);
+    const editor=document.createElement('div');const child=document.createElement('span');
+    editor.append(child);main.append(editor);
+    for(const value of ['', 'true', 'plaintext-only']) {
+      editor.setAttribute('contenteditable',value);
+      expect(fireEvent.contextMenu(child)).toBe(true);
+    }
+    child.setAttribute('contenteditable','false');
+    expect(fireEvent.contextMenu(child)).toBe(false);
+    editor.remove();textarea.remove();
+  });
+
   it('keeps league-wide live counts when only followed cards are shown and can clear an empty filter',async()=>{
     await load({...structuredClone(mockSnapshot),settings:{...mockSnapshot.settings,favorites:[],followedOnly:true}});
     render(<App/>);

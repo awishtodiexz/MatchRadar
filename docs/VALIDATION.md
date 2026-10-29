@@ -1,5 +1,11 @@
 # Validation and Windows runtime checks
 
+## Recording interaction follow-up — 29 October 2026
+
+The supplied 58.7-second recording shows unwanted browser context menus on Home at approximately 00:46–00:48 and Details at 00:50, plus selected static event text at 00:52–00:54. A shell-scoped context-menu handler now preserves editing/copy menus only on form controls, editable content and explicitly copyable diagnostics. CSS prevents static surface selection while retaining those exceptions. No pointer-down, keyboard, clipboard or native notification behavior changed. The recorded muted/subscribed/team-default transitions match their indicators and existing tests; no bell redesign or additional layout changes were justified.
+
+Frontend lint, all 45 tests, TypeScript/production build and diff checks passed. Two new tests exercise context-menu cancellation across views, nested SVG targets, input editing, selects, textareas, editable descendants and copyable errors. An isolated headless Edge fixture using the actual before/after stylesheet reproduced static text selection and confirmed its suppression with input/editor/error copying preserved; this was a DOM/CSS check, not a packaged-app test. No additional flickering, clipping or scrolling defect was confirmed from the reviewed frames. Verify actual WebView2 right-click and keyboard context menus, input select/copy/paste, keyboard focus and Narrator on Windows. No installer build was requested for this follow-up.
+
 ## UI/UX refinement — 29 October 2026
 
 Final card-spacing follow-up: the intermediate 83px live-card measurement below describes the first refinement, not the final layout. The final cards return to centered side-by-side team/result groups, with status confined to the result column, 10px vertical padding, a 7px team-row gap and a separate 32px bell target. Browser measurements in both themes were 86px for scored cards; scheduled cards measured 73px at 390px and 83px at 320px when names wrapped. Card widths were 346px and 284px respectively. This preserves the latest spacing correction; native Windows rendering still needs testing.

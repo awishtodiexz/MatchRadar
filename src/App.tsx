@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, KeyboardEvent } from 'react';
+import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -70,10 +70,19 @@ export default function App() {
   const statusLabel = demo?'DEMO DATA':status.label;
   const statusTime = !demo&&status.timestamp?`${dateLabel(status.timestamp)} ${timeLabel(status.timestamp)}`:undefined;
   const doRefresh = async () => {setRefreshing(true);try{await refresh();}finally{setRefreshing(false);}};
+  const contextMenu = (event:MouseEvent) => {
+    const target = event.target;
+    if (target instanceof Element) {
+      if (target.closest('input, textarea, select, [data-copyable]')) return;
+      const editable = target.closest('[contenteditable]')?.getAttribute('contenteditable')?.toLowerCase();
+      if (editable === '' || editable === 'true' || editable === 'plaintext-only') return;
+    }
+    event.preventDefault();
+  };
   const keyDown = (event:KeyboardEvent) => {
     if(event.key==='Escape'&&!event.defaultPrevented&&view!=='home'&&!(event.target instanceof HTMLSelectElement)) {event.preventDefault();back();}
   };
-  return <main ref={root} onKeyDown={keyDown} className={'shell theme-'+(settings?.theme??'dark')+' '+((settings?.opacity??96)<85?'transparent-panel ':'')+(settings?.compact?'compact-view ':'')+(settings?.reducedMotion?'reduced':'')} style={{'--panel-opacity':Math.min(100,Math.max(70,settings?.opacity??96))/100} as CSSProperties}>
+  return <main ref={root} onKeyDown={keyDown} onContextMenu={contextMenu} className={'shell theme-'+(settings?.theme??'dark')+' '+((settings?.opacity??96)<85?'transparent-panel ':'')+(settings?.compact?'compact-view ':'')+(settings?.reducedMotion?'reduced':'')} style={{'--panel-opacity':Math.min(100,Math.max(70,settings?.opacity??96))/100} as CSSProperties}>
     <header className="header" data-tauri-drag-region>
       <div className="brand" data-tauri-drag-region><span className="brand-icon"><Radio size={19}/></span><div data-tauri-drag-region><h1>match<span>radar</span><i>®</i></h1><p>YOUR MATCHDAY COMPANION</p></div></div>
       <div className="header-actions">
@@ -97,7 +106,7 @@ export default function App() {
             :settings&&groups.map(({key,label,matches:items})=><section key={key} aria-labelledby={'date-group-'+key}><h3 id={'date-group-'+key} className={'group-title '+(key==='live'&&items.some(m=>!m.scoreStale)?'live-group':'')}><span>{label}</span><span>{items.length.toString().padStart(2,'0')}</span></h3>{items.map(match=><MatchCard key={match.id} match={match} settings={settings} onOpen={()=>openMatch(match)}/>)}</section>)}
         </div>
       </>}
-    {error&&<div className="error-banner" role="alert"><span>{error}</span><button className="icon-button" aria-label="Dismiss message" title="Dismiss message" onClick={()=>useApp.setState({error:null})}><X size={14}/></button></div>}
+    {error&&<div className="error-banner" role="alert"><span data-copyable>{error}</span><button className="icon-button" aria-label="Dismiss message" title="Dismiss message" onClick={()=>useApp.setState({error:null})}><X size={14}/></button></div>}
     <footer>
       <div className="connection-info" role="status" title={[statusLabel,statusTime].filter(Boolean).join(' · ')}><span className={'connection '+(snapshot?.error?'error':'')} aria-hidden="true"/><div className="status-copy"><span>{statusLabel}</span>{statusTime&&<time dateTime={status.timestamp??undefined}>{statusTime}</time>}</div></div>
       <div className="footer-actions">
