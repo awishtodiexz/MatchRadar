@@ -5,6 +5,11 @@ import type { Match } from './types';
 
 const fixture = (id: string, day: number, hour: number, favorite = false): Match => ({ ...mockMatches[2], id, status: 'scheduled', home: { id: favorite ? 'followed' : id, name: id, short: id }, away: { id: 'away', name: 'Away', short: 'AWY' }, kickoff: new Date(2026, 9, day, hour).toISOString() });
 describe('local fixture dates', () => {
+  it('labels unconfirmed cached live scores explicitly without changing their match status', () => {
+    const saved = {...fixture('live',28,12),status:'live' as const,scoreStale:true};
+    expect(groupFixtures([saved],[])[0].label).toBe('SAVED LIVE SCORES');
+    expect(groupFixtures([saved,{...saved,id:'fresh',scoreStale:false}],[])[0].label).toBe('LIVE NOW · SOME SAVED');
+  });
   it('keeps earlier dates ahead of later followed fixtures and sorts each day', () => {
     const groups = groupFixtures([fixture('later', 31, 14, true), fixture('evening', 30, 20), fixture('morning', 30, 9)], ['followed'], new Date(2026, 9, 28));
     expect(groups).toHaveLength(2);

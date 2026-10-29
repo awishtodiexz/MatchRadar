@@ -19,5 +19,9 @@ export function groupFixtures(matches: Match[], favorites: string[], now = new D
     if (!groups.has(key)) groups.set(key, { label, matches: [] });
     groups.get(key)!.matches.push(match);
   }
-  return [...groups.entries()].map(([key, group]) => ({ key, ...group }));
+  return [...groups.entries()].map(([key, group]) => ({ key, ...group,
+    label:key === 'live' && group.matches.some(m=>m.scoreStale)
+      ? group.matches.every(m=>m.scoreStale) ? 'SAVED LIVE SCORES' : 'LIVE NOW · SOME SAVED'
+      : group.label
+  }));
 }

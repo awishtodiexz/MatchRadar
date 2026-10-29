@@ -1,0 +1,117 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockSnapshot } from './mock';
+import type { Settings, Snapshot } from './types';
+
+const bridge = vi.hoisted(() => ({ invoke: vi.fn() }));
+vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => true, invoke: bridge.invoke }));
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+let store: typeof import('./store')['useApp'];
+let reads: ReturnType<typeof deferred<Snapshot>>[];
+let writes: { settings: Settings; task: ReturnType<typeof deferred<Settings>> }[];
+const initial = (): Snapshot => structuredClone({ ...mockSnapshot, updatedAt:'2026-10-28T12:00:00Z', settings: { ...mockSnapshot.settings, mock: false } });
+const fresh = (): Snapshot => ({ ...initial(), matches: [{ ...mockSnapshot.matches[0], homeScore: 4, scoreStale: true }], updatedAt: '2026-10-28T12:01:00Z', fixtureUpdatedAt:'2026-10-28T12:02:00Z', scoreError:'Daily scores unavailable', partial:true, error: 'Partial feed failure', refreshing: true });
+
+beforeEach(async () => {
+  vi.resetModules(); reads = []; writes = []; bridge.invoke.mockReset();
+  bridge.invoke.mockImplementation((command: string, args?: {settings: Settings}) => {
+    if (command === 'get_snapshot') { const task = deferred<Snapshot>(); reads.push(task); return task.promise; }
+    if (command === 'save_settings' && args) { const task = deferred<Settings>(); writes.push({settings:args.settings, task}); return task.promise; }
+    throw new Error(`Unexpected native command: ${command}`);
+  });
+  store = (await import('./store')).useApp;
+  const load = store.getState().load(); reads[0].resolve(initial()); await load;
+  reads = [];
+});
+
+describe('native snapshot and preference ordering', () => {
+  it('isolates F03 freshness during an optimistic mode change and restores it on failure', async () => {
+    const load = store.getState().load(); reads[0].resolve(fresh()); await load;
+    const save = store.getState().save({mock:true});
+    expect(store.getState().snapshot).toMatchObject({matches:[],updatedAt:null,fixtureUpdatedAt:null,error:null,fixtureError:null,scoreError:null,partial:false,refreshing:true});
+    await vi.waitFor(() => expect(writes).toHaveLength(1));
+    writes[0].task.reject(new Error('Mode save denied')); await save;
+    expect(store.getState().snapshot).toMatchObject({matches:[{homeScore:4,scoreStale:true}],fixtureUpdatedAt:'2026-10-28T12:02:00Z',scoreError:'Daily scores unavailable',partial:true,settings:{mock:false}});
+    reads[1].resolve(fresh()); // Complete failure reconciliation before the next test.
+    await Promise.resolve();
+  });
+  it('F02: accepts a fresh event snapshot finishing after a cosmetic save', async () => {
+    const save = store.getState().save({opacity:80});
+    await vi.waitFor(() => expect(writes).toHaveLength(1));
+    const eventLoad = store.getState().load();
+    writes[0].task.resolve(writes[0].settings); await save;
+    reads[0].resolve(fresh()); await eventLoad;
+    expect(store.getState().snapshot).toMatchObject({matches:[{homeScore:4,scoreStale:true}], updatedAt:'2026-10-28T12:01:00Z', fixtureUpdatedAt:'2026-10-28T12:02:00Z', scoreError:'Daily scores unavailable', partial:true, error:'Partial feed failure', refreshing:true, settings:{opacity:80}});
+  });
+
+  it('preserves data arriving before the save acknowledgement', async () => {
+    const save = store.getState().save({theme:'light'});
+    await vi.waitFor(() => expect(writes).toHaveLength(1));
+    const eventLoad = store.getState().load(); reads[0].resolve(fresh()); await eventLoad;
+    expect(store.getState().snapshot?.settings.theme).toBe('light');
+    writes[0].task.resolve(writes[0].settings); await save;
+    expect(store.getState().snapshot).toMatchObject({matches:[{homeScore:4}], error:'Partial feed failure', settings:{theme:'light'}});
+  });
+
+  it('ignores an older read completing after a newer accepted read', async () => {
+    const older = store.getState().load(); const newer = store.getState().load();
+    reads[1].resolve(fresh()); await newer;
+    reads[0].resolve(initial()); await older;
+    expect(store.getState().snapshot).toMatchObject({matches:[{homeScore:4}], error:'Partial feed failure', refreshing:true});
+  });
+
+  it('serializes rapid patches and keeps all later edits optimistic', async () => {
+    const first = store.getState().save({opacity:80});
+    const second = store.getState().save({opacity:75});
+    const third = store.getState().save({alwaysOnTop:false, theme:'light'});
+    expect(store.getState().snapshot?.settings).toMatchObject({opacity:75,alwaysOnTop:false,theme:'light'});
+    await vi.waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0].settings.opacity).toBe(80);
+    writes[0].task.resolve(writes[0].settings); await first;
+    expect(store.getState().snapshot?.settings.opacity).toBe(75);
+    await vi.waitFor(() => expect(writes).toHaveLength(2));
+    writes[1].task.resolve(writes[1].settings); await second;
+    await vi.waitFor(() => expect(writes).toHaveLength(3));
+    expect(writes[2].settings).toMatchObject({opacity:75,alwaysOnTop:false,theme:'light'});
+    writes[2].task.resolve(writes[2].settings); await third;
+    expect(bridge.invoke.mock.calls.map(([name]) => name)).not.toContain('refresh');
+  });
+
+  it('rolls back failed preferences while retaining fresh data and later edits', async () => {
+    const failed = store.getState().save({alwaysOnTop:false});
+    const later = store.getState().save({theme:'light'});
+    await vi.waitFor(() => expect(writes).toHaveLength(1));
+    const eventLoad = store.getState().load(); reads[0].resolve(fresh()); await eventLoad;
+    writes[0].task.reject(new Error('Disk full'));
+    await failed;
+    expect(store.getState().snapshot).toMatchObject({matches:[{homeScore:4}], updatedAt:'2026-10-28T12:01:00Z', error:'Partial feed failure', settings:{alwaysOnTop:true,theme:'light'}});
+    await vi.waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes[1].settings.alwaysOnTop).toBe(true);
+    writes[1].task.resolve(writes[1].settings); await later;
+    // The failure reconciliation was started before the later successful save.
+    // It may update feed data, but cannot undo that save's preferences.
+    reads[1].resolve(fresh());
+    await vi.waitFor(() => expect(store.getState().snapshot?.settings.theme).toBe('light'));
+    expect(store.getState().error).toMatch(/Could not save/);
+  });
+
+  it('F14: uses normalized settings without allowing a pre-save snapshot to restore rejected alerts', async () => {
+    const submitted = {invalid:{enabled:true,expiresAt:'expired'}};
+    const save = store.getState().save({matchAlerts:submitted,opacity:60});
+    await vi.waitFor(() => expect(writes).toHaveLength(1));
+    const oldSettingsLoad = store.getState().load();
+    writes[0].task.resolve({...writes[0].settings,matchAlerts:{},opacity:70}); await save;
+    reads[0].resolve({...fresh(),settings:{...initial().settings,matchAlerts:submitted}}); await oldSettingsLoad;
+    expect(store.getState().snapshot).toMatchObject({matches:[{homeScore:4}],settings:{matchAlerts:{},opacity:70}});
+    expect(store.getState().snapshot?.settings.matchAlerts).toEqual({});
+    const next = store.getState().save({compact:true});
+    await vi.waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes[1].settings).toMatchObject({matchAlerts:{},opacity:70,compact:true});
+    writes[1].task.resolve(writes[1].settings); await next;
+  });
+});

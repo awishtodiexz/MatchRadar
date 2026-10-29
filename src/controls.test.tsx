@@ -4,21 +4,38 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { mockSnapshot } from './mock';
 import { useApp } from './store';
 import App from './App';
+import type { Settings } from './types';
 
 const bridge = vi.hoisted(() => ({ native: false, invoke: vi.fn(), minimize: vi.fn(), hide: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => bridge.native, invoke: bridge.invoke }));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ minimize: bridge.minimize, hide: bridge.hide }) }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() => {}) }));
 vi.mock('@tauri-apps/plugin-autostart', () => ({ isEnabled: vi.fn().mockResolvedValue(false), enable: vi.fn(), disable: vi.fn() }));
-beforeEach(() => { bridge.native = false; bridge.invoke.mockReset(); bridge.minimize.mockReset(); useApp.setState({snapshot: {...mockSnapshot, settings: {...mockSnapshot.settings}}, loading: false, error: null}); });
+beforeEach(async () => {
+ bridge.native = false; bridge.invoke.mockReset(); bridge.minimize.mockReset();
+ useApp.setState({snapshot: {...mockSnapshot, settings: {...mockSnapshot.settings}}, loading: false, error: null});
+ await useApp.getState().load();
+});
 afterEach(cleanup);
 describe('widget controls', () => {
+ it('shows partial fixture success and saved live scores without claiming they were freshly confirmed', async () => {
+  bridge.native=true;
+  const snapshot={...mockSnapshot,settings:{...mockSnapshot.settings,mock:false},partial:true,error:'Scores: HTTP 500',scoreError:'HTTP 500',updatedAt:'2026-10-28T11:00:00Z',fixtureUpdatedAt:'2026-10-28T12:00:00Z',matches:mockSnapshot.matches.map(m=>({...m,scoreStale:m.status==='live'||m.status==='halftime'}))};
+  bridge.invoke.mockImplementation((command: string)=>Promise.resolve(command==='get_snapshot'?snapshot:undefined));
+  render(<App/>);
+  expect(await screen.findByText('Partial update · some data may be stale')).toBeTruthy();
+  expect(screen.getByText('Saved · 67′').classList.contains('live-text')).toBe(false);
+  expect(screen.getByRole('heading',{name:/SAVED LIVE SCORES/})).toBeTruthy();
+  expect(screen.getByText('SAVED LIVE',{exact:true})).toBeTruthy();
+  expect(document.querySelector('footer')?.textContent).toContain('PARTIAL · SCORES SAVED');
+  expect(bridge.invoke.mock.calls.every(([command])=>command==='get_snapshot')).toBe(true);
+ });
  it('round-trips a match subscription through the native settings bridge', async () => {
   bridge.native = true;
   let persisted = {...mockSnapshot, settings:{...mockSnapshot.settings, matchAlerts:{}}};
   bridge.invoke.mockImplementation((command: string, args?: {settings: typeof mockSnapshot.settings}) => {
    if (command === 'save_settings' && args) persisted = {...persisted, settings:args.settings};
-   return Promise.resolve(command === 'get_snapshot' ? persisted : undefined);
+   return Promise.resolve(command === 'get_snapshot' ? persisted : args?.settings);
   });
   render(<App/>);
   fireEvent.click(screen.getByRole('button', {name:'Enable all alerts: Arsenal versus Chelsea'}));
@@ -72,10 +89,10 @@ describe('widget controls', () => {
   bridge.native = true;
   let releaseSave: (() => void) | undefined;
   let releaseLoad: ((value: typeof mockSnapshot) => void) | undefined;
-  bridge.invoke.mockImplementation((command: string) => {
-   if (command === 'save_settings' && !releaseSave) return new Promise<void>(resolve => { releaseSave = resolve; });
+  bridge.invoke.mockImplementation((command: string, args?: {settings: Settings}) => {
+   if (command === 'save_settings' && args && !releaseSave) return new Promise<Settings>(resolve => { releaseSave = () => resolve(args.settings); });
    if (command === 'get_snapshot') return new Promise(resolve => { releaseLoad = resolve; });
-   return Promise.resolve();
+   return Promise.resolve(args?.settings);
   });
   const first = useApp.getState().save({alwaysOnTop:false});
   const second = useApp.getState().save({theme:'light', opacity:70});
@@ -98,7 +115,7 @@ describe('widget controls', () => {
  it('keeps a later optimistic preference visible when an earlier save finishes', async () => {
   bridge.native = true;
   const releases: Array<() => void> = [];
-  bridge.invoke.mockImplementation(() => new Promise<void>(resolve => releases.push(resolve)));
+  bridge.invoke.mockImplementation((_command: string, args: {settings: Settings}) => new Promise<Settings>(resolve => releases.push(() => resolve(args.settings))));
   const first = useApp.getState().save({alwaysOnTop:false});
   await waitFor(() => expect(releases).toHaveLength(1));
   const second = useApp.getState().save({theme:'light'});
@@ -112,7 +129,7 @@ describe('widget controls', () => {
   let persisted = {...mockSnapshot, settings:{...mockSnapshot.settings}};
   bridge.invoke.mockImplementation((command: string, args?: {settings: typeof persisted.settings}) => {
    if (command === 'save_settings' && args) persisted = {...persisted, settings:args.settings};
-   return Promise.resolve(command === 'get_snapshot' ? persisted : undefined);
+   return Promise.resolve(command === 'get_snapshot' ? persisted : args?.settings);
   });
   render(<App/>);
   fireEvent.click(screen.getByRole('button', {name:'Settings'}));
@@ -133,7 +150,7 @@ describe('widget controls', () => {
    if (command === 'get_snapshot') return Promise.resolve(persisted);
    if (args?.settings.alwaysOnTop === false) return Promise.reject(new Error('Disk unavailable'));
    if (args) persisted = {...persisted, settings:args.settings};
-   return Promise.resolve();
+   return Promise.resolve(args?.settings);
   });
   const pin = useApp.getState().save({alwaysOnTop:false});
   const theme = useApp.getState().save({theme:'light'});
@@ -145,9 +162,11 @@ describe('widget controls', () => {
  it('does not relabel demo fixtures as live during a mode save or stale snapshot load', async () => {
   bridge.native = true;
   let releaseSave: (() => void) | undefined;
-  bridge.invoke.mockImplementation((command: string) => command === 'get_snapshot'
-   ? Promise.resolve(mockSnapshot)
-   : new Promise<void>(resolve => {releaseSave=resolve;}));
+  bridge.invoke.mockImplementation((command: string, args?: {settings: Settings}) => {
+   if (command === 'get_snapshot') return Promise.resolve(mockSnapshot);
+   if (!args) throw new Error('Missing settings payload');
+   return new Promise<Settings>(resolve => {releaseSave=()=>resolve(args.settings);});
+  });
   const save = useApp.getState().save({mock:false});
   expect(useApp.getState().snapshot?.matches).toEqual([]);
   await useApp.getState().load();
