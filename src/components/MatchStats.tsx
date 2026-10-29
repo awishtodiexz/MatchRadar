@@ -8,7 +8,7 @@ export function MatchStats({match,statistics}:{match:Match;statistics:MatchSumma
     {keys.map(key=>{
       const home=statistics.find(s=>s.name===key&&s.teamId===match.home.id);
       const away=statistics.find(s=>s.name===key&&s.teamId===match.away.id);
-      const comparable=['possession','shots','shotsOnTarget','corners'].includes(key);
+      const comparable=['possession','possessionPct','shots','totalShots','shotsOnTarget','corners','wonCorners'].includes(key);
       const number=(value:string|undefined)=>value&&/^\d+(?:\.\d+)?%?$/.test(value.trim())?Number.parseFloat(value):null;
       const left=number(home?.value),right=number(away?.value);
       const highlight=comparable&&left!==null&&right!==null;

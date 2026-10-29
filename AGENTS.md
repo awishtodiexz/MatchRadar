@@ -158,19 +158,3 @@ Run commands from the repository root; use `npm.cmd` if PowerShell blocks npm.
 - Update relevant docs when behavior, setup, configuration, persistence, provider
   assumptions, or validation procedures change. Keep this guide durable; detailed
   build evidence and remaining limitations belong in project documentation.
-
-## Preferred model workflow
-
-These are user preferences, not automatic model routing or delegation:
-
-- **GPT-6 Astra High:** architecture, planning, difficult decisions.
-- **GPT-6.1 Sol High:** complex implementation, Rust, difficult debugging.
-- **GPT-6.1 Sol Medium:** regular development and integration.
-- **GPT-6.1 Terra High:** UI design, visual refinement, accessibility.
-- **GPT-6 Sol Medium:** smaller bugs and focused tasks.
-- **GPT-6 Luna Low/Medium:** documentation and mechanical changes.
-
-Follow the requested workflow using available models; disclose unavailable choices
-instead of silently substituting. This table alone does not authorize model
-switching or delegation. Keep any requested handoff focused on scope, relevant
-files, decisions, and validation.

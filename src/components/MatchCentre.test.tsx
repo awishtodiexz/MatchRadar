@@ -13,10 +13,32 @@ it('compares each statistic once and distinguishes a missing value from zero',()
  render(<MatchCentre match={mockSnapshot.matches[0]} demo={false}/>);fireEvent.click(screen.getByRole('tab',{name:'Stats'}));
  const row=screen.getByRole('row',{name:/Red cards/});expect(row.textContent).toBe('0Red cards—');
 });
+it('highlights comparable ESPN statistics while keeping disciplinary counts neutral',()=>{
+ const old=state.data;
+ state.data={...old,statistics:[
+  {teamId:'359',name:'possessionPct',label:'Possession',value:'58.2'},
+  {teamId:'363',name:'possessionPct',label:'Possession',value:'41.8'},
+  {teamId:'359',name:'totalShots',label:'Shots',value:'13'},
+  {teamId:'363',name:'totalShots',label:'Shots',value:'11'},
+  {teamId:'359',name:'foulsCommitted',label:'Fouls',value:'12'},
+  {teamId:'363',name:'foulsCommitted',label:'Fouls',value:'20'}
+ ]};
+ render(<MatchCentre match={mockSnapshot.matches[0]} demo={false}/>);fireEvent.click(screen.getByRole('tab',{name:'Stats'}));
+ expect(screen.getByRole('row',{name:/Possession/}).querySelector('.stat-leading')?.textContent).toBe('58.2');
+ expect(screen.getByRole('row',{name:/Shots/}).querySelector('.stat-leading')?.textContent).toBe('13');
+ expect(screen.getByRole('row',{name:/Fouls/}).querySelector('.stat-leading')).toBeNull();state.data=old;
+});
 it('groups known positions without inventing a position for unknown players',()=>{
  const old=state.data;state.data={...old,players:[...old.players,{teamId:'359',name:'Unknown Player',position:'',starter:true}]};
  render(<MatchCentre match={mockSnapshot.matches[0]} demo={false}/>);fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));
  expect(screen.getByText('Goalkeepers')).toBeTruthy();expect(screen.getByText('Other positions')).toBeTruthy();expect(screen.getByText('Unknown Player')).toBeTruthy();state.data=old;
+});
+
+it('explains when one team has no lineup rather than showing an empty starting XI',()=>{
+ render(<MatchCentre match={mockSnapshot.matches[0]} demo={false}/>);
+ fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));
+ expect(screen.getAllByText('Starting XI')).toHaveLength(1);
+ expect(screen.getByText('Lineup unavailable')).toBeTruthy();
 });
 
 it('exposes selected panels and supports arrow, Home and End keyboard navigation',()=>{
