@@ -30,6 +30,26 @@ beforeEach(async () => {
 });
 
 describe('native snapshot and preference ordering', () => {
+  it('clears an obsolete read error on a later successful snapshot without hiding save errors', async()=>{
+    const failed=store.getState().load();reads[0].reject(new Error('IPC unavailable'));await failed;
+    expect(store.getState().error).toBe('Could not load the widget state.');
+    const recovered=store.getState().load();reads[1].resolve(fresh());await recovered;
+    expect(store.getState().error).toBeNull();
+    store.setState({error:'Could not save settings. Please try again.'});
+    const again=store.getState().load();reads[2].resolve(fresh());await again;
+    expect(store.getState().error).toBe('Could not save settings. Please try again.');
+  });
+
+  it('clears a refresh failure after a successful refresh/read and makes no extra requests', async()=>{
+    await store.getState().refresh(); // The controlled bridge rejects unknown commands.
+    expect(store.getState().error).toBe('Could not refresh matches.');
+    bridge.invoke.mockImplementationOnce(()=>Promise.resolve());
+    const recovered=store.getState().refresh();
+    await vi.waitFor(()=>expect(reads).toHaveLength(1));
+    reads[0].resolve(fresh());await recovered;
+    expect(store.getState().error).toBeNull();
+    expect(bridge.invoke.mock.calls.filter(([name])=>name==='refresh')).toHaveLength(2);
+  });
   it('isolates F03 freshness during an optimistic mode change and restores it on failure', async () => {
     const load = store.getState().load(); reads[0].resolve(fresh()); await load;
     const save = store.getState().save({mock:true});

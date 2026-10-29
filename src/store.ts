@@ -12,6 +12,9 @@ let acceptedRead = 0;
 let settingsRevision = 0;
 let confirmed: Settings | null = null;
 let feed: Snapshot | null = null;
+const loadError = 'Could not load the widget state.';
+const refreshError = 'Could not refresh matches.';
+const recoveredError = (error:string|null) => error===loadError||error===refreshError?null:error;
 
 function projected(): Snapshot | null {
   if (!feed || !confirmed) return null;
@@ -37,9 +40,9 @@ export const useApp = create<Store>((set, get) => ({
       // A read started before a save acknowledgement can contain old preferences
       // and still carry fresh matches/errors. Accept its data, not its settings.
       if (revision === settingsRevision || !confirmed) confirmed = snapshot.settings;
-      set({snapshot: projected(), loading:false});
+      set(state=>({snapshot: projected(), loading:false, error:recoveredError(state.error)}));
     } catch {
-      if (sequence > acceptedRead) set({loading:false, error:'Could not load the widget state.'});
+      if (sequence > acceptedRead) set(state=>({loading:false, error:state.error??loadError}));
     }
   },
   refresh: async () => {
@@ -47,9 +50,9 @@ export const useApp = create<Store>((set, get) => ({
       if (isTauri()) { await invoke('refresh'); await get().load(); }
       else {
         if (feed) feed = {...feed, updatedAt:new Date().toISOString()};
-        set({snapshot:projected()});
+        set(state=>({snapshot:projected(),error:recoveredError(state.error)}));
       }
-    } catch { set({error:'Could not refresh matches.'}); }
+    } catch { set(state=>({error:state.error??refreshError})); }
   },
   save: (patch) => {
     pending.push(patch);
