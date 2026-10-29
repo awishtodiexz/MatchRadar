@@ -2,6 +2,21 @@
 
 For the latest feature-branch evidence and acceptance checklist, see [Match Centre integration report](MATCH_CENTRE_EVOLUTION_REPORT.md). Earlier sections below are historical checkpoints and do not validate later commits.
 
+## Verification Lite
+
+Run `npm ci`, then use these commands from the repository root (`npm.cmd` if needed in PowerShell):
+
+- `npm run verify:fast`: existing ESLint, all frontend tests, and TypeScript/production build. Stops on failure.
+- `npm run verify:ui`: builds the frontend and runs seven Playwright journeys against a local production preview in installed Microsoft Edge. Covers all fixture filters, independent bells, Match Centre tabs and keyboard navigation, back-navigation scroll/focus restoration, both themes, demo progression/reset, unavailable details, and 320/390px overflow. The server is started and stopped by Playwright; port 1420 must be free.
+
+Browser tests fix time, locale and timezone, disable motion, block external HTTP and use the existing labelled demo dataset. No native IPC or notifications are sent. Failure screenshots and traces are saved under ignored `verification/artifacts/browser/`; inspect a trace with `npx playwright show-trace <path-to-trace.zip>`. There are no automatically accepted screenshot baselines. Stable behavioral assertions and failure screenshots keep the suite small; pixel comparisons can be added later for a demonstrated regression.
+
+The existing Windows workflow remains responsible for Rust compilation/tests and installer packaging. Browser coverage does not certify native notifications, tray/autostart, window sizing, sleep/resume, monitor handling or DPI. Existing F01–F04/provider/store/cache regression tests are retained rather than duplicated. Local MSVC `link.exe` is unavailable, so native tests were not executed for this tooling-only change. Product demo build-time exclusion remains unfinished as documented in [Demo isolation report](DEMO_ISOLATION_REPORT.md); this verification work does not claim otherwise.
+
+Future improvement workflow: identify a concrete issue, reproduce or measure it, make one focused change, run the relevant verification tier, compare the outcome, and retain it only when the intended result improves without regressions. Record meaningful evidence in the relevant change description. Stop when the bounded issue is resolved; do not introduce a campaign engine or change tests to conceal failures.
+
+Local evidence on 29 October 2026: `verify:fast` passed (69 tests in 15 files, ESLint and production build); `verify:ui` passed all seven tests in 4.6 seconds, plus its build. Node v26.12.1 locally; CI uses Node 22. No installer or GitHub run was triggered. The test package is a development-only dependency and the browser harness is outside the bundled `src` tree.
+
 ## Recording interaction follow-up — 29 October 2026
 
 The supplied 58.7-second recording shows unwanted browser context menus on Home at approximately 00:46–00:48 and Details at 00:50, plus selected static event text at 00:52–00:54. A shell-scoped context-menu handler now preserves editing/copy menus only on form controls, editable content and explicitly copyable diagnostics. CSS prevents static surface selection while retaining those exceptions. No pointer-down, keyboard, clipboard or native notification behavior changed. The recorded muted/subscribed/team-default transitions match their indicators and existing tests; no bell redesign or additional layout changes were justified.

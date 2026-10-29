@@ -12,3 +12,6 @@ src-tauri/target/
 !.env.example
 coverage/
 .vite/
+verification/artifacts/
+playwright-report/
+test-results/
