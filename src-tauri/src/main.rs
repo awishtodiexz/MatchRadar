@@ -6,6 +6,7 @@ mod model;
 mod persistence;
 mod provider;
 mod refresh;
+mod results;
 mod scheduling;
 mod window;
 use chrono::{DateTime, Utc};
@@ -64,6 +65,7 @@ async fn get_match_details(
         let m = snapshot
             .matches
             .iter()
+            .chain(snapshot.recent_results.iter())
             .find(|m| m.id == id)
             .ok_or("Match not in Premier League fixture cache")?;
         matches!(m.status.as_str(), "live" | "halftime")
@@ -539,6 +541,7 @@ fn main() {
                 }
             }
             app.manage(tokio::sync::Mutex::new(details::Cache::default()));
+            app.manage(results::History::default());
             app.manage(State {
                 snapshot: Mutex::new(snapshot),
                 path,
@@ -595,6 +598,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
             get_match_details,
+            results::get_recent_results,
             save_settings,
             refresh,
             test_notification

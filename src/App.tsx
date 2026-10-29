@@ -8,6 +8,7 @@ import { groupFixtures, isLive } from './fixtures';
 import { updateStatus } from './freshness';
 import { useApp } from './store';
 import { useLocalDay } from './useLocalDay';
+import { useRecentResults } from './useRecentResults';
 import { matchesView } from './matchViews';
 import type { MatchView } from './matchViews';
 import type { Match } from './types';
@@ -31,6 +32,11 @@ export default function App() {
   const native = isTauri();
   const settings = snapshot?.settings;
   const allMatches = snapshot?.matches;
+  const demo = !native||!!settings?.mock;
+  const historyView=matchView==='Results'&&!demo;
+  const recent=useRecentResults(historyView);
+  const sourceMatches=useMemo(()=>historyView?[...new Map([...recent.data.matches,...(allMatches??[]).filter(m=>m.status==='fulltime')].map(m=>[m.id,m])).values()]:allMatches,[historyView,recent.data.matches,allMatches]);
+  const listError=historyView?recent.data.error:snapshot?.error;
   const rememberHome = () => { homeScroll.current=root.current?.querySelector('.match-list')?.scrollTop??0; };
   const back = () => setView('home');
   const openSettings = () => {
@@ -58,18 +64,17 @@ export default function App() {
   },[view]);
   const matches = useMemo(()=>{
     const favorites=settings?.favorites??[];
-    return matchesView(allMatches??[],matchView,favorites).filter(m=>!settings?.followedOnly||favorites.includes(m.home.id)||favorites.includes(m.away.id));
-  },[allMatches,matchView,settings?.favorites,settings?.followedOnly]);
+    return matchesView(sourceMatches??[],matchView,favorites).filter(m=>!settings?.followedOnly||favorites.includes(m.home.id)||favorites.includes(m.away.id));
+  },[sourceMatches,matchView,settings?.favorites,settings?.followedOnly]);
   const groups = useMemo(()=>groupFixtures(matches,settings?.favorites??[],day),[matches,settings?.favorites,day]);
   // League status is independent of the cards filter, and excludes saved/unconfirmed scores.
   const live = (allMatches??[]).filter(m=>isLive(m)&&!m.scoreStale).length;
   const savedLive = (allMatches??[]).some(m=>isLive(m)&&m.scoreStale);
   const liveUnknown = !live&&!savedLive&&!!snapshot?.scoreError;
-  const filteredEmpty = (!!settings?.followedOnly||matchView!=='All')&&!!allMatches?.length&&!matches.length;
-  const waiting = !allMatches?.length&&(loading||!!snapshot?.refreshing&&!snapshot.updatedAt&&!snapshot.fixtureUpdatedAt&&!snapshot.error);
+  const filteredEmpty = (!!settings?.followedOnly||matchView!=='All')&&!!sourceMatches?.length&&!matches.length;
+  const waiting = historyView?recent.loading&&!matches.length:!allMatches?.length&&(loading||!!snapshot?.refreshing&&!snapshot.updatedAt&&!snapshot.fixtureUpdatedAt&&!snapshot.error);
   const busy = refreshing||!!snapshot?.refreshing;
   const status = updateStatus(snapshot);
-  const demo = !native||!!settings?.mock;
   const statusLabel = demo?'DEMO DATA':status.label;
   const statusTime = !demo&&status.timestamp?`${dateLabel(status.timestamp)} ${timeLabel(status.timestamp)}`:undefined;
   const doRefresh = async () => {setRefreshing(true);try{await refresh();}finally{setRefreshing(false);}};
@@ -100,12 +105,13 @@ export default function App() {
         <div className="summary"><div><LeagueMark/><span><b>Premier League</b><small>ENGLAND · MATCH CENTRE</small></span></div><span className={'live-pill '+(!live?'quiet':'')} aria-label={`Premier League: ${live?`${live} live matches`:savedLive?'saved scores, awaiting live update':liveUnknown?'live status unavailable':'no confirmed live matches'}`} title="League-wide status, including matches hidden by your filter"><i className="dot"/>{live?`${live} LIVE`:savedLive?'SAVED LIVE':liveUnknown?'LIVE UNAVAILABLE':'NO LIVE MATCHES'}</span></div>
         <div className="match-list">
           <nav className="centre-tabs" aria-label="Fixture views">{(['All','Live','Following','Upcoming','Results'] as const).map(name=><button key={name} aria-pressed={matchView===name} onClick={()=>setMatchView(name)}>{name}</button>)}</nav>
-          <div className="schedule-context"><p className="schedule-note">Fixtures · approximately the next 14 days</p>{settings?.followedOnly&&<span className="filter-label"><ListFilter size={12}/>Following only</span>}</div>
-          {snapshot?.error&&!!allMatches?.length&&<div className="offline-banner" role="status" title={snapshot.error}><span>{snapshot.partial?'Partial update · some data may be stale':'Update failed · saved data is unchanged'}</span><button onClick={()=>void doRefresh()} disabled={busy}>Retry</button></div>}
+          <div className="schedule-context"><p className="schedule-note">{matchView==='Results'?'Results \u00b7 previous 14 days':'Fixtures \u00b7 approximately the next 14 days'}</p>{settings?.followedOnly&&<span className="filter-label"><ListFilter size={12}/>Following only</span>}</div>
+          {listError&&!!sourceMatches?.length&&<div className="offline-banner" role="status" title={listError}><span>{historyView?'Results update failed - cached results retained':snapshot?.partial?'Partial update · some data may be stale':'Update failed · saved data is unchanged'}</span><button onClick={()=>historyView?recent.retry():void doRefresh()} disabled={historyView?recent.loading:busy}>Retry</button></div>}
+          {historyView&&recent.data.updatedAt&&<p className="field-note">Results checked {new Date(recent.data.updatedAt).toLocaleString()}</p>}
           {waiting?<div className="skeletons" role="status" aria-label="Loading fixtures"><div/><div/><div/></div>
-            :!matches.length?<div className="empty"><Radio size={25}/><h3>{filteredEmpty?(matchView==='All'?'No followed-team matches':`No ${matchView.toLowerCase()} matches`):snapshot?.error?(snapshot.partial?'Some updates are unavailable':'Unable to update matches'):'No fixtures in this window'}</h3>
-              <p>{filteredEmpty?'Your active filters hide the other Premier League matches. Show all matches or choose another view.':snapshot?.error?(snapshot.partial?'Available data was saved, but some updates could not be confirmed.':'We couldn’t update the feed. Any saved fixtures will appear here when available.'):'No Premier League fixtures are available for approximately the next 14 days.'}</p>
-              {filteredEmpty?<button className="outline-button" onClick={()=>{setMatchView('All');void save({followedOnly:false});}}>Show all matches</button>:snapshot?.error?<button className="outline-button" onClick={()=>void doRefresh()} disabled={busy}><RefreshCw size={14}/>Retry</button>:null}
+            :!matches.length?<div className="empty"><Radio size={25}/><h3>{filteredEmpty?(matchView==='All'?'No followed-team matches':`No ${matchView.toLowerCase()} matches`):listError?(historyView?'Unable to update results':snapshot?.partial?'Some updates are unavailable':'Unable to update matches'):historyView?'No recent results':'No fixtures in this window'}</h3>
+              <p>{filteredEmpty?'Your active filters hide the other Premier League matches. Show all matches or choose another view.':listError?(historyView?'Could not update results. Any saved results remain available.':snapshot?.partial?'Available data was saved, but some updates could not be confirmed.':'Could not update the feed. Any saved fixtures remain available.'):historyView?'No completed Premier League matches were found in the previous 14 days.':'No Premier League fixtures are available for approximately the next 14 days.'}</p>
+              {filteredEmpty?<button className="outline-button" onClick={()=>{setMatchView('All');void save({followedOnly:false});}}>Show all matches</button>:listError?<button className="outline-button" onClick={()=>historyView?recent.retry():void doRefresh()} disabled={historyView?recent.loading:busy}><RefreshCw size={14}/>Retry</button>:null}
             </div>
             :settings&&groups.map(({key,label,matches:items})=><section key={key} aria-labelledby={'date-group-'+key}><h3 id={'date-group-'+key} className={'group-title '+(key==='live'&&items.some(m=>!m.scoreStale)?'live-group':'')}><span>{label}</span><span>{items.length.toString().padStart(2,'0')}</span></h3>{items.map(match=><MatchCard key={match.id} match={match} settings={settings} onOpen={()=>openMatch(match)}/>)}</section>)}
         </div>

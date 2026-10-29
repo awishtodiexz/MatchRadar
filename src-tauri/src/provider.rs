@@ -313,6 +313,29 @@ pub async fn fixtures(client: &reqwest::Client, today: NaiveDate) -> FetchOutcom
     }
     outcome
 }
+pub fn recent_query_dates(today: NaiveDate) -> Vec<String> {
+    let first = (today - Duration::days(14)).format("%Y%m").to_string();
+    let last = today.format("%Y%m").to_string();
+    let mut dates = vec![first.clone()];
+    if first != last {
+        dates.push(last);
+    }
+    dates
+}
+pub async fn recent_results(client: &reqwest::Client, today: NaiveDate) -> FetchOutcome {
+    let dates = recent_query_dates(today);
+    let mut outcome = queries(client, &dates).await;
+    if let Some(matches) = &mut outcome.matches {
+        matches.retain(|m| recent_result(m, today));
+    }
+    outcome
+}
+pub fn recent_result(m: &Match, today: NaiveDate) -> bool {
+    m.status == "fulltime"
+        && parse_kickoff(&m.kickoff).is_some_and(|d| {
+            d.date_naive() >= today - Duration::days(14) && d.date_naive() <= today
+        })
+}
 pub async fn scores(client: &reqwest::Client, today: NaiveDate, cached: &[Match]) -> FetchOutcome {
     let mut dates = vec![today.format("%Y%m%d").to_string()];
     if cached.iter().any(|m| {
@@ -597,5 +620,44 @@ mod retry_header_tests {
         assert_eq!(retry_after("Thu, 29 Oct 2026 12:02:00 GMT", now), Some(120));
         assert_eq!(retry_after("Thu, 29 Oct 2026 11:00:00 GMT", now), Some(0));
         assert_eq!(retry_after("bad", now), None);
+    }
+}
+
+#[cfg(test)]
+mod history_query_tests {
+    use super::*;
+    #[test]
+    fn bounded_supported_months() {
+        assert_eq!(
+            recent_query_dates(NaiveDate::from_ymd_opt(2026, 10, 29).unwrap()),
+            vec!["202610"]
+        );
+        assert_eq!(
+            recent_query_dates(NaiveDate::from_ymd_opt(2026, 1, 5).unwrap()),
+            vec!["202512", "202601"]
+        );
+    }
+}
+
+#[cfg(test)]
+mod captured_history_tests {
+    use super::*;
+    #[test]
+    fn monthly_results_exist_despite_empty_today_and_yesterday() {
+        let matches = parse_response(
+            200,
+            None,
+            include_str!("../../tests/fixtures/recent-scoreboard.json"),
+            "202610",
+        )
+        .unwrap();
+        let today = NaiveDate::from_ymd_opt(2026, 10, 29).unwrap();
+        assert_eq!(
+            matches.iter().filter(|m| recent_result(m, today)).count(),
+            3
+        );
+        assert!(matches
+            .iter()
+            .all(|m| parse_kickoff(&m.kickoff).unwrap().date_naive() < today - Duration::days(1)));
     }
 }

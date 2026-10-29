@@ -75,3 +75,7 @@ F01 persistence, F02 store ordering, F03 refresh merging, F04 planning/delivery,
 6. Simulate summary/scoreboard timeouts, malformed responses, 429 numeric/HTTP-date headers and repeated manual refreshes. Preserve cache/error freshness; confirm no requests before the cooldown expires.
 7. Reopen details offline and after restart. Exercise persistence failure/corruption recovery in a test profile; verify favorites, themes, sizing, subscriptions, pending queue, sent IDs and baselines survive.
 8. Recheck tray/minimize/restore, autostart, sleep/resume, monitor changes and native notification submission/retry. Successful API submission does not prove OS display or exactly-once delivery.
+
+## Anytime testing follow-up
+
+A rich, labelled fictional completed demo is now available through Results without ESPN detail requests. Real Results now has a separately persisted previous-14-day history source with on-demand monthly queries and a six-hour cache; it is no longer limited to the regular yesterday/upcoming feed. See the current VALIDATION.md follow-up for 62 passing frontend tests and native limitations. This supersedes the earlier report's historical-window limitation. No Windows CI or installer was produced for this follow-up.

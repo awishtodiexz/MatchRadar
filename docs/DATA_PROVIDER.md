@@ -42,3 +42,9 @@ On-demand summaries are independently cached and bounded, never requested by car
 A new probe on 29 October 2026 returned zero fixtures for `20261029`; the October monthly feed contained 38 scheduled/completed fixtures. Completed summary `401878764` had 27 key events and two rosters with 28 statistics per team; upcoming `401879250` had zero events and only four season-stat fields per team. No live/halftime fixture was available. Reduced recorded test fixtures remain clearly completed/upcoming data; no live schema is inferred from replay.
 
 Summary client reuse, streaming response limits, cache validation/offline recovery and fixed cooldown behavior are covered by deterministic injected-result tests. The poller now honors its backoff despite manual wakes and retains explicit Retry-After values above an hour. Timer sleeps are chunked without reducing the actual deadline. No new provider routes, fixture-window changes or summary requests for notifications were introduced. Full native tests still require Windows CI.
+
+## Recent Results verification — 29 October 2026
+
+`dates=20261028` and `dates=20261029` each returned zero events. `dates=202610` returned 20 completed matches dated October 15–29. `tests/fixtures/recent-scoreboard.json` contains a reduced, genuine three-event subset with identifiers, kickoff, status and teams/scores; it omits external images, odds and news. Deterministic tests use this recording, never the network. Captured provider data does not establish distribution rights.
+
+Recent results use one or two supported monthly queries on demand, a separate six-hour successful cache and independent failure cooldown. The upcoming fixture window and daily scoreboard queries remain unchanged. Summary requests still occur only after a match card opens. Native compilation/runtime of this revision needs fresh Windows validation; previous successful 75-test CI predates it.
