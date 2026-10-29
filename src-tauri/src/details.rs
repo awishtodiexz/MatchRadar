@@ -34,6 +34,8 @@ pub struct Player {
 #[serde(rename_all = "camelCase")]
 pub struct Details {
     pub match_id: String,
+    #[serde(default)]
+    pub venue: Option<String>,
     pub events: Vec<Event>,
     pub statistics: Vec<Statistic>,
     pub players: Vec<Player>,
@@ -127,6 +129,11 @@ pub fn normalize(v: &Value, id: &str) -> Result<Details, String> {
     }
     Ok(Details {
         match_id: id.into(),
+        venue: v["gameInfo"]["venue"]["fullName"]
+            .as_str()
+            .map(str::trim)
+            .filter(|name| !name.is_empty() && !name.chars().any(char::is_control))
+            .map(|name| name.chars().take(200).collect()),
         events,
         statistics,
         players,
@@ -149,6 +156,7 @@ fn valid_cached(d: &Details) -> bool {
         && d.events.len() <= 1000
         && d.statistics.len() <= 80
         && d.players.len() <= 80
+        && d.venue.as_ref().is_none_or(|venue| bounded(venue, 200))
         && DateTime::parse_from_rfc3339(&d.updated_at).is_ok()
         && d.events.iter().all(|e| {
             !e.id.is_empty()

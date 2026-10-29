@@ -18,7 +18,7 @@ export async function installBridge(page: Page) {
         if (command === 'get_match_details') {
           const match = state.matches.find(m => m.id === args.id);
           const active = match && ['live','halftime','fulltime'].includes(match.status);
-          return {matchId:args.id,updatedAt:new Date().toISOString(),stale:false,error:null,
+          return {matchId:args.id,updatedAt:new Date().toISOString(),stale:false,error:null,venue:match?.status==='scheduled'?'Test Stadium':null,
             events:active?[{id:'event-1',minute:"15'",period:1,seconds:900,kind:'goal',text:'A goal is scored.',teamId:match.home.id}]:[],
             statistics:active?[{teamId:match.home.id,name:'totalShots',label:'Shots',value:'3'},{teamId:match.away.id,name:'totalShots',label:'Shots',value:'2'}]:[],
             players:active?[{teamId:match.home.id,name:'Test Keeper',position:'GK',starter:true},

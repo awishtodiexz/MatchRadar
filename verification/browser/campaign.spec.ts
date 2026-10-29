@@ -45,7 +45,7 @@ test('explores filters, bells, search and details', async ({ page }) => {
   await page.getByRole('button',{name:'Back to matches'}).click();
   await page.getByRole('button',{name:'Upcoming',exact:true}).click();
   await page.getByRole('button',{name:'Match details: Manchester City versus Manchester United'}).click();
-  await expect(page.getByText('No event timeline is available for this match.')).toBeVisible();
+  await expect(page.getByText('Match information will appear when available.')).toBeVisible();
   await expect(page.getByRole('tab',{name:'Stats'})).toHaveCount(0);
 });
 

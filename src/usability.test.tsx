@@ -20,6 +20,21 @@ beforeEach(async()=>{await load(structuredClone(mockSnapshot));});
 afterEach(cleanup);
 
 describe('focused usability refinements',()=>{
+  it('distinguishes a quiet live view from a failed scoreboard and hidden live matches',async()=>{
+    const base=structuredClone(mockSnapshot);
+    await load({...base,matches:base.matches.filter(m=>m.status==='scheduled'),updatedAt:'2026-10-29T12:00:00Z'});
+    const {unmount}=render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Live'}));
+    expect(screen.getByText('No Premier League matches are live right now')).toBeTruthy();
+    unmount();
+    await load({...base,matches:base.matches.filter(m=>m.status==='scheduled'),scoreError:'HTTP 500',error:'Scores failed'});
+    const failed=render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Live'}));
+    expect(screen.getByText('Live status unavailable')).toBeTruthy();expect(screen.queryByText('No Premier League matches are live right now')).toBeNull();
+    failed.unmount();
+    await load({...base,settings:{...base.settings,followedOnly:true,favorites:[]}});
+    render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Live'}));
+    expect(screen.getByText('No followed clubs are live')).toBeTruthy();
+    expect(screen.getByLabelText(/Premier League: .* live matches/)).toBeTruthy();
+  });
   it('suppresses surface context menus on cards, icons, details and settings',()=>{
     render(<App/>);
     expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Matchday .'}))).toBe(false);

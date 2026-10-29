@@ -10,6 +10,7 @@ import { useApp } from './store';
 import { useLocalDay } from './useLocalDay';
 import { useRecentResults } from './useRecentResults';
 import { matchesView } from './matchViews';
+import { liveEmptyState } from './emptyState';
 import type { MatchView } from './matchViews';
 import type { Match } from './types';
 import { LeagueMark } from './components/WidgetUi';
@@ -69,8 +70,10 @@ export default function App() {
   // League status is independent of the cards filter, and excludes saved/unconfirmed scores.
   const live = (allMatches??[]).filter(m=>isLive(m)&&!m.scoreStale).length;
   const savedLive = (allMatches??[]).some(m=>isLive(m)&&m.scoreStale);
-  const liveUnknown = !live&&!savedLive&&!!snapshot?.scoreError;
+  const liveUnknown = !live&&!savedLive&&(!!snapshot?.scoreError||!snapshot?.updatedAt);
   const filteredEmpty = (!!settings?.followedOnly||matchView!=='All')&&!!sourceMatches?.length&&!matches.length;
+  const liveStatusUnavailable=!!snapshot?.scoreError||!snapshot?.updatedAt;
+  const liveEmpty = liveEmptyState({scoreError:liveStatusUnavailable,savedLive,live,followedOnly:!!settings?.followedOnly,view:matchView});
   const waiting = historyView?recent.loading&&!matches.length:!allMatches?.length&&(loading||!!snapshot?.refreshing&&!snapshot.updatedAt&&!snapshot.fixtureUpdatedAt&&!snapshot.error);
   const busy = refreshing||!!snapshot?.refreshing;
   const status = updateStatus(snapshot);
@@ -108,9 +111,9 @@ export default function App() {
           {listError&&!!sourceMatches?.length&&<div className="offline-banner" role="status" title={listError}><span>{historyView?'Results update failed - cached results retained':snapshot?.partial?'Partial update · some data may be stale':'Update failed · saved data is unchanged'}</span><button onClick={()=>historyView?recent.retry():void doRefresh()} disabled={historyView?recent.loading:busy}>Retry</button></div>}
           {historyView&&recent.data.updatedAt&&<p className="field-note">Results checked {new Date(recent.data.updatedAt).toLocaleString()}</p>}
           {waiting?<div className="skeletons" role="status" aria-label="Loading fixtures"><div/><div/><div/></div>
-            :!matches.length?<div className="empty"><Radio size={25}/><h3>{filteredEmpty?(matchView==='All'?'No followed-team matches':`No ${matchView.toLowerCase()} matches`):listError?(historyView?'Unable to update results':snapshot?.partial?'Some updates are unavailable':'Unable to update matches'):historyView?'No recent results':'No fixtures in this window'}</h3>
-              <p>{filteredEmpty?'Your active filters hide the other Premier League matches. Show all matches or choose another view.':listError?(historyView?'Could not update results. Any saved results remain available.':snapshot?.partial?'Available data was saved, but some updates could not be confirmed.':'Could not update the feed. Any saved fixtures remain available.'):historyView?'No completed Premier League matches were found in the previous 14 days.':'No Premier League fixtures are available for approximately the next 14 days.'}</p>
-              {filteredEmpty?<button className="outline-button" onClick={()=>{setMatchView('All');void save({followedOnly:false});}}>Show all matches</button>:listError?<button className="outline-button" onClick={()=>historyView?recent.retry():void doRefresh()} disabled={historyView?recent.loading:busy}><RefreshCw size={14}/>Retry</button>:null}
+            :!matches.length?<div className="empty"><Radio size={25}/><h3>{liveEmpty?.title??(filteredEmpty?(matchView==='All'?'No followed-team matches':`No ${matchView.toLowerCase()} matches`):listError?(historyView?'Unable to update results':snapshot?.partial?'Some updates are unavailable':'Unable to update matches'):historyView?'No recent results':'No fixtures in this window')}</h3>
+              <p>{liveEmpty?.message??(filteredEmpty?'Your active filters hide the other Premier League matches. Show all matches or choose another view.':listError?(historyView?'Could not update results. Any saved results remain available.':snapshot?.partial?'Available data was saved, but some updates could not be confirmed.':'Could not update the feed. Any saved fixtures remain available.'):historyView?'No completed Premier League matches were found in the previous 14 days.':'No Premier League fixtures are available for approximately the next 14 days.')}</p>
+              {(liveEmpty?.canShowAll||!liveEmpty&&filteredEmpty)?<button className="outline-button" onClick={()=>{setMatchView('All');void save({followedOnly:false});}}>Show all matches</button>:(liveEmpty&&liveStatusUnavailable||!liveEmpty&&listError)?<button className="outline-button" onClick={()=>historyView?recent.retry():void doRefresh()} disabled={historyView?recent.loading:busy}><RefreshCw size={14}/>Retry</button>:null}
             </div>
             :settings&&groups.map(({key,label,matches:items})=><section key={key} aria-labelledby={'date-group-'+key}><h3 id={'date-group-'+key} className={'group-title '+(key==='live'&&items.some(m=>!m.scoreStale)?'live-group':'')}><span>{label}</span><span>{items.length.toString().padStart(2,'0')}</span></h3>{items.map(match=><MatchCard key={match.id} match={match} settings={settings} onOpen={()=>openMatch(match)}/>)}</section>)}
         </div>

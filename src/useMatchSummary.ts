@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 export interface MatchSummary {
   matchId:string; updatedAt:string; stale:boolean; error:string|null;
+  venue?:string|null;
   events:Array<{id:string;minute:string;period:number;seconds:number;kind:string;text:string;teamId:string|null}>;
   statistics:Array<{teamId:string;name:string;label:string;value:string}>;
   players:Array<{teamId:string;name:string;position:string;starter:boolean}>;

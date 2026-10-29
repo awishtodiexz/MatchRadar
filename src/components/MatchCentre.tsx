@@ -22,7 +22,7 @@ export function MatchCentre({match}:{match:Match}) {
     {loading&&<div className="skeletons" role="status" aria-label="Loading match details"><div/></div>}
     {error&&<p role="status">{error} <button className="text-button" onClick={retry}>Retry details</button></p>}
     {data&&<p className="field-note">{data.stale?'Saved details':'Details checked'} · {new Date(data.updatedAt).toLocaleString()}</p>}
-    {tab==='Overview'&&(!loading||data)&&<><h3>Match events</h3><p>{data?.events.length?`${data.events.length} provider events available in Timeline.`:error?'Details could not be confirmed.':'No event timeline is available for this match.'}</p><p className="field-note">Scores come from the matchday scoreboard. Match details may update separately.</p></>}
+    {tab==='Overview'&&(!loading||data)&&<>{data?.venue&&<><h3>Venue</h3><p>{data.venue}</p></>}{match.status==='scheduled'?<p>{error?'Match information is unavailable right now.':'Match information will appear when available.'}</p>:<><h3>Match events</h3><p>{data?.events.length?`${data.events.length} events available in Timeline.`:error?'Match information is unavailable right now.':'No event timeline is available for this match.'}</p></>}</>}
     {tab==='Timeline'&&<ol className="event-list">{data?.events.map(e=><li key={e.id}><time>{e.minute||'—'}</time><div><small>{team(e.teamId)} · {e.kind.replaceAll('-',' ')}</small><p>{e.text}</p></div></li>)}</ol>}
     {tab==='Stats'&&data&&<MatchStats match={match} statistics={data.statistics}/>}
     {tab==='Lineups'&&data&&<MatchLineups match={match} players={data.players}/>}

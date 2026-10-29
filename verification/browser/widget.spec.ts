@@ -56,15 +56,29 @@ test('theme changes and demo controls are absent from settings', async ({ page }
   await expect(page.getByRole('region', { name: 'Demo controls' })).toHaveCount(0);
 });
 
-test('upcoming match honestly omits unavailable detail tabs', async ({ page }) => {
+test('upcoming match shows supplied venue and omits unavailable detail tabs', async ({ page }, info) => {
   await page.getByRole('button', { name: 'Upcoming', exact: true }).click();
   await page.getByRole('button', { name: 'Match details: Manchester City versus Manchester United' }).click();
-  await expect(page.getByText('No event timeline is available for this match.')).toBeVisible();
+  await expect(page.getByText('Match information will appear when available.')).toBeVisible();
+  await expect(page.getByText('Test Stadium')).toBeVisible();
+  await page.screenshot({path:info.outputPath('upcoming-details.png'),animations:'disabled'});
   await expect(page.getByRole('tab', { name: 'Stats', exact: true })).toHaveCount(0);
   await expect(page.getByRole('tab', { name: 'Lineups', exact: true })).toHaveCount(0);
 });
 
 for (const [width, theme] of [[320, 'light'], [390, 'dark']] as const) {
+  test(`upcoming details fit at ${width}px in ${theme}`, async ({ page }, info) => {
+    await page.setViewportSize({width,height:700});
+    await page.getByRole('button',{name:'Settings',exact:true}).click();
+    await page.getByRole('tab',{name:'Appearance'}).click();
+    await page.getByRole('combobox',{name:'Theme'}).selectOption(theme);
+    await page.getByRole('button',{name:'Back to matches'}).click();
+    await page.getByRole('button',{name:'Upcoming',exact:true}).click();
+    await page.getByRole('button',{name:'Match details: Manchester City versus Manchester United'}).click();
+    await expect(page.getByText('Test Stadium')).toBeVisible();
+    expect(await page.locator('.detail-body').evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
+    await page.screenshot({path:info.outputPath('upcoming.png'),animations:'disabled'});
+  });
   test(`Match Centre stays within ${width}px in ${theme} theme`, async ({ page }) => {
     await page.setViewportSize({ width, height: 700 });
     await page.getByRole('button', { name: 'Settings', exact: true }).click();

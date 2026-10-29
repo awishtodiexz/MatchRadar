@@ -7,6 +7,20 @@ fn captured_summary_has_events_stats_and_rosters() {
     assert!(!d.events.is_empty());
     assert!(!d.statistics.is_empty());
     assert!(!d.players.is_empty());
+    assert!(d
+        .events
+        .iter()
+        .any(|e| e.kind == "goal" && e.text.contains("James Justin")));
+    assert!(d.events.iter().any(|e| e.kind == "yellow-card"));
+    assert!(d.events.iter().any(|e| e.kind == "substitution"));
+    assert_eq!(
+        d.players
+            .iter()
+            .filter(|p| p.team_id == "359" && p.starter)
+            .count(),
+        11
+    );
+    assert!(d.players.iter().any(|p| p.team_id == "359" && !p.starter));
 }
 #[test]
 fn upcoming_does_not_show_season_totals() {
@@ -16,6 +30,22 @@ fn upcoming_does_not_show_season_totals() {
     assert!(d.statistics.is_empty());
     assert!(d.events.is_empty());
     assert!(normalize(&serde_json::json!({}), "1").is_err());
+}
+#[test]
+fn venue_is_optional_bounded_and_survives_legacy_cache() {
+    let mut v: Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/summary-upcoming.json")).unwrap();
+    v["gameInfo"] = serde_json::json!({"venue":{"fullName":"Villa Park"}});
+    let details = normalize(&v, "401879250").unwrap();
+    assert_eq!(details.venue.as_deref(), Some("Villa Park"));
+    v["gameInfo"]["venue"]["fullName"] = serde_json::json!("bad\nvalue");
+    assert!(normalize(&v, "401879250").unwrap().venue.is_none());
+    let mut saved = serde_json::to_value(details).unwrap();
+    saved.as_object_mut().unwrap().remove("venue");
+    assert!(serde_json::from_value::<Details>(saved)
+        .unwrap()
+        .venue
+        .is_none());
 }
 #[test]
 fn ordering_duplicates_and_missing_values() {
