@@ -6,6 +6,7 @@ mod model;
 mod persistence;
 mod provider;
 mod refresh;
+mod scheduling;
 mod window;
 use chrono::{DateTime, Utc};
 use model::{apply_feed, apply_settings, feed_is_current, Settings, SettingsEffects, Snapshot};
@@ -201,10 +202,13 @@ fn save_settings(
 }
 #[tauri::command]
 fn refresh(app: tauri::AppHandle, state: tauri::State<'_, State>) {
-    state.force_fixtures.store(true, Ordering::Relaxed);
     if let Ok(mut s) = state.snapshot.lock() {
+        if s.refreshing {
+            return;
+        }
         s.refreshing = true;
     }
+    state.force_fixtures.store(true, Ordering::Relaxed);
     let _ = app.emit("snapshot-updated", ());
     state.wake.notify_one();
 }
@@ -306,8 +310,29 @@ async fn deliver_notifications(app: tauri::AppHandle) {
 async fn poll(app: tauri::AppHandle) {
     let mut failures = 0u32;
     let client = provider::client();
+    let mut gate = scheduling::RequestGate::default();
     loop {
         let state = app.state::<State>();
+        let mock = state
+            .snapshot
+            .lock()
+            .map(|s| s.settings.mock)
+            .unwrap_or(false);
+        if !mock {
+            if let Some(delay) = gate.remaining(tokio::time::Instant::now().into_std()) {
+                let changed = {
+                    let mut snapshot = state.snapshot.lock().unwrap();
+                    let changed = snapshot.refreshing;
+                    snapshot.refreshing = false;
+                    changed
+                };
+                if changed {
+                    let _ = app.emit("snapshot-updated", ());
+                }
+                tokio::select! {_=tokio::time::sleep(scheduling::sleep_chunk(delay))=>{},_=state.wake.notified()=>{}}
+                continue;
+            }
+        }
         let _guard = state.refresh_lock.lock().await;
         let (settings, cached, fixture_updated_at, generation) = {
             let mut s = state.snapshot.lock().unwrap();
@@ -431,9 +456,7 @@ async fn poll(app: tauri::AppHandle) {
         let delay = {
             let s = state.snapshot.lock().unwrap();
             if failures > 0 {
-                retry_after
-                    .unwrap_or(60u64.saturating_mul(2u64.saturating_pow(failures.min(5))))
-                    .min(3600)
+                scheduling::failure_delay(failures, retry_after)
             } else if s
                 .matches
                 .iter()
@@ -453,8 +476,15 @@ async fn poll(app: tauri::AppHandle) {
                 1800
             }
         };
+        if !settings.mock {
+            if failures > 0 {
+                gate.defer(std::time::Instant::now(), delay);
+            } else {
+                gate.clear();
+            }
+        }
         drop(_guard);
-        tokio::select! { _=tokio::time::sleep(Duration::from_secs(delay))=>{}, _=state.wake.notified()=>{} }
+        tokio::select! { _=tokio::time::sleep(scheduling::sleep_chunk(Duration::from_secs(delay)))=>{}, _=state.wake.notified()=>{} }
     }
 }
 fn main() {
