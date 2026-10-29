@@ -6,7 +6,7 @@ import type { MatchSummary } from './useMatchSummary';
 const bridge=vi.hoisted(()=>({invoke:vi.fn()}));
 vi.mock('@tauri-apps/api/core',()=>({isTauri:()=>true,invoke:bridge.invoke}));
 afterEach(()=>{cleanup();vi.resetAllMocks();vi.restoreAllMocks();vi.useRealTimers();});
-const detail=(id:string):MatchSummary=>({matchId:id,events:[],statistics:[],players:[],updatedAt:'2026-10-29T12:00:00Z',error:null,stale:false});
+const detail=(id:string):MatchSummary=>({matchId:id,venue:null,events:[],statistics:[],players:[],updatedAt:'2026-10-29T12:00:00Z',error:null,stale:false});
 it('ignores a previous match response after rapid navigation',async()=>{
  const pending:Array<(v:MatchSummary)=>void>=[];bridge.invoke.mockImplementation(()=>new Promise(r=>pending.push(r)));
  const {result,rerender}=renderHook(({id})=>useMatchSummary(id,false),{initialProps:{id:'1'}});
