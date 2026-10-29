@@ -52,11 +52,17 @@ pub fn cleanup(snapshot: &mut Snapshot, now: DateTime<Utc>) {
 }
 
 // Pure planning: each event has one ID regardless of team or match eligibility.
-// Delivery IDs are recorded by the caller only after native delivery succeeds.
+// Sent IDs are recorded by the delivery queue only after the native API returns success.
 pub fn plan(snapshot: &mut Snapshot, now: DateTime<Utc>) -> Vec<(String, String)> {
     cleanup(snapshot, now);
+    if snapshot.settings.mock {
+        return Vec::new();
+    }
     let mut alerts = Vec::new();
     for m in &snapshot.matches {
+        if m.score_stale {
+            continue;
+        }
         let preference = snapshot.settings.match_alerts.get(&m.id);
         let subscribed = preference.is_some_and(|p| p.enabled);
         let followed = snapshot.settings.favorites.contains(&m.home.id)

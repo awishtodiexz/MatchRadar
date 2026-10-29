@@ -19,6 +19,29 @@ pub struct AlertBaseline {
     pub seen_at: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum NotificationKind {
+    Reminder,
+    Start,
+    Goal { home: u32, away: u32 },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingNotification {
+    pub id: String,
+    pub match_id: String,
+    pub home_team: String,
+    pub away_team: String,
+    pub body: String,
+    pub kind: NotificationKind,
+    pub created_at: String,
+    pub expires_at: String,
+    pub next_attempt_at: String,
+    pub attempts: u8,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Team {
@@ -30,6 +53,8 @@ pub struct Team {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Match {
+    #[serde(default)]
+    pub score_stale: bool,
     pub id: String,
     pub home: Team,
     pub away: Team,
@@ -158,6 +183,12 @@ pub const TEAM_CATALOG_VERSION: u32 = 1;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Snapshot {
+    #[serde(deserialize_with = "crate::delivery::deserialize_pending")]
+    pub pending_notifications: Vec<PendingNotification>,
+    pub notification_retry_after: Option<String>,
+    pub fixture_error: Option<String>,
+    pub score_error: Option<String>,
+    pub partial: bool,
     pub alert_baselines: HashMap<String, AlertBaseline>,
     pub matches: Vec<Match>,
     pub updated_at: Option<String>,
@@ -174,6 +205,11 @@ pub struct Snapshot {
 impl Default for Snapshot {
     fn default() -> Self {
         Self {
+            pending_notifications: Vec::new(),
+            notification_retry_after: None,
+            fixture_error: None,
+            score_error: None,
+            partial: false,
             alert_baselines: HashMap::new(),
             matches: Vec::new(),
             updated_at: None,
@@ -239,13 +275,18 @@ pub fn apply_settings(snapshot: &mut Snapshot, mut settings: Settings) -> Settin
     settings.opacity = settings.opacity.clamp(70, 100);
     let effects = SettingsEffects::between(&snapshot.settings, &settings);
     if effects.mode_changed {
+        snapshot.pending_notifications.clear();
         snapshot.alert_baselines.clear();
         snapshot.matches.clear();
         snapshot.updated_at = None;
         snapshot.fixture_updated_at = None;
         snapshot.error = None;
+        snapshot.fixture_error = None;
+        snapshot.score_error = None;
+        snapshot.partial = false;
     }
     snapshot.settings = settings;
+    crate::delivery::cleanup(snapshot, chrono::Utc::now());
     effects
 }
 // Feed completion only updates feed fields, preserving preferences saved during I/O.
@@ -262,6 +303,9 @@ pub fn apply_feed(
         snapshot.fixture_updated_at = snapshot.updated_at.clone();
     }
     snapshot.error = error;
+    snapshot.fixture_error = None;
+    snapshot.score_error = None;
+    snapshot.partial = false;
 }
 
 pub fn feed_is_current(

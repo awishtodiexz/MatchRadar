@@ -3,10 +3,62 @@ use chrono::{DateTime, Duration, NaiveDate, Utc};
 use serde_json::Value;
 use std::time::Duration as StdDuration;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct FetchError {
     pub message: String,
     pub retry_after: Option<u64>,
+}
+
+impl FetchError {
+    pub fn rate_limited(&self) -> bool {
+        self.retry_after.is_some() || self.message.contains("HTTP 429")
+    }
+}
+
+/// None means no valid response; Some(empty) is a valid empty response.
+/// Data plus an error represents partial success across month/day queries.
+#[derive(Debug, Default)]
+pub struct FetchOutcome {
+    pub matches: Option<Vec<Match>>,
+    pub error: Option<FetchError>,
+}
+impl FetchOutcome {
+    pub fn failed(error: FetchError) -> Self {
+        Self {
+            matches: None,
+            error: Some(error),
+        }
+    }
+    pub fn record(&mut self, result: Result<Vec<Match>, FetchError>) {
+        match result {
+            Ok(matches) => {
+                self.matches = Some(merge(self.matches.take().unwrap_or_default(), matches))
+            }
+            Err(error) => {
+                self.error = Some(if let Some(previous) = self.error.take() {
+                    FetchError {
+                        message: format!("{}; {}", previous.message, error.message),
+                        retry_after: previous.retry_after.max(error.retry_after),
+                    }
+                } else {
+                    error
+                });
+            }
+        }
+    }
+}
+
+async fn queries(client: &reqwest::Client, dates: &[String]) -> FetchOutcome {
+    let mut outcome = FetchOutcome::default();
+    for date in dates {
+        let result = query(client, date).await;
+        let limited = result.as_ref().err().is_some_and(FetchError::rate_limited);
+        outcome.record(result);
+        if limited {
+            break;
+        }
+    }
+    outcome
 }
 fn field<'a>(v: &'a Value, key: &str) -> &'a str {
     v.get(key).and_then(Value::as_str).unwrap_or("")
@@ -144,6 +196,7 @@ fn normalize(event: &Value) -> Option<Match> {
         field(kind, "shortDetail")
     };
     Some(Match {
+        score_stale: false,
         id: id.into(),
         home: team(home)?,
         away: team(away)?,
@@ -235,44 +288,34 @@ pub fn merge(base: Vec<Match>, updates: Vec<Match>) -> Vec<Match> {
     result.sort_by(|a, b| a.kickoff.cmp(&b.kickoff).then(a.id.cmp(&b.id)));
     result
 }
-pub async fn fixtures(
-    client: &reqwest::Client,
-    today: NaiveDate,
-) -> Result<Vec<Match>, FetchError> {
+pub async fn fixtures(client: &reqwest::Client, today: NaiveDate) -> FetchOutcome {
     let end = today + Duration::days(14);
     let first = (today - Duration::days(1)).format("%Y%m").to_string();
     let last = end.format("%Y%m").to_string();
-    let mut matches = query(client, &first).await?;
+    let mut dates = vec![first.clone()];
     if first != last {
-        matches = merge(matches, query(client, &last).await?);
+        dates.push(last);
     }
+    let mut outcome = queries(client, &dates).await;
     let start = today - Duration::days(1);
-    matches.retain(|m| {
-        parse_kickoff(&m.kickoff).is_some_and(|d| d.date_naive() >= start && d.date_naive() <= end)
-    });
-    Ok(matches)
+    if let Some(matches) = &mut outcome.matches {
+        matches.retain(|m| {
+            parse_kickoff(&m.kickoff)
+                .is_some_and(|d| d.date_naive() >= start && d.date_naive() <= end)
+        });
+    }
+    outcome
 }
-pub async fn scores(
-    client: &reqwest::Client,
-    today: NaiveDate,
-    cached: &[Match],
-) -> Result<Vec<Match>, FetchError> {
-    let mut matches = query(client, &today.format("%Y%m%d").to_string()).await?;
+pub async fn scores(client: &reqwest::Client, today: NaiveDate, cached: &[Match]) -> FetchOutcome {
+    let mut dates = vec![today.format("%Y%m%d").to_string()];
     if cached.iter().any(|m| {
         (m.status == "live" || m.status == "halftime")
             && parse_kickoff(&m.kickoff)
                 .is_some_and(|d| d.date_naive() == today - Duration::days(1))
     }) {
-        matches = merge(
-            matches,
-            query(
-                client,
-                &(today - Duration::days(1)).format("%Y%m%d").to_string(),
-            )
-            .await?,
-        );
+        dates.push((today - Duration::days(1)).format("%Y%m%d").to_string());
     }
-    Ok(matches)
+    queries(client, &dates).await
 }
 pub fn mock() -> Vec<Match> {
     let now = Utc::now();
@@ -361,6 +404,7 @@ pub fn mock() -> Vec<Match> {
         .enumerate()
         .map(
             |(i, (hi, hn, hs, ai, an, as_, status, hours, home_score, away_score))| Match {
+                score_stale: false,
                 id: format!("demo-{i}"),
                 home: team(hi, hn, hs),
                 away: team(ai, an, as_),
@@ -436,6 +480,24 @@ mod response_tests {
         let merged = merge(vec![m], vec![update]);
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].status, "live");
+    }
+
+    #[test]
+    fn independent_query_results_keep_valid_data_after_malformed_or_rate_limited_response() {
+        let body = serde_json::json!({"events":[event()]}).to_string();
+        for invalid in ["no JSON", "{}", "{\"events\":[{}]}"] {
+            let mut outcome = FetchOutcome::default();
+            outcome.record(parse_response(200, None, &body, "202610"));
+            outcome.record(parse_response(200, None, invalid, "202611"));
+            assert_eq!(outcome.matches.as_ref().unwrap().len(), 1);
+            assert!(outcome.error.is_some());
+        }
+        let mut outcome = FetchOutcome::default();
+        outcome.record(parse_response(200, None, "{\"events\":[]}", "202610"));
+        outcome.record(parse_response(429, Some(300), "{}", "202611"));
+        assert!(outcome.matches.as_ref().unwrap().is_empty());
+        assert!(outcome.error.as_ref().unwrap().rate_limited());
+        assert_eq!(outcome.error.unwrap().retry_after, Some(300));
     }
 }
 

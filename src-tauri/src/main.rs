@@ -1,7 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod alerts;
+mod delivery;
 mod model;
+mod persistence;
 mod provider;
+mod refresh;
 use chrono::{DateTime, Utc};
 use model::{
     apply_feed, apply_settings, feed_is_current, ExpandedSize, Settings, SettingsEffects, Snapshot,
@@ -28,16 +31,14 @@ struct State {
     snapshot: Mutex<Snapshot>,
     path: PathBuf,
     wake: tokio::sync::Notify,
+    notification_wake: tokio::sync::Notify,
     force_fixtures: AtomicBool,
     mode_generation: AtomicU64,
     settings_lock: Mutex<()>,
     refresh_lock: tokio::sync::Mutex<()>,
 }
 fn write_snapshot(state: &State, snapshot: &Snapshot) -> Result<(), String> {
-    let data =
-        serde_json::to_vec(snapshot).map_err(|e| format!("Serialize MatchRadar settings: {e}"))?;
-    fs::write(&state.path, data)
-        .map_err(|e| format!("Save MatchRadar state to {}: {e}", state.path.display()))
+    persistence::save(&state.path, snapshot)
 }
 fn persist(state: &State) -> Result<(), String> {
     let snapshot = state
@@ -75,7 +76,7 @@ fn save_settings(
     settings: Settings,
     app: tauri::AppHandle,
     state: tauri::State<'_, State>,
-) -> Result<(), String> {
+) -> Result<Settings, String> {
     let _settings_guard = state
         .settings_lock
         .lock()
@@ -146,8 +147,15 @@ fn save_settings(
         state.force_fixtures.store(true, Ordering::Relaxed);
         state.wake.notify_one();
     }
+    state.notification_wake.notify_one();
     app.emit("snapshot-updated", ())
-        .map_err(|e| format!("Notify widget of saved settings: {e}"))
+        .map_err(|e| format!("Notify widget of saved settings: {e}"))?;
+    // Return Rust's persisted normalization, rather than echoing the IPC payload.
+    state
+        .snapshot
+        .lock()
+        .map(|s| s.settings.clone())
+        .map_err(|e| e.to_string())
 }
 fn rollback_window(
     window: &tauri::WebviewWindow,
@@ -187,22 +195,89 @@ fn test_notification(app: tauri::AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-fn notifications(app: &tauri::AppHandle, next: &mut Snapshot) {
-    for (id, body) in alerts::plan(next, Utc::now()) {
-        match app
-            .notification()
-            .builder()
-            .title("MatchRadar")
-            .body(&body)
-            .show()
-        {
-            Ok(()) => next.sent_notifications.push(id),
-            Err(error) => eprintln!("MatchRadar notification delivery: {error}"),
-        }
+fn notification_log(state: &State, message: &str) {
+    eprintln!("MatchRadar notifications: {message}");
+    if let Ok(mut log) = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(state.path.with_file_name("provider.log"))
+    {
+        let _ = writeln!(log, "{} notifications: {message}", Utc::now().to_rfc3339());
     }
-    if next.sent_notifications.len() > 1000 {
-        next.sent_notifications
-            .drain(..next.sent_notifications.len() - 1000);
+}
+
+fn submit_notification(
+    app: &tauri::AppHandle,
+    event: &model::PendingNotification,
+) -> Result<(), delivery::SubmissionError> {
+    // In plugin 2.8.0 this acknowledges background dispatch, not OS display.
+    app.notification()
+        .builder()
+        .title("MatchRadar")
+        .body(&event.body)
+        .show()
+        .map_err(|error| {
+            let unavailable = matches!(&error,
+                tauri_plugin_notification::Error::Io(e) if matches!(e.kind(),
+                    std::io::ErrorKind::PermissionDenied
+                        | std::io::ErrorKind::NotFound
+                        | std::io::ErrorKind::Unsupported));
+            if unavailable {
+                delivery::SubmissionError::Unavailable(error.to_string())
+            } else {
+                delivery::SubmissionError::Temporary(error.to_string())
+            }
+        })
+}
+
+async fn deliver_notifications(app: tauri::AppHandle) {
+    let mut save_failures = 0u32;
+    let mut persistence_retry = None::<tokio::time::Instant>;
+    loop {
+        let state = app.state::<State>();
+        let delay = if let Some(deadline) =
+            persistence_retry.filter(|t| *t > tokio::time::Instant::now())
+        {
+            Some(deadline.saturating_duration_since(tokio::time::Instant::now()))
+        } else {
+            let mut snapshot = state.snapshot.lock().unwrap();
+            if !snapshot.pending_notifications.is_empty() || save_failures > 0 {
+                let result = delivery::submit_due(
+                    &mut snapshot,
+                    Utc::now,
+                    |event| submit_notification(&app, event),
+                    |next| write_snapshot(&state, next),
+                    |message| notification_log(&state, message),
+                );
+                if let Err(error) = result {
+                    // Back off persistence failures too; never submit an unpersisted candidate.
+                    if save_failures == 0 {
+                        notification_log(&state, &format!("Queue persistence failed: {error}"));
+                    }
+                    save_failures = save_failures.saturating_add(1);
+                } else {
+                    save_failures = 0;
+                    persistence_retry = None;
+                }
+            }
+            if save_failures > 0 {
+                let delay = Duration::from_secs((30 * 2u64.pow(save_failures.min(4))).min(300));
+                persistence_retry = Some(tokio::time::Instant::now() + delay);
+                Some(delay)
+            } else {
+                delivery::next_due(&snapshot, Utc::now())
+            }
+        };
+        // Independent wake/deadline: delivery retry never wakes the ESPN poller.
+        tokio::select! {
+            _ = async {
+                match delay {
+                    Some(delay) => tokio::time::sleep(delay.max(Duration::from_secs(1))).await,
+                    None => std::future::pending::<()>().await,
+                }
+            } => {},
+            _ = state.notification_wake.notified() => {},
+        }
     }
 }
 async fn poll(app: tauri::AppHandle) {
@@ -251,89 +326,74 @@ async fn poll(app: tauri::AppHandle) {
                             .num_minutes()
                             >= 360
                     });
-            let result = async {
-                let client = client.as_ref().map_err(|e| provider::FetchError {
-                    message: e.message.clone(),
-                    retry_after: e.retry_after,
-                })?;
-                let today = Utc::now().date_naive();
-                let fixture_result = if due {
-                    provider::fixtures(client, today).await
-                } else {
-                    Ok(cached.clone())
-                };
-                // Continue refreshing scores when the less frequent fixture request fails,
-                // except when the provider explicitly rate-limits us.
-                if fixture_result
-                    .as_ref()
-                    .err()
-                    .is_some_and(|e| e.retry_after.is_some() || e.message.contains("HTTP 429"))
-                {
-                    return Err(fixture_result.err().unwrap());
+            let (fixtures, scores) = match client.as_ref() {
+                Ok(client) => {
+                    let today = Utc::now().date_naive();
+                    let fixtures = if due {
+                        provider::fixtures(client, today).await
+                    } else {
+                        provider::FetchOutcome::default()
+                    };
+                    let scores = if fixtures
+                        .error
+                        .as_ref()
+                        .is_some_and(provider::FetchError::rate_limited)
+                    {
+                        provider::FetchOutcome::failed(provider::FetchError {
+                            message: "Daily requests deferred after fixture rate limit".into(),
+                            retry_after: fixtures.error.as_ref().and_then(|e| e.retry_after),
+                        })
+                    } else {
+                        // Check yesterday if either cached or newly fetched data says it is live.
+                        let mut relevant = cached;
+                        if let Some(matches) = &fixtures.matches {
+                            relevant.extend(matches.iter().cloned());
+                        }
+                        provider::scores(client, today, &relevant).await
+                    };
+                    (fixtures, scores)
                 }
-                let fixtures = fixture_result
-                    .as_ref()
-                    .cloned()
-                    .unwrap_or_else(|_| cached.clone());
-                let scores = provider::scores(client, today, &fixtures).await?;
-                Ok::<_, provider::FetchError>((
-                    provider::merge(fixtures, scores),
-                    fixture_result.err(),
-                ))
-            }
-            .await;
-            match result {
-                Ok((matches, fixture_error)) => {
-                    let mut s = state.snapshot.lock().unwrap();
-                    if feed_is_current(
-                        &s,
-                        false,
-                        generation,
-                        state.mode_generation.load(Ordering::Relaxed),
-                    ) {
-                        apply_feed(
-                            &mut s,
-                            matches,
-                            Utc::now().to_rfc3339(),
-                            due && fixture_error.is_none(),
-                            fixture_error.as_ref().map(|e| e.message.clone()),
+                Err(error) => (
+                    if due {
+                        provider::FetchOutcome::failed(error.clone())
+                    } else {
+                        provider::FetchOutcome::default()
+                    },
+                    provider::FetchOutcome::failed(error.clone()),
+                ),
+            };
+            let mut s = state.snapshot.lock().unwrap();
+            if feed_is_current(
+                &s,
+                false,
+                generation,
+                state.mode_generation.load(Ordering::Relaxed),
+            ) {
+                let applied = refresh::apply(&mut s, fixtures, scores, Utc::now());
+                retry_after = applied.retry_after;
+                if applied.any_response {
+                    let overflow = delivery::enqueue(&mut s, &applied.score_ids, Utc::now());
+                    if overflow > 0 {
+                        notification_log(
+                            &state,
+                            &format!("Pending queue full; {overflow} candidates omitted"),
                         );
-                        notifications(&app, &mut s);
                     }
-                    if let Some(e) = fixture_error {
-                        eprintln!("MatchRadar: {}", e.message);
-                        if let Ok(mut f) = fs::OpenOptions::new()
+                }
+                if applied.failed {
+                    failures = failures.saturating_add(1);
+                    if let Some(error) = &s.error {
+                        eprintln!("MatchRadar: {error}");
+                        if let Ok(mut log) = fs::OpenOptions::new()
                             .create(true)
                             .append(true)
                             .open(state.path.with_file_name("provider.log"))
                         {
-                            let _ = writeln!(f, "{} {}", Utc::now().to_rfc3339(), e.message);
+                            let _ = writeln!(log, "{} {}", Utc::now().to_rfc3339(), error);
                         }
-                        failures = failures.saturating_add(1);
-                    } else {
-                        failures = 0;
                     }
-                }
-                Err(e) => {
-                    retry_after = e.retry_after;
-                    eprintln!("MatchRadar: {}", e.message);
-                    if let Ok(mut f) = fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(state.path.with_file_name("provider.log"))
-                    {
-                        let _ = writeln!(f, "{} {}", Utc::now().to_rfc3339(), e.message);
-                    }
-                    let mut s = state.snapshot.lock().unwrap();
-                    if feed_is_current(
-                        &s,
-                        false,
-                        generation,
-                        state.mode_generation.load(Ordering::Relaxed),
-                    ) {
-                        s.error = Some(e.message);
-                    }
-                    failures = failures.saturating_add(1);
+                } else {
+                    failures = 0;
                 }
             }
         }
@@ -343,6 +403,7 @@ async fn poll(app: tauri::AppHandle) {
         if let Err(e) = persist(&state) {
             eprintln!("MatchRadar: {e}");
         }
+        state.notification_wake.notify_one();
         let _ = app.emit("snapshot-updated", ());
         let delay = {
             let s = state.snapshot.lock().unwrap();
@@ -395,13 +456,23 @@ fn main() {
             let dir = app.path().app_data_dir()?;
             fs::create_dir_all(&dir)?;
             let path = dir.join("state.json");
-            let mut snapshot: Snapshot = fs::read(&path)
-                .ok()
-                .and_then(|b| serde_json::from_slice(&b).ok())
-                .unwrap_or_default();
+            let loaded = persistence::load(&path)?;
+            if let Some(notice) = loaded.notice {
+                eprintln!("MatchRadar persistence: {notice}");
+                if let Ok(mut log) = fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(dir.join("provider.log"))
+                {
+                    let _ = writeln!(log, "{} persistence: {notice}", Utc::now().to_rfc3339());
+                }
+            }
+            let mut snapshot = loaded.snapshot;
             snapshot.refreshing = false;
             snapshot.migrate_catalog();
+            refresh::mark_cached(&mut snapshot);
             alerts::cleanup(&mut snapshot, Utc::now());
+            delivery::cleanup(&mut snapshot, Utc::now());
             if let Some(window) = app.get_webview_window("main") {
                 window.restore_state(StateFlags::all())?;
                 window.set_always_on_top(snapshot.settings.always_on_top)?;
@@ -418,6 +489,7 @@ fn main() {
                 snapshot: Mutex::new(snapshot),
                 path,
                 wake: tokio::sync::Notify::new(),
+                notification_wake: tokio::sync::Notify::new(),
                 force_fixtures: AtomicBool::new(false),
                 mode_generation: AtomicU64::new(0),
                 settings_lock: Mutex::new(()),
@@ -457,6 +529,7 @@ fn main() {
             }
             tray.build(app)?;
             tauri::async_runtime::spawn(poll(app.handle().clone()));
+            tauri::async_runtime::spawn(deliver_notifications(app.handle().clone()));
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -492,6 +565,7 @@ mod persistence_tests {
             snapshot: Mutex::new(Snapshot::default()),
             path: path.clone(),
             wake: tokio::sync::Notify::new(),
+            notification_wake: tokio::sync::Notify::new(),
             force_fixtures: AtomicBool::new(false),
             mode_generation: AtomicU64::new(0),
             settings_lock: Mutex::new(()),
