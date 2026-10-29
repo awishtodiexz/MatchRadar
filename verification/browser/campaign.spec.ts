@@ -38,6 +38,7 @@ test('explores filters, bells, search and details', async ({ page }) => {
   await page.getByRole('searchbox',{name:'Search clubs'}).fill('no club matches this');
   await expect(page.getByText(/No clubs match/)).toBeVisible();
   await page.getByRole('button',{name:'Clear search'}).click();
+  await expect(page.getByRole('searchbox',{name:'Search clubs'})).toBeFocused();
   await expect(page.getByRole('button',{name:'Arsenal',exact:true})).toBeVisible();
   await page.getByRole('tab',{name:'Teams'}).press('End');
   await expect(page.getByRole('tab',{name:'App',exact:true})).toBeFocused();

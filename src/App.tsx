@@ -45,6 +45,13 @@ export default function App() {
   };
   const openMatch = (match:Match) => {rememberHome();restoreFocus.current=matchButtonId(match.id);setSelected(match);setView('detail');};
   useEffect(()=>{
+    setSelected(current=>{
+      if(!current)return current;
+      const fresh=allMatches?.find(m=>m.id===current.id);
+      return fresh??(isLive(current)&&!current.scoreStale?{...current,scoreStale:true}:current);
+    });
+  },[allMatches]);
+  useEffect(()=>{
     void load();
     if(!native) return;
     let disposed=false;

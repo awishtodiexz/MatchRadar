@@ -1,9 +1,10 @@
 import type { Page } from '@playwright/test';
 import { mockSnapshot } from '../../src/test-fixtures/fixtures';
+import type { Snapshot } from '../../src/types';
 
 // Test-only desktop bridge. It is injected by Playwright and is never bundled.
-export async function installBridge(page: Page) {
-  await page.addInitScript((snapshot) => {
+export async function installBridge(page: Page, options: {snapshot?:Snapshot; details?:'error'|'pending'} = {}) {
+  await page.addInitScript(({snapshot,details}) => {
     let state = snapshot;
     const internals = {
       metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main', windowLabel: 'main' } },
@@ -16,6 +17,8 @@ export async function installBridge(page: Page) {
         }
         if (command === 'get_recent_results') return {matches:state.matches.filter(m => m.status === 'fulltime'),updatedAt:state.updatedAt,error:null};
         if (command === 'get_match_details') {
+          if(details==='error') throw new Error('Unavailable');
+          if(details==='pending') return new Promise(()=>{});
           const match = state.matches.find(m => m.id === args.id);
           const active = match && ['live','halftime','fulltime'].includes(match.status);
           return {matchId:args.id,updatedAt:new Date().toISOString(),stale:false,error:null,venue:match?.status==='scheduled'?'Test Stadium':null,
@@ -31,5 +34,5 @@ export async function installBridge(page: Page) {
       }
     };
     Object.assign(window, {isTauri:true,__TAURI_INTERNALS__:internals});
-  }, structuredClone(mockSnapshot));
+  }, {snapshot:structuredClone(options.snapshot??mockSnapshot),details:options.details});
 }

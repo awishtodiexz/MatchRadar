@@ -1,4 +1,5 @@
 import { Bell, BellOff, BellRing, ChevronRight, Star } from 'lucide-react';
+import { useRef } from 'react';
 import { useApp } from '../store';
 import { isLive } from '../fixtures';
 import type { Match, Settings } from '../types';
@@ -44,15 +45,16 @@ export function MatchCard({match, settings, onOpen}: {match:Match; settings:Sett
 
 export function MatchAlertPanel({match, settings}: {match:Match; settings:Settings}) {
   const save = useApp(state=>state.save);
+  const heading = useRef<HTMLHeadingElement>(null);
   const alerts = alertPresentation(settings, match);
-  const change = (enabled:boolean) => void save({matchAlerts:{...settings.matchAlerts,[match.id]:{enabled,expiresAt:new Date(Date.parse(match.kickoff)+30*86400000).toISOString()}}});
-  const reset = () => { const next = {...settings.matchAlerts}; delete next[match.id]; void save({matchAlerts:next}); };
+  const change = (enabled:boolean) => {if(alerts.ended)heading.current?.focus();void save({matchAlerts:{...settings.matchAlerts,[match.id]:{enabled,expiresAt:new Date(Date.parse(match.kickoff)+30*86400000).toISOString()}}});};
+  const reset = () => { const next = {...settings.matchAlerts}; delete next[match.id]; heading.current?.focus(); void save({matchAlerts:next}); };
   return <section className="match-alert-panel" aria-labelledby="match-alert-heading">
-    <div className="section-line"><h3 id="match-alert-heading">Match alerts</h3><span className="state-label" data-alert-state={alerts.state}>{alerts.label}</span></div>
-    <p>{alerts.ended?'This match has ended. You can still mute or reset existing alerts.':alerts.description}</p>
-    <div className="inline-actions">
+    <div className="section-line"><h3 id="match-alert-heading" ref={heading} tabIndex={-1}>Match alerts</h3><span className="state-label" data-alert-state={alerts.state}>{alerts.label}</span></div>
+    <p>{alerts.ended?(alerts.state==='on'?'This match has ended. You can mute or reset its alerts.':alerts.state==='muted'?'This match has ended. You can reset its muted setting.':'This match has ended.'):alerts.description}</p>
+    {(!alerts.ended||alerts.state!=='team')&&<div className="inline-actions">
       {(!alerts.ended||alerts.enabled)&&<button className="outline-button" onClick={()=>change(!alerts.enabled)}>{alerts.enabled?<BellOff size={15}/>:<BellRing size={15}/>} {alerts.enabled?'Mute this match':'Notify me about this match'}</button>}
       {alerts.state!=='team'&&<button className="text-button" onClick={reset}>Use team settings</button>}
-    </div>
+    </div>}
   </section>;
 }

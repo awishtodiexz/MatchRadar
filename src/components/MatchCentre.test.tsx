@@ -7,7 +7,17 @@ const state=vi.hoisted(()=>({data:{matchId:'1',updatedAt:'2026-10-29T12:00:00Z',
 vi.mock('../useMatchSummary',()=>({useMatchSummary:()=>state}));
 afterEach(cleanup);
 it('offers available sections and displays explicit zero stats and player names',()=>{render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Timeline'}));expect(screen.getByText("45+2'")).toBeTruthy();expect(screen.getByText('Verified provider goal')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getByText('0')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));expect(screen.getByText('A long player name')).toBeTruthy();});
+it('uses a singular event count when there is one event',()=>{
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ expect(screen.getByText('1 event available in Timeline.')).toBeTruthy();
+});
 it('omits unavailable sections rather than displaying empty tabs',()=>{const old=state.data;state.data={...old,events:[],statistics:[],players:[]};render(<MatchCentre match={mockSnapshot.matches[0]}/>);expect(screen.queryByRole('tab',{name:'Timeline'})).toBeNull();expect(screen.getByText('No event timeline is available for this match.')).toBeTruthy();state.data=old;});
+it('retains visible detail content without inserting a skeleton during a refresh',()=>{
+ state.loading=true;render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ expect(screen.queryByLabelText('Loading match details')).toBeNull();
+ expect(screen.getByRole('tab',{name:'Timeline'})).toBeTruthy();
+ expect(screen.getByRole('region',{name:'Match centre'}).getAttribute('aria-busy')).toBe('true');state.loading=false;
+});
 it('shows a supplied venue and clear pre-match copy without empty tabs',()=>{
  const old=state.data;state.data={...old,venue:'Villa Park',events:[],statistics:[],players:[]};
  render(<MatchCentre match={{...mockSnapshot.matches[0],status:'scheduled'}}/>);

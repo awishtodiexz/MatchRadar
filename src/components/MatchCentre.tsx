@@ -13,16 +13,16 @@ export function MatchCentre({match}:{match:Match}) {
   const tab=tabs.includes(selected)?selected:'Overview';
   const sectionId=useId();
   const team=(id:string|null)=>id===match.home.id?match.home.name:id===match.away.id?match.away.name:'Match';
-  return <section className="match-centre" aria-label="Match centre">
+  return <section className="match-centre" aria-label="Match centre" aria-busy={loading}>
     <div className="centre-tabs" role="tablist" aria-label="Match centre sections">{tabs.map((name,index)=><button key={name} role="tab" id={sectionId+'-'+name} aria-controls={sectionId+'-panel'} aria-selected={tab===name} tabIndex={tab===name?0:-1} onClick={()=>setSelected(name)} onKeyDown={event=>{
       const next=event.key==='ArrowRight'?(index+1)%tabs.length:event.key==='ArrowLeft'?(index+tabs.length-1)%tabs.length:event.key==='Home'?0:event.key==='End'?tabs.length-1:undefined;
       if(next===undefined)return;event.preventDefault();setSelected(tabs[next]);document.getElementById(sectionId+'-'+tabs[next])?.focus();
     }}>{name}</button>)}</div>
     <div role="tabpanel" id={sectionId+'-panel'} aria-labelledby={sectionId+'-'+tab} tabIndex={0}>
-    {loading&&<div className="skeletons" role="status" aria-label="Loading match details"><div/></div>}
+    {loading&&!data&&<div className="skeletons" role="status" aria-label="Loading match details"><div/></div>}
     {error&&<p role="status">{error} <button className="text-button" onClick={retry}>Retry details</button></p>}
     {data&&<p className="field-note">{data.stale?'Saved details':'Details checked'} · {new Date(data.updatedAt).toLocaleString()}</p>}
-    {tab==='Overview'&&(!loading||data)&&<>{data?.venue&&<><h3>Venue</h3><p>{data.venue}</p></>}{match.status==='scheduled'?<p>{error?'Match information is unavailable right now.':'Match information will appear when available.'}</p>:<><h3>Match events</h3><p>{data?.events.length?`${data.events.length} events available in Timeline.`:error?'Match information is unavailable right now.':'No event timeline is available for this match.'}</p></>}</>}
+    {tab==='Overview'&&(!loading||data)&&<>{data?.venue&&<><h3>Venue</h3><p>{data.venue}</p></>}{match.status==='scheduled'?!error&&<p>Match information will appear when available.</p>:(!error||!!data?.events.length)&&<><h3>Match events</h3><p>{data?.events.length?`${data.events.length} ${data.events.length===1?'event':'events'} available in Timeline.`:'No event timeline is available for this match.'}</p></>}</>}
     {tab==='Timeline'&&<ol className="event-list">{data?.events.map(e=><li key={e.id}><time>{e.minute||'—'}</time><div><small>{team(e.teamId)} · {e.kind.replaceAll('-',' ')}</small><p>{e.text}</p></div></li>)}</ol>}
     {tab==='Stats'&&data&&<MatchStats match={match} statistics={data.statistics}/>}
     {tab==='Lineups'&&data&&<MatchLineups match={match} players={data.players}/>}

@@ -49,7 +49,7 @@ describe('focused usability refinements',()=>{
     expect(fireEvent.contextMenu(screen.getByRole('button',{name:inheritName}).querySelector('svg')!)).toBe(false);
     fireEvent.click(card);
     expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Match details'}))).toBe(false);
-    expect(fireEvent.contextMenu(screen.getByText('Match events'))).toBe(false);
+    expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Match alerts'}))).toBe(false);
     fireEvent.click(screen.getByRole('button',{name:'Settings'}));
     expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Your clubs'}))).toBe(false);
     expect(fireEvent.contextMenu(screen.getByRole('searchbox',{name:'Search clubs'}))).toBe(true);
@@ -108,9 +108,10 @@ describe('focused usability refinements',()=>{
     expect(screen.getByRole('button',{name:'Mute match alerts (all alerts on): Arsenal versus Chelsea'}).getAttribute('data-alert-state')).toBe('on');
     fireEvent.click(screen.getByRole('button',{name:detailName}));
     expect(screen.getByText('All alerts on',{exact:true})).toBeTruthy();
-    fireEvent.click(screen.getByRole('button',{name:'Use team settings'}));
+    const reset=screen.getByRole('button',{name:'Use team settings'});reset.focus();fireEvent.click(reset);
     await waitFor(()=>expect(useApp.getState().snapshot?.settings.matchAlerts).toEqual({'demo-2':other}));
     expect(screen.getByText('Team settings',{exact:true})).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('heading',{name:'Match alerts'}));
     fireEvent.click(screen.getByRole('button',{name:'Back to matches'}));
     expect(screen.getByRole('button',{name:inheritName}).getAttribute('data-alert-state')).toBe('team');
   });
@@ -127,6 +128,45 @@ describe('focused usability refinements',()=>{
     expect(screen.getByRole('button',{name:'Match ended: Brighton & Hove Albion versus Everton'}).hasAttribute('disabled')).toBe(true);
   });
 
+  it('does not offer ended-match alert actions when no override exists',()=>{
+    render(<App/>);
+    fireEvent.click(screen.getByRole('button',{name:'Match details: Brighton & Hove Albion versus Everton'}));
+    expect(screen.getByText('This match has ended.')).toBeTruthy();
+    expect(screen.queryByText(/mute or reset existing alerts/)).toBeNull();
+    expect(screen.queryByRole('button',{name:'Use team settings'})).toBeNull();
+    expect(screen.queryByRole('button',{name:'Notify me about this match'})).toBeNull();
+  });
+
+  it('offers only applicable actions for ended subscribed and muted matches',async()=>{
+    const base=structuredClone(mockSnapshot);
+    await load({...base,settings:{...base.settings,matchAlerts:{'demo-5':{enabled:true,expiresAt:'2099-01-01T00:00:00Z'}}}});
+    render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Match details: Brighton & Hove Albion versus Everton'}));
+    expect(screen.getByText('This match has ended. You can mute or reset its alerts.')).toBeTruthy();
+    const mute=screen.getByRole('button',{name:'Mute this match'});mute.focus();fireEvent.click(mute);
+    await waitFor(()=>expect(screen.getByText('This match has ended. You can reset its muted setting.')).toBeTruthy());
+    expect(document.activeElement).toBe(screen.getByRole('heading',{name:'Match alerts'}));
+    expect(screen.queryByRole('button',{name:'Notify me about this match'})).toBeNull();
+    expect(screen.getByRole('button',{name:'Use team settings'})).toBeTruthy();
+  });
+
+  it('keeps keyboard focus in Settings after resetting all match alerts',async()=>{
+    const base=structuredClone(mockSnapshot);
+    await load({...base,settings:{...base.settings,matchAlerts:{'demo-1':{enabled:true,expiresAt:'2099-01-01T00:00:00Z'}}}});
+    render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Settings'}));fireEvent.click(screen.getByRole('tab',{name:'Alerts'}));
+    const reset=screen.getByRole('button',{name:'Reset match bells to team defaults'});reset.focus();fireEvent.click(reset);
+    await waitFor(()=>expect(screen.queryByRole('button',{name:'Reset match bells to team defaults'})).toBeNull());
+    expect(document.activeElement).toBe(screen.getByRole('tabpanel',{name:'Alerts'}));
+    fireEvent.keyDown(document.activeElement??document.body,{key:'Escape'});
+    expect(document.activeElement).toBe(screen.getByRole('button',{name:'Settings'}));
+  });
+
+  it('returns focus to club search after clearing an empty result',()=>{
+    render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Settings'}));
+    const search=screen.getByRole('searchbox',{name:'Search clubs'});fireEvent.change(search,{target:{value:'zzzzzz'}});
+    const clear=screen.getByRole('button',{name:'Clear search'});clear.focus();fireEvent.click(clear);
+    expect(document.activeElement).toBe(search);expect((search as HTMLInputElement).value).toBe('');
+  });
+
   it('moves focus into details and restores the originating card and scroll position on Escape',()=>{
     render(<App/>);
     const card=screen.getByRole('button',{name:detailName});
@@ -137,6 +177,20 @@ describe('focused usability refinements',()=>{
     fireEvent.keyDown(document.activeElement??document.body,{key:'Escape'});
     expect(document.activeElement).toBe(screen.getByRole('button',{name:detailName}));
     expect(document.querySelector('.match-list')?.scrollTop).toBe(123);
+  });
+
+  it('updates an open match from fresh snapshots and keeps it visible when temporarily absent',()=>{
+    render(<App/>);fireEvent.click(screen.getByRole('button',{name:detailName}));
+    act(()=>useApp.setState({snapshot:{...mockSnapshot,matches:mockSnapshot.matches.map(m=>m.id==='demo-1'?{...m,homeScore:3,detail:"72'"}:m)}}));
+    expect(document.querySelector('.detail-score')?.textContent).toContain('3 : 1');
+    expect(document.querySelector('.detail-score')?.textContent).toContain("72'");
+    act(()=>useApp.setState({snapshot:{...mockSnapshot,matches:mockSnapshot.matches.filter(m=>m.id!=='demo-1')}}));
+    expect(screen.getByRole('heading',{name:'Match details'})).toBeTruthy();
+    expect(document.querySelector('.detail-score')?.textContent).toContain('3 : 1');
+    expect(document.querySelector('.detail-score')?.textContent).toContain('saved');
+    act(()=>useApp.setState({snapshot:{...mockSnapshot,matches:mockSnapshot.matches.map(m=>m.id==='demo-1'?{...m,homeScore:4,detail:"80'"}:m)}}));
+    expect(document.querySelector('.detail-score')?.textContent).toContain('4 : 1');
+    expect(document.querySelector('.detail-score')?.textContent).not.toContain('saved');
   });
 
   it('announces selected tabs, implements arrow/Home/End navigation and restores Settings focus',()=>{

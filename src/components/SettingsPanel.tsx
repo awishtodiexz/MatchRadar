@@ -20,6 +20,7 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
   const [startupError,setStartupError] = useState(false);
   const [testing,setTesting] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
+  const search = useRef<HTMLInputElement>(null);
   const native = isTauri();
   useEffect(()=>{
     let disposed = false;
@@ -54,11 +55,11 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
       {section==='Teams'&&<>
         <div className="section-intro"><h3>Your clubs</h3><p>Follow clubs to put their matches first.</p></div>
         <Toggle label="Following only" value={settings.followedOnly} onChange={followedOnly=>update({followedOnly})}/>
-        <label className="search"><Search size={15} aria-hidden="true"/><input type="search" aria-label="Search clubs" placeholder="Search clubs" value={query} onChange={e=>setQuery(e.target.value)}/></label>
+        <label className="search"><Search size={15} aria-hidden="true"/><input ref={search} type="search" aria-label="Search clubs" placeholder="Search clubs" value={query} onChange={e=>setQuery(e.target.value)}/></label>
         <div className="club-list">{filteredClubs.map(club=><button className="club" key={club.id} title={club.name} aria-pressed={settings.favorites.includes(club.id)} onClick={()=>update({favorites:settings.favorites.includes(club.id)?settings.favorites.filter(id=>id!==club.id):[...settings.favorites,club.id]})}>
           <Badge team={club}/><span>{club.name}</span><span className={'check '+(settings.favorites.includes(club.id)?'selected':'')} aria-hidden="true">{settings.favorites.includes(club.id)&&<Check size={13}/>}</span>
         </button>)}</div>
-        {!filteredClubs.length&&<div className="search-empty" role="status"><p>No clubs match “{query}”.</p><button className="text-button" onClick={()=>setQuery('')}>Clear search</button></div>}
+        {!filteredClubs.length&&<div className="search-empty" role="status"><p>No clubs match “{query}”.</p><button className="text-button" onClick={()=>{search.current?.focus();setQuery('');}}>Clear search</button></div>}
       </>}
       {section==='Appearance'&&<>
         <div className="section-intro"><h3>Set the mood</h3><p>The same matchday, in your style.</p></div>
@@ -78,7 +79,7 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
         <Toggle label="Goals" description="For followed clubs; match bells can enable goals separately" value={settings.goals} onChange={goals=>update({goals})}/>
         <button className="outline-button" onClick={()=>void test()} disabled={testing} aria-busy={testing}><Bell size={15}/>{testing?'Requesting notification…':'Send test notification'}</button>
         <p className="field-note">Open match details to mute a game or use team settings again.</p>
-        {!!Object.keys(settings.matchAlerts).length&&<button className="text-button reset-all" onClick={()=>update({matchAlerts:{}})}>Reset match bells to team defaults</button>}
+        {!!Object.keys(settings.matchAlerts).length&&<button className="text-button reset-all" onClick={()=>{panel.current?.focus();update({matchAlerts:{}});}}>Reset match bells to team defaults</button>}
       </>}
       {section==='App'&&<>
         <div className="section-intro"><h3>MatchRadar <span className="version">1.0.0</span></h3><p>Your personal matchday companion.</p></div>
