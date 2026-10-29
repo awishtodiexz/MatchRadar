@@ -86,7 +86,7 @@ Tauri 2 and Rust handle the native window, background fetching, persistence, and
 
 The [Windows workflow](.github/workflows/windows.yml) runs lint, frontend tests, the TypeScript/Vite build, Rust formatting and tests, Tauri packaging, and installer upload. The [validation notes](docs/VALIDATION.md) record what has been tested and the remaining Windows checks. A passing build does not prove notification delivery, startup, tray restoration, scaling, sleep/resume, or multi-monitor recovery.
 
-- Match Centre events, statistics and lineups depend on provider availability; live/halftime summary shapes still need real-match validation. Demo fixtures are static and do not simulate notification transitions.
+- Match Centre events, statistics and lineups depend on provider availability; live/halftime summary shapes still need real-match validation. Demo Data provides fictional details and manual match progression, without sending synthetic match notifications. See [Demo Mode report](docs/DEMO_MODE_REPORT.md) for isolation limitations.
 - Dedicated off-screen window recovery is not implemented. HTTP-date and numeric `Retry-After` are parsed; cooldowns are process-local. Sleep/resume behavior and real notification delivery need further validation.
 - Provider outages and changes can affect coverage. Cached data can be stale; the widget labels unconfirmed scores accordingly.
 - Performance has not been benchmarked for release.
