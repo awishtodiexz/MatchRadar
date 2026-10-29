@@ -259,9 +259,17 @@ footer { min-height: 52px; display: flex; align-items: center; justify-content: 
 .event-list li {display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
 .event-list time {flex:none;width:38px;font-variant-numeric:tabular-nums;color:var(--accent);}
 .event-list p {color:var(--text);overflow-wrap:anywhere;}
-.centre-stats {margin:0;}
-.centre-stats>div,.lineup-list li {display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--border);}
-.centre-stats dd {margin:0;color:var(--text);font-variant-numeric:tabular-nums;}
+.stat-heading,.stat-row {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr) minmax(0,1fr);gap:8px;align-items:center;text-align:center;}
+.stat-heading {padding:8px 0;color:var(--muted);font-size:11px;border-bottom:1px solid var(--border);}
+.stat-heading strong {color:var(--text);overflow-wrap:anywhere;}
+.stat-row {min-height:34px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;}
+.stat-row span:first-child,.stat-row span:last-child {color:var(--text);font-weight:700;font-variant-numeric:tabular-nums;}
+.stat-row .stat-leading {color:var(--accent);}
+.stat-row span {min-width:0;overflow-wrap:anywhere;}
+.lineups section+section {margin-top:18px;}
+.lineups h5 {margin:10px 0 2px;color:var(--muted);font-size:11px;}
+.lineup-list li {display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--border);}
+.demo-disclaimer {color:var(--accent);}
 /* Provider text may contain long unbroken player names or event fragments. */
 .lineup-list li span, .event-list li > div, .centre-stats dt { min-width: 0; overflow-wrap: anywhere; }
 .lineup-list small, .centre-stats dd { flex: none; }

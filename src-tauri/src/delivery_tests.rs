@@ -7,7 +7,7 @@ fn now() -> DateTime<Utc> {
 }
 fn subscribed(status: &str) -> Snapshot {
     let mut s = Snapshot::default();
-    let mut m = crate::provider::mock().remove(0);
+    let mut m = crate::demo::mock().remove(0);
     m.id = "match-1".into();
     m.status = status.into();
     m.kickoff = now().to_rfc3339();

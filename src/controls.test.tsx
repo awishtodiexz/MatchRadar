@@ -1,7 +1,7 @@
 ﻿// @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { mockSnapshot } from './mock';
+import { mockSnapshot } from './demo/fixtures';
 import { useApp } from './store';
 import App from './App';
 import type { Settings } from './types';

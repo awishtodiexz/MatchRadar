@@ -416,7 +416,7 @@ mod tests {
         let dir = Directory::new();
         let path = dir.primary();
         let mut snapshot = Snapshot::default();
-        snapshot.matches = crate::provider::mock();
+        snapshot.matches = crate::demo::mock();
         snapshot.updated_at = Some("2026-10-28T12:00:00Z".into());
         snapshot.fixture_updated_at = snapshot.updated_at.clone();
         snapshot.error = Some("cached provider diagnostic".into());

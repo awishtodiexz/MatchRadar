@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach,expect,it,vi } from 'vitest';
 import { act,cleanup,fireEvent,render,screen } from '@testing-library/react';
-import App from './App';import { useApp } from './store';import { mockSnapshot } from './mock';
-import { demoClock,progressDemo } from './demoScenario';import { demoMatchSummary } from './demoMatchSummary';
+import App from '../App';import { useApp } from '../store';import { mockSnapshot } from './fixtures';
+import { demoClock,progressDemo } from './scenario';import { demoMatchSummary } from './summary';
 const bridge=vi.hoisted(()=>({invoke:vi.fn()}));vi.mock('@tauri-apps/api/core',()=>({invoke:bridge.invoke,isTauri:()=>false}));
 afterEach(()=>{cleanup();vi.clearAllMocks();});
 it('generates deterministic ordered progression with consistent goals and stable IDs',()=>{
@@ -19,8 +19,8 @@ it('offers manual controls only in demo and updates an open details view without
  fireEvent.click(screen.getByRole('button',{name:'Settings'}));fireEvent.click(screen.getByRole('tab',{name:'App'}));
  expect(screen.getByRole('region',{name:'Demo controls'})).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'Advance match'}));fireEvent.click(screen.getByRole('button',{name:'Back to matches'}));
  fireEvent.click(screen.getByRole('button',{name:'Match details: Manchester City versus Manchester United'}));expect(screen.getByText("20'")).toBeTruthy();
- act(()=>useApp.getState().demoControl('advance'));expect(screen.getByText('Half-time')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Timeline'}));expect(screen.getByText(/Home Alex Hart scores/)).toBeTruthy();
- act(()=>useApp.getState().demoControl('advance'));expect(screen.getByText('Home Robin Ash scores an own goal for the away side.')).toBeTruthy();
+ act(()=>useApp.getState().demoControl('advance'));expect(screen.getByText('Half-time')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Timeline'}));expect(screen.getByText(/Alex Hart scores/)).toBeTruthy();
+ act(()=>useApp.getState().demoControl('advance'));expect(screen.getByText('Robin Ash scores an own goal for the away side.')).toBeTruthy();
  act(()=>{useApp.getState().demoControl('advance');useApp.getState().demoControl('advance');});expect(useApp.getState().demoStep).toBe(4);expect(screen.getByText(/a penalty/)).toBeTruthy();
  act(()=>useApp.getState().demoControl('reset'));expect(useApp.getState().demoStep).toBe(0);expect(bridge.invoke).not.toHaveBeenCalled();
 });

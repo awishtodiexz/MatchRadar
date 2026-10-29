@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { Settings, Snapshot } from './types';
-import { mockSnapshot } from './mock';
-import { progressDemo } from './demoScenario';
+import { mockSnapshot } from './demo/fixtures';
+import { progressDemo } from './demo/scenario';
 
 type Patch = Partial<Settings>;
 type Store = { demoStep:number; demoControl:(action:'advance'|'reset')=>void; snapshot: Snapshot | null; loading: boolean; error: string | null; load: () => Promise<void>; refresh: () => Promise<void>; save: (patch: Patch) => Promise<void> };

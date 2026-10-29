@@ -140,7 +140,7 @@ mod tests {
             .with_timezone(&Utc)
     }
     fn fixture(id: &str, status: &str, day: i64, score: u32) -> Match {
-        let mut m = provider::mock().remove(0);
+        let mut m = crate::demo::mock().remove(0);
         m.id = id.into();
         m.kickoff = (now() + Duration::days(day)).to_rfc3339();
         m.status = status.into();

@@ -133,7 +133,7 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc);
         let mut s = Snapshot::default();
-        let mut m = provider::mock().remove(4);
+        let mut m = crate::demo::mock().remove(4);
         m.id = "123".into();
         m.kickoff = "2026-10-20T12:00:00Z".into();
         let outcome = provider::FetchOutcome {
@@ -176,7 +176,7 @@ mod tests {
         );
         assert!(s.recent_error.is_none());
         assert!(s.recent_updated_at.is_some());
-        let mut m = provider::mock().remove(4);
+        let mut m = crate::demo::mock().remove(4);
         m.kickoff = "2026-10-14T23:59:00Z".into();
         assert!(!provider::recent_result(&m, now.date_naive()));
         m.kickoff = "2026-10-15T00:00:00Z".into();
@@ -190,7 +190,7 @@ mod tests {
         let mut s = Snapshot::default();
         s.error = Some("live failure".into());
         s.score_error = s.error.clone();
-        let mut m = provider::mock().remove(4);
+        let mut m = crate::demo::mock().remove(4);
         m.kickoff = "2026-10-20T12:00:00Z".into();
         apply(
             &mut s,

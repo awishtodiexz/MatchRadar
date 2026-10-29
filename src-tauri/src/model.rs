@@ -531,7 +531,7 @@ mod tests {
     #[test]
     fn catalog_migration_does_not_rewrite_provider_matches_or_defaults() {
         let mut old: Snapshot = serde_json::from_str("{}").unwrap();
-        old.matches = crate::provider::mock();
+        old.matches = crate::demo::mock();
         let matches = serde_json::to_value(&old.matches).unwrap();
         let defaults = old.settings.favorites.clone();
         old.migrate_catalog();

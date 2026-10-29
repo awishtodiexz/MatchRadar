@@ -2,7 +2,9 @@ import { useId, useState } from 'react';
 import type { Match } from '../types';
 import { isLive } from '../fixtures';
 import { useMatchSummary } from '../useMatchSummary';
-import { demoMatchSummary } from '../demoMatchSummary';
+import { demoMatchSummary } from '../demo/summary';
+import { MatchStats } from './MatchStats';
+import { MatchLineups } from './MatchLineups';
 export function MatchCentre({match,demo}:{match:Match;demo:boolean}) {
   const summary=useMatchSummary(match.id,isLive(match),demo);
   const {loading,error,retry}=summary;
@@ -18,14 +20,14 @@ export function MatchCentre({match,demo}:{match:Match;demo:boolean}) {
       if(next===undefined)return;event.preventDefault();setSelected(tabs[next]);document.getElementById(sectionId+'-'+tabs[next])?.focus();
     }}>{name}</button>)}</div>
     <div role="tabpanel" id={sectionId+'-panel'} aria-labelledby={sectionId+'-'+tab} tabIndex={0}>
-    {demo&&data&&<p className="field-note">DEMO DATA: fictional match, players and events. Not a historical result.</p>}
+    {demo&&<p className="field-note demo-disclaimer">Demo match · Fictional players and events</p>}
     {loading&&<div className="skeletons" role="status" aria-label="Loading match details"><div/></div>}
     {error&&<p role="status">{error} <button className="text-button" onClick={retry}>Retry details</button></p>}
-    {data&&<p className="field-note">{demo?'Synthetic demo sample':`${data.stale?'Saved details':'Details checked'} · ${new Date(data.updatedAt).toLocaleString()}`}</p>}
-    {tab==='Overview'&&(!loading||data)&&<><h3>Match events</h3><p>{data?.events.length?`${data.events.length} ${demo?'demo':'provider'} events available in Timeline.`:error?'Details could not be confirmed.':'No event timeline is available for this match.'}</p><p className="field-note">{demo?'Demo scores and events are fictional.':'Scores come from the matchday scoreboard. Match details may update separately.'}</p></>}
+    {data&&!demo&&<p className="field-note">{data.stale?'Saved details':'Details checked'} · {new Date(data.updatedAt).toLocaleString()}</p>}
+    {tab==='Overview'&&(!loading||data)&&<><h3>Match events</h3><p>{data?.events.length?`${data.events.length} ${demo?'demo':'provider'} events available in Timeline.`:error?'Details could not be confirmed.':'No event timeline is available for this match.'}</p>{!demo&&<p className="field-note">Scores come from the matchday scoreboard. Match details may update separately.</p>}</>}
     {tab==='Timeline'&&<ol className="event-list">{data?.events.map(e=><li key={e.id}><time>{e.minute||'—'}</time><div><small>{team(e.teamId)} · {e.kind.replaceAll('-',' ')}</small><p>{e.text}</p></div></li>)}</ol>}
-    {tab==='Stats'&&<>{[match.home,match.away].map(t=><section key={t.id}><h3>{t.name}</h3><dl className="centre-stats">{data?.statistics.filter(s=>s.teamId===t.id).map(s=><div key={s.name}><dt>{s.label||s.name}</dt><dd>{s.value}</dd></div>)}</dl></section>)}</>}
-    {tab==='Lineups'&&<>{[match.home,match.away].map(t=><section key={t.id}><h3>{t.name}</h3>{[true,false].map(starter=><div key={String(starter)}><h4>{starter?'Starting XI':'Other listed players'}</h4><ul className="lineup-list">{data?.players.filter(p=>p.teamId===t.id&&p.starter===starter).map(p=><li key={p.name}><span>{p.name}</span><small>{p.position}</small></li>)}</ul></div>)}</section>)}</>}
+    {tab==='Stats'&&data&&<MatchStats match={match} statistics={data.statistics}/>}
+    {tab==='Lineups'&&data&&<MatchLineups match={match} players={data.players}/>}
     </div>
   </section>;
 }

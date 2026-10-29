@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod alerts;
 mod delivery;
+mod demo;
 mod details;
 mod model;
 mod persistence;
@@ -354,7 +355,7 @@ async fn poll(app: tauri::AppHandle) {
                 .as_ref()
                 .is_none_or(|(version, _)| *version != generation)
             {
-                demo_fixtures = Some((generation, provider::mock()));
+                demo_fixtures = Some((generation, crate::demo::mock()));
             }
             let mut s = state.snapshot.lock().unwrap();
             if feed_is_current(

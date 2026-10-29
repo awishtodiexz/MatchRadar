@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach,expect,it,vi } from 'vitest';
 import { cleanup,fireEvent,render,screen } from '@testing-library/react';
-import App from './App';
-import { useApp } from './store';
-import { mockSnapshot } from './mock';
-import { demoMatchSummary } from './demoMatchSummary';
+import App from '../App';
+import { useApp } from '../store';
+import { mockSnapshot } from './fixtures';
+import { demoMatchSummary } from './summary';
 const bridge=vi.hoisted(()=>({invoke:vi.fn()}));
 vi.mock('@tauri-apps/api/core',()=>({invoke:bridge.invoke,isTauri:()=>false}));
 afterEach(cleanup);
@@ -12,9 +12,9 @@ it('opens a complete fictional centre from the normal completed demo card withou
  useApp.setState({snapshot:structuredClone(mockSnapshot),loading:false,error:null});await useApp.getState().load();render(<App/>);
  fireEvent.click(screen.getByRole('button',{name:'Results'}));
  fireEvent.click(screen.getByRole('button',{name:'Match details: Brighton & Hove Albion versus Everton'}));
- expect(screen.getByText('DEMO DATA: fictional match, players and events. Not a historical result.')).toBeTruthy();
+ expect(screen.getByText(/Demo match.*Fictional players and events/)).toBeTruthy();
  fireEvent.click(screen.getByRole('tab',{name:'Timeline'}));expect(screen.getByText(/Alex Hart scores/)).toBeTruthy();expect(screen.getByText(/receives a red card/)).toBeTruthy();expect(screen.getByText(/Jamie Reed replaces/)).toBeTruthy();
- fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getAllByText('Possession')).toHaveLength(2);
+ fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getAllByText('Possession')).toHaveLength(1);
  fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));expect(screen.getByText('Casey Brook')).toBeTruthy();expect(screen.getAllByText('Starting XI')).toHaveLength(2);
  expect(bridge.invoke).not.toHaveBeenCalled();
 });

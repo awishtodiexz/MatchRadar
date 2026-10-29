@@ -7,7 +7,7 @@ import { clubs } from '../teams';
 import type { Match, Settings } from '../types';
 import { Badge, Toggle, ViewHeading } from './WidgetUi';
 import { useApp } from '../store';
-import { DEMO_STAGES, demoClock } from '../demoScenario';
+import { DEMO_STAGES, demoClock } from '../demo/scenario';
 
 const sections = ['Teams','Appearance','Alerts','App'] as const;
 type Section = typeof sections[number];

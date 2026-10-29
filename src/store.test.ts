@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { mockSnapshot } from './mock';
+import { mockSnapshot } from './demo/fixtures';
 import type { Settings, Snapshot } from './types';
 
 const bridge = vi.hoisted(() => ({ invoke: vi.fn() }));

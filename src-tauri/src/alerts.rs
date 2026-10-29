@@ -147,7 +147,7 @@ mod tests {
     }
     fn fixture() -> Snapshot {
         let mut snapshot = Snapshot::default();
-        let mut m = crate::provider::mock().remove(0);
+        let mut m = crate::demo::mock().remove(0);
         m.id = "match-1".into();
         m.kickoff = (now() + Duration::minutes(10)).to_rfc3339();
         m.status = "scheduled".into();

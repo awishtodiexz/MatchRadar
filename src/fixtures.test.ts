@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { groupFixtures } from './fixtures';
-import { mockMatches } from './mock';
+import { mockMatches } from './demo/fixtures';
 import type { Match } from './types';
 
 const fixture = (id: string, day: number, hour: number, favorite = false): Match => ({ ...mockMatches[2], id, status: 'scheduled', home: { id: favorite ? 'followed' : id, name: id, short: id }, away: { id: 'away', name: 'Away', short: 'AWY' }, kickoff: new Date(2026, 9, day, hour).toISOString() });

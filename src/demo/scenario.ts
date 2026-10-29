@@ -1,4 +1,4 @@
-import type { Match } from './types';
+import type { Match } from '../types';
 export const DEMO_STAGES=['Scheduled','First half','Half-time','Second half','Full-time'] as const;
 // UI-only derived scenario. It never changes the native feed, settings or alert state.
 export function progressDemo(matches:Match[],step:number):Match[] {

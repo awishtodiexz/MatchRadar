@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App from './App';
-import { mockSnapshot } from './mock';
+import { mockSnapshot } from './demo/fixtures';
 import { useApp } from './store';
 import type { Snapshot } from './types';
 

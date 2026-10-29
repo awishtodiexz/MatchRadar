@@ -1,7 +1,7 @@
 ﻿// @vitest-environment jsdom
 import { cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react';
 import { afterEach,expect,it,vi } from 'vitest';
-import App from './App';import { useApp } from './store';import { mockSnapshot } from './mock';
+import App from './App';import { useApp } from './store';import { mockSnapshot } from './demo/fixtures';
 const bridge=vi.hoisted(()=>({invoke:vi.fn()}));vi.mock('@tauri-apps/api/core',()=>({isTauri:()=>true,invoke:bridge.invoke}));vi.mock('@tauri-apps/api/event',()=>({listen:vi.fn().mockResolvedValue(()=>{})}));
 afterEach(cleanup);
 it('shows a result outside yesterday/today and fetches its summary only when opened',async()=>{
