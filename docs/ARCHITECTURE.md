@@ -5,6 +5,7 @@
 | Boundary | Owner |
 | --- | --- |
 | Native commands, state locks, task wakes, polling/delivery loops and tray lifecycle | `src-tauri/src/main.rs` |
+| Provider backoff deadlines and bounded sleep chunks | `src-tauri/src/scheduling.rs` |
 | Logical window sizing, resize calls and best-effort settings rollback | `src-tauri/src/window.rs` |
 | Serialized state, defaults, preference normalization and feed application | `src-tauri/src/model.rs` |
 | ESPN transport/normalization and source-result reconciliation | `src-tauri/src/provider.rs`, `src-tauri/src/refresh.rs` |
@@ -59,3 +60,9 @@ F04 adds 15 deterministic sink/clock/persistence tests for fail-once, repeated f
 ## Match Centre evolution checkpoint
 
 `details.rs` normalizes eng.1 summaries into events, statistics and players. `get_match_details` accepts only numeric IDs already in the widget fixture cache and rejects demo requests. A separate async cache lock serializes summary requests independently of scoreboard operations. The bounded 24-entry cache is saved in `Snapshot.detailCache` through F01; old state defaults to an empty cache and malformed individual entries are skipped. Summary fields never change scores or notification observations. Active details refresh at 60 seconds only while mounted; other entries reuse a 15-minute cache. Failures retain cached data and impose a minimum 60-second cooldown. `useMatchSummary` ignores responses after cleanup/navigation; `MatchCentre` renders supported sections inside the existing Details scroll region. Home view filters use existing fixture data only.
+
+## Integration hardening checkpoint
+
+`details.rs` now separates HTTP parsing from cache application with injectable clock/transport results. Freshness accepts nonnegative ages only; cooldown reads do not extend deadlines. Restoration validates and bounds entries; F01 recovery coverage includes detail cache, settings and pending/sent notification records. The frontend retains same-match data while retrying and pauses detail-specific polling while hidden, with identity/demo/navigation guards. Match Centre sections use the accessible tabs pattern and precede match-alert controls in the same Details scroller.
+
+`scheduling.rs` owns the poller's monotonic backoff gate. Manual refreshes coalesce while a fetch is active and cannot bypass provider backoff. Explicit Retry-After is not capped to one hour; only sleep chunks are bounded to prevent timer overflow. Mode changes can enter demo without network work while retaining the real-provider deadline. Normal successful adaptive intervals and source freshness/notification logic remain unchanged. See MATCH_CENTRE_EVOLUTION_REPORT.md for verification and remaining Windows checks.

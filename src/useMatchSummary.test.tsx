@@ -5,7 +5,7 @@ import { useMatchSummary } from './useMatchSummary';
 import type { MatchSummary } from './useMatchSummary';
 const bridge=vi.hoisted(()=>({invoke:vi.fn()}));
 vi.mock('@tauri-apps/api/core',()=>({isTauri:()=>true,invoke:bridge.invoke}));
-afterEach(()=>{cleanup();vi.resetAllMocks();});
+afterEach(()=>{cleanup();vi.resetAllMocks();vi.restoreAllMocks();vi.useRealTimers();});
 const detail=(id:string):MatchSummary=>({matchId:id,events:[],statistics:[],players:[],updatedAt:'2026-10-29T12:00:00Z',error:null,stale:false});
 it('does not fetch summaries in demo mode',()=>{renderHook(()=>useMatchSummary('demo-1',true,true));expect(bridge.invoke).not.toHaveBeenCalled();});
 it('ignores a previous match response after rapid navigation',async()=>{
@@ -15,3 +15,32 @@ it('ignores a previous match response after rapid navigation',async()=>{
  expect(result.current.data?.matchId).toBe('2');
 });
 it('reports errors and retries on demand',async()=>{bridge.invoke.mockRejectedValueOnce(new Error('offline')).mockResolvedValue(detail('1'));const {result}=renderHook(()=>useMatchSummary('1',false,false));await waitFor(()=>expect(result.current.error).toBeTruthy());act(()=>result.current.retry());await waitFor(()=>expect(result.current.data?.matchId).toBe('1'));});
+
+it('retains cached details during a retry and marks them saved on IPC failure',async()=>{
+ bridge.invoke.mockResolvedValueOnce(detail('1')).mockRejectedValueOnce(new Error('offline'));
+ const {result}=renderHook(()=>useMatchSummary('1',false,false));await waitFor(()=>expect(result.current.data?.matchId).toBe('1'));
+ act(()=>result.current.retry());expect(result.current.data?.matchId).toBe('1');
+ await waitFor(()=>expect(result.current.error).toBeTruthy());expect(result.current.data?.stale).toBe(true);
+});
+it('polls only an open active match and stops after unmount',async()=>{
+ vi.useFakeTimers();bridge.invoke.mockResolvedValue(detail('1'));
+ const {unmount}=renderHook(()=>useMatchSummary('1',true,false));
+ await act(async()=>{});expect(bridge.invoke).toHaveBeenCalledTimes(1);
+ await act(async()=>vi.advanceTimersByTimeAsync(60000));expect(bridge.invoke).toHaveBeenCalledTimes(2);
+ unmount();await act(async()=>vi.advanceTimersByTimeAsync(180000));expect(bridge.invoke).toHaveBeenCalledTimes(2);
+});
+it('suppresses a late real response after switching into demo mode',async()=>{
+ let resolve!:(v:MatchSummary)=>void;bridge.invoke.mockImplementation(()=>new Promise(r=>resolve=r));
+ const {result,rerender}=renderHook(({demo})=>useMatchSummary('1',true,demo),{initialProps:{demo:false}});
+ rerender({demo:true});await act(async()=>resolve(detail('1')));expect(result.current.data).toBeNull();expect(result.current.loading).toBe(false);
+});
+it('rejects a mismatched native response without displaying another match',async()=>{
+ bridge.invoke.mockResolvedValue(detail('2'));const {result}=renderHook(()=>useMatchSummary('1',false,false));await waitFor(()=>expect(result.current.error).toBeTruthy());expect(result.current.data).toBeNull();
+});
+
+it('pauses detail polling while hidden and reconciles on visibility return',async()=>{
+ vi.useFakeTimers();let visibility:DocumentVisibilityState='visible';vi.spyOn(document,'visibilityState','get').mockImplementation(()=>visibility);bridge.invoke.mockResolvedValue(detail('1'));
+ const {unmount}=renderHook(()=>useMatchSummary('1',true,false));await act(async()=>{});expect(bridge.invoke).toHaveBeenCalledTimes(1);
+ visibility='hidden';act(()=>document.dispatchEvent(new Event('visibilitychange')));await act(async()=>vi.advanceTimersByTimeAsync(180000));expect(bridge.invoke).toHaveBeenCalledTimes(1);
+ visibility='visible';await act(async()=>document.dispatchEvent(new Event('visibilitychange')));expect(bridge.invoke).toHaveBeenCalledTimes(2);unmount();
+});

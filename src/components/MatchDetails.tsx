@@ -16,8 +16,8 @@ export function MatchDetails({match, settings, back}: {match:Match; settings:Set
         <div><Badge team={match.away}/><b title={match.away.name}>{match.away.name}</b></div>
       </div>
       <p className="detail-date"><time dateTime={match.kickoff}>{dateLabel(match.kickoff)} · {timeLabel(match.kickoff)}</time> local time</p>
-      <MatchAlertPanel match={match} settings={settings}/>
       <MatchCentre key={match.id} match={match} demo={settings.mock || match.id.startsWith("demo-")}/>
+      <MatchAlertPanel match={match} settings={settings}/>
     </div>
   </>;
 }

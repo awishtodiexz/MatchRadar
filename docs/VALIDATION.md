@@ -1,5 +1,7 @@
 # Validation and Windows runtime checks
 
+For the latest feature-branch evidence and acceptance checklist, see [Match Centre integration report](MATCH_CENTRE_EVOLUTION_REPORT.md). Earlier sections below are historical checkpoints and do not validate later commits.
+
 ## Recording interaction follow-up — 29 October 2026
 
 The supplied 58.7-second recording shows unwanted browser context menus on Home at approximately 00:46–00:48 and Details at 00:50, plus selected static event text at 00:52–00:54. A shell-scoped context-menu handler now preserves editing/copy menus only on form controls, editable content and explicitly copyable diagnostics. CSS prevents static surface selection while retaining those exceptions. No pointer-down, keyboard, clipboard or native notification behavior changed. The recorded muted/subscribed/team-default transitions match their indicators and existing tests; no bell redesign or additional layout changes were justified.
@@ -84,3 +86,7 @@ Install the installer from the successful GitHub run for the intended commit, fo
 - Notifications, autostart, sleep/resume, and monitor changes are tested separately. Event/statistics details and deterministic demo transitions remain outside the implemented functionality.
 
 Automated build results and artifact URLs should be reported for their exact commit. No release CPU or memory measurements have been made.
+
+## Match Centre integration hardening
+
+The local hardening checkpoint passed 57 frontend tests, lint, TypeScript/build and Rust formatting. A dependency-free scheduling metadata compile succeeded; the full native suite (75 test declarations, not a passing count) remains unexecuted without MSVC link.exe. A 213-state browser matrix and actual browser keyboard/reduced-motion checks passed using recorded fixtures through an IPC mock. See MATCH_CENTRE_EVOLUTION_REPORT.md for exact coverage and the Windows checklist. No Windows installer was built for this checkpoint, and prior installer evidence does not validate it.
