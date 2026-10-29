@@ -6,6 +6,8 @@ import { Bell, Check, CircleHelp, RefreshCw, Search } from 'lucide-react';
 import { clubs } from '../teams';
 import type { Match, Settings } from '../types';
 import { Badge, Toggle, ViewHeading } from './WidgetUi';
+import { useApp } from '../store';
+import { DEMO_STAGES, demoClock } from '../demoScenario';
 
 const sections = ['Teams','Appearance','Alerts','App'] as const;
 type Section = typeof sections[number];
@@ -13,6 +15,9 @@ type Section = typeof sections[number];
 export function SettingsPanel({settings, save, back, matches, refresh, refreshing}: {
   settings:Settings; save:(s:Partial<Settings>)=>Promise<void>; back:()=>void; matches:Match[]; refresh:()=>void; refreshing:boolean;
 }) {
+  const demoStep=useApp(state=>state.demoStep);
+  const demoControl=useApp(state=>state.demoControl);
+  const scenarioClock=demoClock(matches.find(m=>m.home.id==='382'&&m.away.id==='360'),demoStep);
   const [section,setSection] = useState<Section>('Teams');
   const [query,setQuery] = useState('');
   const [notice,setNotice] = useState('');
@@ -85,6 +90,7 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
         <Toggle label="Launch with Windows" description={!native?'Available in the desktop app':startupError?'Startup preference unavailable':autostart===null?'Checking startup preference…':'Open MatchRadar when you sign in'} disabled={!native||autostart===null} value={autostart??false} onChange={value=>{void (value?enable():disable()).then(()=>setAutostart(value)).catch(()=>setNotice('Could not change the Windows startup setting.'));}}/>
         {startupError&&<p className="notice" role="status">Could not read the Windows startup setting. Reopen Settings to try again.</p>}
         <Toggle label="Demo data" description="Show clearly labelled sample fixtures" value={settings.mock} onChange={mock=>update({mock})}/>
+        {settings.mock&&<section className="match-alert-panel" aria-label="Demo controls"><h3>Demo controls</h3><p>Fictional Manchester City v Manchester United: {DEMO_STAGES[demoStep]}. Simulation never sends match alerts. {scenarioClock&&<>Scenario clock: <time dateTime={scenarioClock}>{new Date(scenarioClock).toLocaleString()}</time>.</>}</p><div className="inline-actions"><button className="outline-button" disabled={demoStep>=4} onClick={()=>demoControl('advance')}>Advance match</button><button className="text-button" onClick={()=>demoControl('reset')}>Reset demo</button></div></section>}
         <div className="about"><CircleHelp size={17}/><p>Scores use ESPN’s unofficial endpoints and may be unavailable or change. MatchRadar is not affiliated with ESPN or the Premier League.</p></div>
         <button className="outline-button" onClick={refresh} disabled={refreshing}><RefreshCw size={15}/>Refresh data</button>
         <p className="field-note">X keeps MatchRadar running in the tray. Choose Quit in the tray to exit.</p>

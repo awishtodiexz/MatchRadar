@@ -313,6 +313,7 @@ async fn poll(app: tauri::AppHandle) {
     let mut failures = 0u32;
     let client = provider::client();
     let mut gate = scheduling::RequestGate::default();
+    let mut demo_fixtures: Option<(u64, Vec<model::Match>)> = None;
     loop {
         let state = app.state::<State>();
         let mock = state
@@ -349,6 +350,12 @@ async fn poll(app: tauri::AppHandle) {
         let _ = app.emit("snapshot-updated", ());
         let mut retry_after = None;
         if settings.mock {
+            if demo_fixtures
+                .as_ref()
+                .is_none_or(|(version, _)| *version != generation)
+            {
+                demo_fixtures = Some((generation, provider::mock()));
+            }
             let mut s = state.snapshot.lock().unwrap();
             if feed_is_current(
                 &s,
@@ -358,7 +365,10 @@ async fn poll(app: tauri::AppHandle) {
             ) {
                 apply_feed(
                     &mut s,
-                    provider::mock(),
+                    demo_fixtures
+                        .as_ref()
+                        .map(|(_, fixtures)| fixtures.clone())
+                        .unwrap_or_default(),
                     Utc::now().to_rfc3339(),
                     false,
                     None,
@@ -366,6 +376,7 @@ async fn poll(app: tauri::AppHandle) {
             }
             failures = 0;
         } else {
+            demo_fixtures = None;
             let force = state.force_fixtures.swap(false, Ordering::Relaxed);
             let due = force
                 || fixture_updated_at

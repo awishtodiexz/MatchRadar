@@ -28,7 +28,7 @@ describe('focused usability refinements',()=>{
     expect(fireEvent.contextMenu(screen.getByRole('button',{name:inheritName}).querySelector('svg')!)).toBe(false);
     fireEvent.click(card);
     expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Match details'}))).toBe(false);
-    expect(fireEvent.contextMenu(screen.getByText('Event details aren’t available from this feed yet.'))).toBe(false);
+    expect(fireEvent.contextMenu(screen.getByText(/demo events available in Timeline/))).toBe(false);
     fireEvent.click(screen.getByRole('button',{name:'Settings'}));
     expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Your clubs'}))).toBe(false);
     expect(fireEvent.contextMenu(screen.getByRole('searchbox',{name:'Search clubs'}))).toBe(true);
@@ -59,7 +59,7 @@ describe('focused usability refinements',()=>{
   it('keeps league-wide live counts when only followed cards are shown and can clear an empty filter',async()=>{
     await load({...structuredClone(mockSnapshot),settings:{...mockSnapshot.settings,favorites:[],followedOnly:true}});
     render(<App/>);
-    expect(screen.getByLabelText('Premier League: 2 live matches').textContent).toBe('2 LIVE');
+    expect(screen.getByLabelText('Premier League: 3 live matches').textContent).toBe('3 LIVE');
     expect(screen.queryByText('NO LIVE MATCHES')).toBeNull();
     expect(screen.getByRole('heading',{name:'No followed-team matches'})).toBeTruthy();
     expect(screen.queryByRole('button',{name:detailName})).toBeNull();
@@ -165,7 +165,7 @@ describe('focused usability refinements',()=>{
   it('explains native-only controls and provides full club names without changing compact on tab switches',async()=>{
     render(<App/>);
     expect(screen.getByRole('button',{name:'Minimize widget'}).hasAttribute('disabled')).toBe(true);
-    expect(screen.getByText('Wolverhampton Wanderers').title).toBe('Wolverhampton Wanderers');
+    expect(screen.getAllByText('Wolverhampton Wanderers')[0].title).toBe('Wolverhampton Wanderers');
     fireEvent.click(screen.getByRole('button',{name:'Settings'}));
     fireEvent.click(screen.getByRole('tab',{name:'Appearance'}));
     fireEvent.click(screen.getByRole('checkbox',{name:'Compact view'}));

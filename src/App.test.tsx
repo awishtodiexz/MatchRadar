@@ -9,7 +9,8 @@ describe('widget', () => {
     expect(await screen.findByText('DEMO DATA')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', {name: /Match details: Arsenal versus Chelsea/}));
     expect(screen.getByText('Match details')).toBeTruthy();
-    expect(screen.getByText(/Event details aren’t available/)).toBeTruthy();
+    expect(screen.getByText(/demo events available in Timeline/)).toBeTruthy();
+    expect(screen.getByRole('tab',{name:'Timeline'})).toBeTruthy();
   });
   it('allows filtering to followed teams', async () => {
     render(<App/>);

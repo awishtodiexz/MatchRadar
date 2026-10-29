@@ -43,6 +43,17 @@ fn reminder() -> Snapshot {
     assert_eq!(s.pending_notifications.len(), 1);
     s
 }
+#[test]
+fn demo_observations_do_not_create_native_alerts_or_baselines() {
+    let mut snapshot = subscribed("live");
+    snapshot.settings.mock = true;
+    snapshot.matches[0].id = "demo-synthetic".into();
+    snapshot.matches[0].home_score = Some(4);
+    assert_eq!(enqueue(&mut snapshot, &["demo-synthetic".into()], now()), 0);
+    assert!(snapshot.pending_notifications.is_empty());
+    assert!(snapshot.alert_baselines.is_empty());
+    assert!(snapshot.sent_notifications.is_empty());
+}
 #[derive(Default)]
 struct Sink {
     results: VecDeque<Result<(), SubmissionError>>,
