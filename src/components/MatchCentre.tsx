@@ -18,7 +18,7 @@ export function MatchCentre({match,demo}:{match:Match;demo:boolean}) {
       if(next===undefined)return;event.preventDefault();setSelected(tabs[next]);document.getElementById(sectionId+'-'+tabs[next])?.focus();
     }}>{name}</button>)}</div>
     <div role="tabpanel" id={sectionId+'-panel'} aria-labelledby={sectionId+'-'+tab} tabIndex={0}>
-    {demo&&data&&<p className="field-note">DEMO DATA ? fictional match, players and events. Not a historical result.</p>}
+    {demo&&data&&<p className="field-note">DEMO DATA: fictional match, players and events. Not a historical result.</p>}
     {loading&&<div className="skeletons" role="status" aria-label="Loading match details"><div/></div>}
     {error&&<p role="status">{error} <button className="text-button" onClick={retry}>Retry details</button></p>}
     {data&&<p className="field-note">{demo?'Demo sample':data.stale?'Saved details':'Details checked'} · {new Date(data.updatedAt).toLocaleString()}</p>}

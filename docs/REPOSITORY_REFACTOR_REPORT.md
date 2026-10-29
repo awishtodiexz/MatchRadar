@@ -1,4 +1,4 @@
-﻿# Repository refactor report
+# Repository refactor report
 
 ## Baseline and safety
 
@@ -34,10 +34,10 @@ README.md                  Product and development entry point
 CHANGELOG.md               Unreleased changes
 ```
 
-Configuration stays at the root where Vite, TypeScript, Tailwind, ESLint and npm expect it. No dependency or application behavior changed for organization. Larger moves of the state store, native lifecycle and historical reports were deferred: they would increase integration risk or invalidate the pending AGENTS.md map without a demonstrated benefit. A separate visual redesign, additional abstraction layers and speculative asset deletion were also avoided.
+Configuration stays at the root where Vite, TypeScript, Tailwind, ESLint and npm expect it. No dependency or application behavior changed for organization. A browser check did find a literal question mark in the demo warning; its punctuation was corrected and the visible label is covered by a regression assertion. Larger moves of the state store, native lifecycle and historical reports were deferred: they would increase integration risk or invalidate the pending AGENTS.md map without a demonstrated benefit. A separate visual redesign, additional abstraction layers and speculative asset deletion were also avoided.
 
 ## Validation and remaining work
 
 The move-only comparison confirmed the summary production section and all extracted test bodies are identical apart from indentation. Frontend lint, all 62 frontend tests, TypeScript and Vite production build passed. Rust formatting and `git diff --check` passed. Native Rust compilation and tests for this revision remain unexecuted locally because MSVC `link.exe` is unavailable. The prior 75-test Windows CI success predates recent results and this test move. No installer build was performed.
 
-No frontend styles or runtime UI were changed in this refactor; the README captures were inspected and are described accurately. Verify both themes and Match Centre in the next packaged Windows build, and run the complete Rust suite to validate Rust module resolution and recent-result persistence. See [Windows validation](VALIDATION.md) and the [Match Centre report](MATCH_CENTRE_EVOLUTION_REPORT.md) for the remaining native acceptance checks.
+No frontend styles or layouts were changed. Browser preview at 390px covered dark and light Home and the fictional Match Centre timeline; the README captures were also inspected and are described accurately. Verify both themes and Match Centre in the next packaged Windows build, and run the complete Rust suite to validate Rust module resolution and recent-result persistence. See [Windows validation](VALIDATION.md) and the [Match Centre report](MATCH_CENTRE_EVOLUTION_REPORT.md) for the remaining native acceptance checks.

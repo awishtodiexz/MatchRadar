@@ -1,4 +1,4 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 import { afterEach,expect,it,vi } from 'vitest';
 import { cleanup,fireEvent,render,screen } from '@testing-library/react';
 import App from './App';
@@ -12,7 +12,7 @@ it('opens a complete fictional centre from the normal completed demo card withou
  useApp.setState({snapshot:structuredClone(mockSnapshot),loading:false,error:null});await useApp.getState().load();render(<App/>);
  fireEvent.click(screen.getByRole('button',{name:'Results'}));
  fireEvent.click(screen.getByRole('button',{name:'Match details: Brighton & Hove Albion versus Everton'}));
- expect(screen.getByText(/fictional match, players and events/)).toBeTruthy();
+ expect(screen.getByText('DEMO DATA: fictional match, players and events. Not a historical result.')).toBeTruthy();
  fireEvent.click(screen.getByRole('tab',{name:'Timeline'}));expect(screen.getByText(/Alex Hart scores/)).toBeTruthy();expect(screen.getByText(/receives a red card/)).toBeTruthy();expect(screen.getByText(/Jamie Reed replaces/)).toBeTruthy();
  fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getAllByText('Possession')).toHaveLength(2);
  fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));expect(screen.getByText('Casey Brook')).toBeTruthy();expect(screen.getAllByText('Starting XI')).toHaveLength(2);
