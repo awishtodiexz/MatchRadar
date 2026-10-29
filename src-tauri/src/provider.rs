@@ -426,6 +426,7 @@ mod response_tests {
 #[cfg(test)]
 mod crest_tests {
     use super::*;
+    use crate::demo::mock;
     #[test]
     fn accepts_direct_and_alternate_crests() {
         let standard = "https://a.espncdn.com/i/teamlogos/soccer/500/359.png";
