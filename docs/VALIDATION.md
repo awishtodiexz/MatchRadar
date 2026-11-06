@@ -31,6 +31,14 @@ The test instance was stopped, the temporary app-data directories were removed, 
 
 Packaged Windows checks: move the widget to a secondary display, disconnect that display, and confirm the widget reappears centered on the primary within 30 seconds; repeat with the app hidden to tray, then show it. Change display scale, resolution and arrangement; test negative-origin (left/above) monitors; and confirm taskbar space is respected. Verify that intentionally edge-docked windows with a usable visible patch are not moved, and that focus/scale events do not cause placement loops at mixed DPI.
 
+## Champions League — 6 November 2026
+
+Direct ESPN probes verified the `uefa.champions` routes: monthly scoreboards returned 36 events for `202610` and `202611`, the daily query for `20261106` returned a valid empty schedule, and `summary?event=401915418` returned 22 key events, two boxscore teams and two rosters. Date ranges still return HTTP 400, so monthly fixture queries were retained.
+
+A local debug build (embedded frontend, workspace app-data override and isolated WebView2 profile because the coding sandbox blocks `%APPDATA%` and the default WebView2 profile) fetched 10 Premier League and 18 Champions League fixtures in one cycle, with independent `eng.1` and `uefa.champions` status entries. Captures at 390px and the 320px minimum showed the Premier League, Champions League and Both layouts; Both used `PL`/`UCL` card tags and a single chronological list. Opening Results through the WebView2 debug protocol fetched 18 UCL and 20 PL completed matches, each retained under its own status key. Three completed UCL summaries requested through the app's own `get_match_details` IPC returned 16–28 events, 56 statistics and 45–46 players each, correctly attributed to `championsLeague`.
+
+Automated checks passed: `cargo fmt --check`, 107 Rust tests, lint, 82 frontend tests, the production build, and 28 Playwright journeys at 320/390px in both themes. This was a debug build with test-only path overrides, not the packaged installer. No live UCL fixture was available, so live/halftime summary shapes remain unverified; notification delivery, tray behavior, DPI and sleep/resume still require packaged Windows checks.
+
 ## Verification Lite
 
 The subsequent targeted demo/live isolation change adds native regression tests for persisted pending alerts, separate demo preferences, restart, expiry, score corrections, synthetic event suppression and rapid mode changes. `verify:fast` passed 69 frontend tests and `verify:ui` passed seven Edge tests; Rust formatting passed. Local `cargo check --locked` stopped because MSVC `link.exe` is unavailable, so those new native tests and packaged notification behavior still require Windows CI and runtime verification.

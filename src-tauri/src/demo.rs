@@ -1,5 +1,5 @@
 //! Synthetic fixture data, used only by demo mode and test fixtures.
-use crate::model::{Match, Team};
+use crate::model::{Competition, Match, Team};
 use chrono::{DateTime, Duration, Local, TimeZone, Utc};
 
 pub fn mock() -> Vec<Match> {
@@ -195,7 +195,8 @@ fn mock_at(now: DateTime<Utc>) -> Vec<Match> {
                     _ => "Scheduled",
                 }
                 .into(),
-                competition: "Premier League".into(),
+                competition: Competition::PremierLeague.name().into(),
+                league: Competition::PremierLeague,
             },
         )
         .collect()

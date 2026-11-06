@@ -4,10 +4,10 @@
 
 **Your matchday companion, right on your Windows desktop.**
 
-MatchRadar is a compact Premier League widget that keeps fixtures and scores in
-view while you work, browse, or play. It is built with Tauri 2, Rust, React, and
-TypeScript, keeps preferences and cached data local, and ships as a small NSIS
-installer for 64-bit Windows 10/11.
+MatchRadar is a compact Premier League and Champions League widget that keeps
+fixtures and scores in view while you work, browse, or play. It is built with
+Tauri 2, Rust, React, and TypeScript, keeps preferences and cached data local,
+and ships as a small NSIS installer for 64-bit Windows 10/11.
 
 **Requirements:** 64-bit Windows 10/11 with the Microsoft Edge WebView2 runtime.
 
@@ -33,16 +33,19 @@ ESPN's CDN. They are not packaged Windows captures.*
 - **Widget first:** frameless and resizable, with compact and expanded views,
   adjustable background opacity, dark and light themes, always-on-top, tray
   controls, and optional launch at sign-in.
-- **Premier League at a glance:** live scores, upcoming fixtures, local kickoff
-  times, competition context, and a league-wide live count. Follow clubs or
-  filter to favorites.
-- **Match Centre:** on-demand timeline, team statistics, and lineups when ESPN
-  supplies them. Scores remain sourced from the scoreboard.
+- **Two competitions at a glance:** switch between Premier League, Champions
+  League, or Both. The choice persists; Both shows one chronological list with a
+  small PL/UCL tag per card, and the live count follows the selection. UCL looks
+  30 days ahead so sparse fixtures still appear.
+- **Match Centre:** on-demand timeline, team statistics, and lineups for either
+  competition when ESPN supplies them. Scores remain sourced from the scoreboard.
 - **Views that fit matchday:** All, Live, Following, Upcoming, and Results.
   Results covers completed matches from the previous 14 days with a separate
-  cache.
-- **Alerts:** followed-team reminders, match-start and optional goal alerts,
-  per-match subscribe/mute, persistent deduplication, and a durable retry queue.
+  per-competition cache.
+- **Alerts:** followed-team reminders, match-start and optional goal alerts for
+  both competitions, per-match subscribe/mute, persistent deduplication, and a
+  durable retry queue. Alerts keep monitoring both leagues regardless of the
+  competition you are viewing.
 - **Built for interruptions:** independent fixture and score refreshes, offline
   cache, stale-data labels, retry/backoff handling, and automatic recovery when
   a display change leaves the widget off-screen.
@@ -118,7 +121,9 @@ manual dispatches. See the [validation notes](docs/VALIDATION.md) for current
 evidence. A passing build does not prove runtime behavior.
 
 - Match Centre events, statistics, and lineups depend on provider availability;
-  live and halftime summary shapes still need real-match validation.
+  live and halftime summary shapes still need real-match validation. The UCL
+  scoreboard and one completed UCL summary were verified on 6 November 2026, but
+  UCL live/halftime details still need a real match.
 - Off-screen window recovery runs after display changes but still needs packaged
   Windows verification; `Retry-After` cooldowns are process-local. Sleep/resume
   and real notification delivery need validation.
@@ -129,9 +134,10 @@ evidence. A passing build does not prove runtime behavior.
 ## Data, assets, and licensing
 
 Scores and fixtures come from ESPN's **unofficial, undocumented** public JSON
-endpoints. Availability, format, rate limits, and usage rights are not guaranteed;
-MatchRadar is not affiliated with ESPN or the Premier League. Crests load from
-ESPN's CDN when available, with initials as a fallback; the competition shield is
+endpoints for the Premier League and Champions League. Availability, format,
+rate limits, and usage rights are not guaranteed; MatchRadar is not affiliated
+with ESPN, the Premier League, or UEFA. Crests load from
+ESPN's CDN when available, with initials as a fallback; the competition marks are
 original artwork. See [data provider notes](docs/DATA_PROVIDER.md).
 
 **License:** none selected yet. The repository is private and no distribution

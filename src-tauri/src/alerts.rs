@@ -254,6 +254,47 @@ mod tests {
     }
 
     #[test]
+    fn champions_league_favorites_plan_distinct_events_and_goals() {
+        let mut s = fixture();
+        let team = s.matches[0].home.id.clone();
+        s.matches[0].kickoff = (now() + Duration::minutes(10)).to_rfc3339();
+        s.settings.favorites = vec![team.clone()];
+        s.settings.reminders = true;
+        s.settings.reminder_minutes = 30;
+        let mut ucl = s.matches[0].clone();
+        ucl.id = "ucl-match-1".into();
+        ucl.league = crate::model::Competition::ChampionsLeague;
+        ucl.competition = "Champions League".into();
+        ucl.kickoff = (now() + Duration::minutes(20)).to_rfc3339();
+        s.matches.push(ucl);
+        let reminders = plan(&mut s, now());
+        assert_eq!(reminders.len(), 2, "one reminder per match, never per team");
+        let ids: std::collections::HashSet<_> = reminders.iter().map(|(id, _)| id).collect();
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains(&"match-1:reminder".to_string()));
+        assert!(ids.contains(&"ucl-match-1:reminder".to_string()));
+
+        // A confirmed UCL score transition produces a goal event through the same
+        // planner as the Premier League.
+        let mut live = fixture();
+        live.matches[0].league = crate::model::Competition::ChampionsLeague;
+        live.matches[0].status = "live".into();
+        live.matches[0].home_score = Some(0);
+        live.matches[0].away_score = Some(0);
+        live.matches[0].kickoff = (now() - Duration::minutes(5)).to_rfc3339();
+        live.settings.favorites = vec![live.matches[0].home.id.clone()];
+        live.settings.goals = true;
+        assert!(plan(&mut live, now()).is_empty());
+        live.matches[0].home_score = Some(1);
+        let goals = plan(&mut live, now() + Duration::minutes(1));
+        assert_eq!(goals.len(), 1);
+        assert_eq!(goals[0].0, "match-1:score:1:0");
+        assert!(goals[0].1.contains("1–0"));
+        live.sent_notifications.push(goals[0].0.clone());
+        assert!(plan(&mut live, now() + Duration::minutes(2)).is_empty());
+    }
+
+    #[test]
     fn cosmetic_saves_preserve_subscription_baselines_and_feed_timestamps() {
         let mut s = fixture();
         subscribe(&mut s, true);

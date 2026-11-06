@@ -1,7 +1,7 @@
 # MatchRadar — coding-agent guide
 
-MatchRadar is a Windows 10/11 Premier League desktop widget built with Tauri 2,
-Rust, React, TypeScript, Vite, Tailwind CSS, and Zustand. Keep it a compact,
+MatchRadar is a Windows 10/11 Premier League and Champions League desktop widget
+built with Tauri 2, Rust, React, TypeScript, Vite, Tailwind CSS, and Zustand. Keep it a compact,
 premium, dark-by-default widget with optional light mode, and stay within the
 requested v1.0 scope.
 
@@ -14,8 +14,8 @@ requested v1.0 scope.
 - `src/styles.css`: shared visual styling.
 - `src-tauri/src/main.rs`: commands, polling, persistence, notifications, lifecycle.
 - `src-tauri/src/window.rs`: sizing, off-screen recovery, settings rollback.
-- `src-tauri/src/provider.rs`: ESPN requests, normalization, merging, tests.
-- `src-tauri/src/model.rs`: native models and defaults.
+- `src-tauri/src/provider.rs`: ESPN requests for both competitions, normalization, merging, tests.
+- `src-tauri/src/model.rs`: competition/view models, native models and defaults.
 - `src-tauri/tauri.conf.json`, `src-tauri/capabilities/default.json`: native config.
 - `.github/workflows/windows.yml`: validation; installer on `v*` tags/manual dispatch.
 
@@ -31,6 +31,10 @@ authoritative preference store or make polling depend on a mounted component.
 
 - Tray, single-instance, window-state, autostart, and notification integration
   exist, but their presence does not prove packaged Windows behavior.
+- Premier League and Champions League fixtures, results and details are
+  implemented; the UCL scoreboard and one completed UCL summary were verified
+  against real ESPN data on 6 November 2026. UCL live/halftime summary shapes
+  and packaged runtime behavior are not yet verified.
 - Provider detail data is best-effort. Off-screen window recovery is implemented
   in `window.rs` (startup, focus/scale events, 30-second watchdog) but still needs
   packaged Windows validation after monitor removal; sleep/resume and

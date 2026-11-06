@@ -10,7 +10,7 @@ Demo mode has been removed. References to it in the historical checkpoint sectio
 | Provider backoff deadlines and bounded sleep chunks | `src-tauri/src/scheduling.rs` |
 | Logical window sizing, off-screen recovery and best-effort settings rollback | `src-tauri/src/window.rs` |
 | Serialized state, defaults, preference normalization and feed application | `src-tauri/src/model.rs` |
-| ESPN transport/normalization and source-result reconciliation | `src-tauri/src/provider.rs`, `src-tauri/src/refresh.rs` |
+| Competition definitions, ESPN transport/normalization and per-league reconciliation | `src-tauri/src/model.rs`, `src-tauri/src/provider.rs`, `src-tauri/src/refresh.rs` |
 | Atomic state storage and recovery | `src-tauri/src/persistence.rs` |
 | Notification eligibility and durable submission queue | `src-tauri/src/alerts.rs`, `src-tauri/src/delivery.rs` |
 | Delivery and summary regression tests (private child modules) | `src-tauri/src/delivery_tests.rs`, `src-tauri/src/details_tests.rs` |
@@ -22,6 +22,14 @@ Demo mode has been removed. References to it in the historical checkpoint sectio
 `get_snapshot` returns the Rust snapshot serialized in camelCase; TypeScript models its UI-facing subset, not internal persisted notification/window fields. Rust `Option` values can serialize as null. `save_settings` accepts a complete Settings object assembled by the frontend's partial-update queue and returns normalized authoritative Settings. Snapshot events signal a new read rather than transporting an additional state model. Keep these names, nullability and defaults aligned when changing the IPC contract. The window-helper and delivery-test extractions do not change it.
 
 The Tauri process owns a normalized snapshot, preferences, a local JSON cache and a single asynchronous refresh loop. React reads snapshots through commands and refreshes on native events. The window can be hidden while the process continues running. The ESPN adapter validates each fixture independently, and failed requests preserve the previous snapshot. Settings and notification identifiers are persisted together.
+
+## Competitions
+
+`model::Competition` defines the two supported leagues as configuration: display name, ESPN slug (`eng.1` / `uefa.champions`) and fixture lookahead (14 / 30 days, because the UCL league phase is sparse). Every `Match` carries its `league`; serialization defaults missing values to the Premier League so existing saves keep working. `CompetitionView` (Premier League, Champions League, Both) is persisted in `Settings` and defaults to the Premier League; it is a cosmetic preference and never gates polling or notifications.
+
+The poller fetches each competition independently inside one cycle. A fixture/score outcome for one league is applied by `refresh::apply_league`, which only rebuilds that league's subset of `snapshot.matches`; a failure or valid empty response never deletes the other league's fixtures. Fixture queries run at most every six hours per league, daily score queries follow the existing cadence, and a provider rate limit stops the remaining requests for that cycle. `snapshot.leagueStatus` stores timestamps and errors keyed by slug; aggregate fields (`updatedAt`, `fixtureUpdatedAt`, errors, `partial`) are rebuilt from them. On upgrade, prior global freshness is migrated once to the Premier League entry.
+
+Results likewise keep one cache list with per-league status entries: the Results command fetches only competitions whose six-hour cache/retry is due, and `apply_league` replaces only that league's rows. Declared result responses and live full-time fallbacks stay merged by provider ID. Match summaries resolve the league from the cached match and request that competition's `summary` endpoint; the detail cache is keyed by `slug:id` and `Details` stores its league (missing values default to the Premier League). Notifications iterate the whole snapshot regardless of the selected UI competition, so followed teams and match bells keep working for both leagues while the widget is on the other view or hidden in the tray.
 
 The frontend shell and native event listeners stay in `src/App.tsx`. Focused presentation components in `src/components/` own settings tabs, match cards/alert shortcuts, details, crests and shared controls. They call the existing store with partial settings patches; the Rust preference/notification model is unchanged. League status derives from the complete snapshot, separately from filtered card groups. `src/useLocalDay.ts` supplies one local-midnight timer plus focus/visibility reconciliation for date headings, independent of networking. Successful snapshot reads clear obsolete load/refresh errors while retaining unrelated save/action failures and provider diagnostics.
 

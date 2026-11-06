@@ -12,7 +12,7 @@ mod results;
 mod scheduling;
 mod window;
 use chrono::{DateTime, Utc};
-use model::{apply_settings, Settings, SettingsEffects, Snapshot};
+use model::{apply_settings, Competition, Settings, SettingsEffects, Snapshot};
 use std::{
     fs,
     io::Write,
@@ -57,7 +57,7 @@ async fn get_match_details(
     app: tauri::AppHandle,
     cache: tauri::State<'_, tokio::sync::Mutex<details::Cache>>,
 ) -> Result<details::Details, String> {
-    let active = {
+    let (league, active) = {
         let state = app.state::<State>();
         let snapshot = state.snapshot.lock().map_err(|e| e.to_string())?;
         let m = snapshot
@@ -65,8 +65,8 @@ async fn get_match_details(
             .iter()
             .chain(snapshot.recent_results.iter())
             .find(|m| m.id == id)
-            .ok_or("Match not in Premier League fixture cache")?;
-        matches!(m.status.as_str(), "live" | "halftime")
+            .ok_or("Match not in fixture cache")?;
+        (m.league, matches!(m.status.as_str(), "live" | "halftime"))
     };
     if id.is_empty() || !id.bytes().all(|b| b.is_ascii_digit()) {
         return Err("Invalid match ID".into());
@@ -78,7 +78,7 @@ async fn get_match_details(
     };
     let mut cache = cache.lock().await;
     cache.seed(&saved);
-    let mut data = cache.get(&id, active).await?;
+    let mut data = cache.get(league, &id, active).await?;
     if !data.stale {
         let state = app.state::<State>();
         let mut snapshot = state.snapshot.lock().map_err(|e| e.to_string())?;
@@ -295,6 +295,27 @@ async fn deliver_notifications(app: tauri::AppHandle) {
         }
     }
 }
+fn fixtures_due(state: &tauri::State<'_, State>, league: Competition, now: DateTime<Utc>) -> bool {
+    let snapshot = state.snapshot.lock().unwrap();
+    let per_league = snapshot
+        .league_status
+        .get(league.slug())
+        .and_then(|status| status.fixture_updated_at.clone());
+    let legacy = if league == Competition::PremierLeague {
+        snapshot.fixture_updated_at.clone()
+    } else {
+        None
+    };
+    per_league
+        .or(legacy)
+        .and_then(|value| DateTime::parse_from_rfc3339(&value).ok())
+        .is_none_or(|updated| {
+            now.signed_duration_since(updated.with_timezone(&Utc))
+                .num_minutes()
+                >= 360
+        })
+}
+
 async fn poll(app: tauri::AppHandle) {
     let mut failures = 0u32;
     let client = provider::client();
@@ -315,89 +336,113 @@ async fn poll(app: tauri::AppHandle) {
             continue;
         }
         let _guard = state.refresh_lock.lock().await;
-        let (cached, fixture_updated_at) = {
+        let cached = {
             let mut s = state.snapshot.lock().unwrap();
             s.refreshing = true;
-            (s.matches.clone(), s.fixture_updated_at.clone())
+            s.matches.clone()
         };
         let _ = app.emit("snapshot-updated", ());
-        let mut retry_after = None;
-        {
-            let force = state.force_fixtures.swap(false, Ordering::Relaxed);
-            let due = force
-                || fixture_updated_at
-                    .and_then(|v| DateTime::parse_from_rfc3339(&v).ok())
-                    .is_none_or(|t| {
-                        Utc::now()
-                            .signed_duration_since(t.with_timezone(&Utc))
-                            .num_minutes()
-                            >= 360
-                    });
-            let (fixtures, scores) = match client.as_ref() {
-                Ok(client) => {
-                    let today = Utc::now().date_naive();
+        let now = Utc::now();
+        let today = now.date_naive();
+        let force = state.force_fixtures.swap(false, Ordering::Relaxed);
+        let mut outcomes = Vec::new();
+        match &client {
+            Ok(client) => {
+                for league in Competition::ALL {
+                    let due = force || fixtures_due(&state, league, now);
                     let fixtures = if due {
-                        provider::fixtures(client, today).await
+                        provider::fixtures(client, league, today).await
                     } else {
                         provider::FetchOutcome::default()
                     };
-                    let scores = if fixtures
+                    let limited = fixtures
                         .error
                         .as_ref()
-                        .is_some_and(provider::FetchError::rate_limited)
-                    {
+                        .is_some_and(provider::FetchError::rate_limited);
+                    let scores = if limited {
                         provider::FetchOutcome::failed(provider::FetchError {
-                            message: "Daily requests deferred after fixture rate limit".into(),
+                            message: format!(
+                                "{} daily requests deferred after fixture rate limit",
+                                league.name()
+                            ),
                             retry_after: fixtures.error.as_ref().and_then(|e| e.retry_after),
                         })
                     } else {
-                        // Check yesterday if either cached or newly fetched data says it is live.
-                        let mut relevant = cached;
+                        // Check yesterday when cached or newly fetched data says it is live.
+                        let mut relevant: Vec<_> = cached
+                            .iter()
+                            .filter(|m| m.league == league)
+                            .cloned()
+                            .collect();
                         if let Some(matches) = &fixtures.matches {
                             relevant.extend(matches.iter().cloned());
                         }
-                        provider::scores(client, today, &relevant).await
+                        provider::scores(client, league, today, &relevant).await
                     };
-                    (fixtures, scores)
+                    outcomes.push((league, fixtures, scores));
+                    // A provider rate limit applies to the host, not just this league.
+                    if limited {
+                        break;
+                    }
                 }
-                Err(error) => (
-                    if due {
-                        provider::FetchOutcome::failed(error.clone())
-                    } else {
-                        provider::FetchOutcome::default()
-                    },
-                    provider::FetchOutcome::failed(error.clone()),
-                ),
-            };
+            }
+            Err(error) => {
+                for league in Competition::ALL {
+                    let due = force || fixtures_due(&state, league, now);
+                    outcomes.push((
+                        league,
+                        if due {
+                            provider::FetchOutcome::failed(error.clone())
+                        } else {
+                            provider::FetchOutcome::default()
+                        },
+                        provider::FetchOutcome::failed(error.clone()),
+                    ));
+                }
+            }
+        }
+        let mut retry_after: Option<u64> = None;
+        {
             let mut s = state.snapshot.lock().unwrap();
-            {
-                let applied = refresh::apply(&mut s, fixtures, scores, Utc::now());
-                retry_after = applied.retry_after;
-                delivery::revalidate(&mut s, &applied.score_ids, Utc::now());
-                if applied.any_response {
-                    let overflow = delivery::enqueue(&mut s, &applied.score_ids, Utc::now());
-                    if overflow > 0 {
-                        notification_log(
-                            &state,
-                            &format!("Pending queue full; {overflow} candidates omitted"),
-                        );
+            let mut any_response = false;
+            let mut failed_any = false;
+            let mut score_ids = Vec::new();
+            for (league, fixtures, scores) in outcomes {
+                let applied = refresh::apply_league(&mut s, league, fixtures, scores, Utc::now());
+                any_response |= applied.any_response;
+                failed_any |= applied.failed;
+                score_ids.extend(applied.score_ids);
+                retry_after = match (retry_after, applied.retry_after) {
+                    (Some(a), Some(b)) => Some(a.max(b)),
+                    (current, None) => current,
+                    (None, Some(b)) => Some(b),
+                };
+            }
+            refresh::finish(&mut s, any_response);
+            delivery::revalidate(&mut s, &score_ids, Utc::now());
+            if any_response {
+                let overflow = delivery::enqueue(&mut s, &score_ids, Utc::now());
+                if overflow > 0 {
+                    notification_log(
+                        &state,
+                        &format!("Pending queue full; {overflow} candidates omitted"),
+                    );
+                }
+            }
+            if failed_any {
+                failures = failures.saturating_add(1);
+                if let Some(error) = &s.error {
+                    eprintln!("MatchRadar: {error}");
+                    if let Ok(mut log) = fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(state.path.with_file_name("provider.log"))
+                    {
+                        let _ = writeln!(log, "{} {}", Utc::now().to_rfc3339(), error);
                     }
                 }
-                if applied.failed {
-                    failures = failures.saturating_add(1);
-                    if let Some(error) = &s.error {
-                        eprintln!("MatchRadar: {error}");
-                        if let Ok(mut log) = fs::OpenOptions::new()
-                            .create(true)
-                            .append(true)
-                            .open(state.path.with_file_name("provider.log"))
-                        {
-                            let _ = writeln!(log, "{} {}", Utc::now().to_rfc3339(), error);
-                        }
-                    }
-                } else {
-                    failures = 0;
-                }
+            } else {
+                failures = 0;
             }
         }
         if let Ok(mut s) = state.snapshot.lock() {
@@ -503,6 +548,7 @@ fn main() {
             snapshot.refreshing = false;
             snapshot.migrate_catalog();
             snapshot.migrate_demo_state();
+            snapshot.migrate_competition_state();
             refresh::mark_cached(&mut snapshot);
             alerts::cleanup(&mut snapshot, Utc::now());
             delivery::cleanup(&mut snapshot, Utc::now());

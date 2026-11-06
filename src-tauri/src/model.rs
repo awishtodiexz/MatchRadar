@@ -1,6 +1,88 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 
+/// Supported ESPN competitions. The slug is the stable provider key and the
+/// storage key for per-competition status; it is not shown in the widget.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Competition {
+    #[default]
+    PremierLeague,
+    ChampionsLeague,
+}
+
+impl Competition {
+    pub const ALL: [Self; 2] = [Self::PremierLeague, Self::ChampionsLeague];
+
+    pub const fn slug(self) -> &'static str {
+        match self {
+            Self::PremierLeague => "eng.1",
+            Self::ChampionsLeague => "uefa.champions",
+        }
+    }
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::PremierLeague => "Premier League",
+            Self::ChampionsLeague => "Champions League",
+        }
+    }
+
+    /// UCL fixtures are sparse, so its schedule window is wider than the EPL's.
+    pub const fn lookahead_days(self) -> i64 {
+        match self {
+            Self::PremierLeague => 14,
+            Self::ChampionsLeague => 30,
+        }
+    }
+}
+
+/// The persisted competition selector. The default preserves existing users on
+/// the Premier League.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CompetitionView {
+    #[default]
+    PremierLeague,
+    ChampionsLeague,
+    Both,
+}
+
+impl<'de> Deserialize<'de> for CompetitionView {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        Ok(match value.as_str() {
+            Some("championsLeague") => Self::ChampionsLeague,
+            Some("both") => Self::Both,
+            _ => Self::PremierLeague,
+        })
+    }
+}
+
+impl CompetitionView {
+    pub fn includes(self, league: Competition) -> bool {
+        match self {
+            Self::PremierLeague => league == Competition::PremierLeague,
+            Self::ChampionsLeague => league == Competition::ChampionsLeague,
+            Self::Both => true,
+        }
+    }
+}
+
+/// Per-competition source freshness. Aggregate snapshot fields remain for
+/// compatibility with older saved state and are derived after every refresh.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct LeagueStatus {
+    pub fixture_updated_at: Option<String>,
+    pub updated_at: Option<String>,
+    pub fixture_error: Option<String>,
+    pub score_error: Option<String>,
+    pub recent_updated_at: Option<String>,
+    pub recent_error: Option<String>,
+    pub recent_retry_at: Option<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MatchAlert {
@@ -64,6 +146,9 @@ pub struct Match {
     pub status: String,
     pub detail: String,
     pub competition: String,
+    /// Missing in saved Premier League state, which defaults to that competition.
+    #[serde(default)]
+    pub league: Competition,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
@@ -100,6 +185,7 @@ pub struct Settings {
     pub theme: Theme,
     #[serde(deserialize_with = "opacity")]
     pub opacity: u8,
+    pub competition_view: CompetitionView,
     pub reminders: bool,
     pub reminder_minutes: u32,
     pub starts: bool,
@@ -122,6 +208,7 @@ impl Default for Settings {
             reduced_motion: false,
             theme: Theme::Dark,
             opacity: 96,
+            competition_view: CompetitionView::PremierLeague,
             reminders: true,
             reminder_minutes: 15,
             starts: true,
@@ -200,6 +287,8 @@ pub struct Snapshot {
     pub partial: bool,
     pub alert_baselines: HashMap<String, AlertBaseline>,
     pub matches: Vec<Match>,
+    #[serde(default)]
+    pub league_status: HashMap<String, LeagueStatus>,
     pub updated_at: Option<String>,
     pub fixture_updated_at: Option<String>,
     pub error: Option<String>,
@@ -227,6 +316,7 @@ impl Default for Snapshot {
             partial: false,
             alert_baselines: HashMap::new(),
             matches: Vec::new(),
+            league_status: HashMap::new(),
             updated_at: None,
             fixture_updated_at: None,
             error: None,
@@ -262,6 +352,37 @@ impl Snapshot {
             self.updated_at = None;
             self.fixture_updated_at = None;
         }
+    }
+
+    /// Older saves stored freshness globally; copy it to the Premier League entry
+    /// once so per-competition status starts from known values.
+    pub fn migrate_competition_state(&mut self) {
+        let has_legacy = self.fixture_updated_at.is_some()
+            || self.updated_at.is_some()
+            || self.fixture_error.is_some()
+            || self.score_error.is_some()
+            || self.recent_updated_at.is_some()
+            || self.recent_error.is_some()
+            || self.recent_retry_at.is_some();
+        if !has_legacy {
+            return;
+        }
+        let status = self
+            .league_status
+            .entry(Competition::PremierLeague.slug().into())
+            .or_default();
+        let fill = |target: &mut Option<String>, value: &Option<String>| {
+            if target.is_none() {
+                *target = value.clone();
+            }
+        };
+        fill(&mut status.fixture_updated_at, &self.fixture_updated_at);
+        fill(&mut status.updated_at, &self.updated_at);
+        fill(&mut status.fixture_error, &self.fixture_error);
+        fill(&mut status.score_error, &self.score_error);
+        fill(&mut status.recent_updated_at, &self.recent_updated_at);
+        fill(&mut status.recent_error, &self.recent_error);
+        fill(&mut status.recent_retry_at, &self.recent_retry_at);
     }
 
     pub fn migrate_catalog(&mut self) {
@@ -457,9 +578,10 @@ mod tests {
     #[test]
     fn settings_effects_identify_native_window_changes() {
         let original = Settings::default();
-        let changes: [fn(&mut Settings); 11] = [
+        let changes: [fn(&mut Settings); 12] = [
             |s| s.theme = Theme::Light,
             |s| s.opacity = 70,
+            |s| s.competition_view = CompetitionView::Both,
             |s| s.compact = true,
             |s| s.always_on_top = false,
             |s| s.favorites = vec!["368".into()],
@@ -565,6 +687,72 @@ mod tests {
         fresh.migrate_catalog();
         assert_eq!(fresh.settings.favorites, ["362"]);
     }
+    #[test]
+    fn legacy_state_defaults_to_premier_league_and_preserves_new_selection() {
+        let legacy: Snapshot = serde_json::from_str(
+            r#"{"settings":{},"matches":[{"id":"1","home":{"id":"359","name":"Arsenal","short":"ARS","logo":null},"away":{"id":"363","name":"Chelsea","short":"CHE","logo":null},"homeScore":null,"awayScore":null,"kickoff":"2026-11-07T15:00:00Z","status":"scheduled","detail":"Scheduled","competition":"Premier League"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            legacy.settings.competition_view,
+            CompetitionView::PremierLeague
+        );
+        assert_eq!(legacy.matches[0].league, Competition::PremierLeague);
+        assert!(legacy.league_status.is_empty());
+        assert_eq!(
+            serde_json::from_str::<Settings>(r#"{"competitionView":"bogus"}"#)
+                .unwrap()
+                .competition_view,
+            CompetitionView::PremierLeague
+        );
+        let both = Settings {
+            competition_view: CompetitionView::Both,
+            ..Settings::default()
+        };
+        assert_eq!(
+            serde_json::to_value(&both).unwrap()["competitionView"],
+            "both"
+        );
+        assert!(CompetitionView::Both.includes(Competition::ChampionsLeague));
+        assert!(!CompetitionView::PremierLeague.includes(Competition::ChampionsLeague));
+        assert_eq!(
+            serde_json::to_value(Competition::ChampionsLeague).unwrap(),
+            "championsLeague"
+        );
+        assert_eq!(Competition::ChampionsLeague.lookahead_days(), 30);
+        assert_eq!(Competition::PremierLeague.lookahead_days(), 14);
+    }
+
+    #[test]
+    fn legacy_freshness_migrates_once_to_the_premier_league_entry() {
+        let mut old: Snapshot = serde_json::from_str(
+            r#"{"updatedAt":"2026-11-06T10:00:00Z","fixtureUpdatedAt":"2026-11-06T06:00:00Z","scoreError":"HTTP 500","recentUpdatedAt":"2026-11-06T09:00:00Z","recentError":"results down"}"#,
+        )
+        .unwrap();
+        assert!(old.league_status.is_empty());
+        old.migrate_competition_state();
+        let status = &old.league_status[Competition::PremierLeague.slug()];
+        assert_eq!(status.updated_at.as_deref(), Some("2026-11-06T10:00:00Z"));
+        assert_eq!(status.score_error.as_deref(), Some("HTTP 500"));
+        assert_eq!(
+            status.recent_updated_at.as_deref(),
+            Some("2026-11-06T09:00:00Z")
+        );
+        assert_eq!(status.recent_error.as_deref(), Some("results down"));
+        // Later status wins: migration is fill-only and idempotent.
+        old.league_status
+            .get_mut(Competition::PremierLeague.slug())
+            .unwrap()
+            .updated_at = Some("later".into());
+        old.migrate_competition_state();
+        assert_eq!(
+            old.league_status[Competition::PremierLeague.slug()]
+                .updated_at
+                .as_deref(),
+            Some("later")
+        );
+    }
+
     #[test]
     fn catalog_migration_does_not_rewrite_provider_matches_or_defaults() {
         let mut old: Snapshot = serde_json::from_str("{}").unwrap();

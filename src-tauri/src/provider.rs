@@ -1,5 +1,5 @@
-use crate::model::{Match, Team};
-use chrono::{DateTime, Duration, NaiveDate, Utc};
+use crate::model::{Competition, Match, Team};
+use chrono::{DateTime, Datelike, Duration, Months, NaiveDate, Utc};
 use serde_json::Value;
 use std::time::Duration as StdDuration;
 
@@ -48,10 +48,14 @@ impl FetchOutcome {
     }
 }
 
-async fn queries(client: &reqwest::Client, dates: &[String]) -> FetchOutcome {
+async fn queries(
+    client: &reqwest::Client,
+    competition: Competition,
+    dates: &[String],
+) -> FetchOutcome {
     let mut outcome = FetchOutcome::default();
     for date in dates {
-        let result = query(client, date).await;
+        let result = query(client, competition, date).await;
         let limited = result.as_ref().err().is_some_and(FetchError::rate_limited);
         outcome.record(result);
         if limited {
@@ -151,7 +155,7 @@ fn parse_kickoff(value: &str) -> Option<DateTime<Utc>> {
         })
         .map(|date| date.with_timezone(&Utc))
 }
-fn normalize(event: &Value) -> Option<Match> {
+fn normalize(event: &Value, league: Competition) -> Option<Match> {
     let id = field(event, "id");
     let kickoff = parse_kickoff(field(event, "date"))?;
     if id.is_empty() {
@@ -209,7 +213,8 @@ fn normalize(event: &Value) -> Option<Match> {
         } else {
             detail.into()
         },
-        competition: "Premier League".into(),
+        competition: league.name().into(),
+        league,
     })
 }
 fn parse_response(
@@ -217,29 +222,34 @@ fn parse_response(
     retry_after: Option<u64>,
     body: &str,
     query: &str,
+    league: Competition,
 ) -> Result<Vec<Match>, FetchError> {
+    let label = format!("ESPN {} scoreboard", league.name());
     if !(200..300).contains(&status) {
         return Err(FetchError {
-            message: format!("ESPN scoreboard dates={query}: HTTP {status}"),
+            message: format!("{label} dates={query}: HTTP {status}"),
             retry_after,
         });
     }
     let json: Value = serde_json::from_str(body).map_err(|e| FetchError {
-        message: format!("ESPN scoreboard dates={query}: invalid JSON: {e}"),
+        message: format!("{label} dates={query}: invalid JSON: {e}"),
         retry_after: None,
     })?;
     let events = json
         .get("events")
         .and_then(Value::as_array)
         .ok_or_else(|| FetchError {
-            message: format!("ESPN scoreboard dates={query}: missing events array"),
+            message: format!("{label} dates={query}: missing events array"),
             retry_after: None,
         })?;
-    let matches: Vec<_> = events.iter().filter_map(normalize).collect();
+    let matches: Vec<_> = events
+        .iter()
+        .filter_map(|event| normalize(event, league))
+        .collect();
     if !events.is_empty() && matches.is_empty() {
         return Err(FetchError {
             message: format!(
-                "ESPN scoreboard dates={query}: no valid fixtures in {} events",
+                "{label} dates={query}: no valid fixtures in {} events",
                 events.len()
             ),
             retry_after: None,
@@ -263,14 +273,21 @@ pub fn retry_after(value: &str, now: DateTime<Utc>) -> Option<u64> {
             .map(|t| (t.with_timezone(&Utc) - now).num_seconds().max(0) as u64)
     })
 }
-async fn query(client: &reqwest::Client, dates: &str) -> Result<Vec<Match>, FetchError> {
+async fn query(
+    client: &reqwest::Client,
+    league: Competition,
+    dates: &str,
+) -> Result<Vec<Match>, FetchError> {
     let response = client
-        .get("https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard")
+        .get(format!(
+            "https://site.api.espn.com/apis/site/v2/sports/soccer/{}/scoreboard",
+            league.slug()
+        ))
         .query(&[("dates", dates), ("limit", "200")])
         .send()
         .await
         .map_err(|e| FetchError {
-            message: format!("ESPN scoreboard dates={dates}: {e}"),
+            message: format!("ESPN {} scoreboard dates={dates}: {e}", league.name()),
             retry_after: None,
         })?;
     let status = response.status().as_u16();
@@ -280,10 +297,13 @@ async fn query(client: &reqwest::Client, dates: &str) -> Result<Vec<Match>, Fetc
         .and_then(|h| h.to_str().ok())
         .and_then(|s| retry_after(s, Utc::now()));
     let body = response.text().await.map_err(|e| FetchError {
-        message: format!("ESPN scoreboard dates={dates}: response read failed: {e}"),
+        message: format!(
+            "ESPN {} scoreboard dates={dates}: response read failed: {e}",
+            league.name()
+        ),
         retry_after: None,
     })?;
-    parse_response(status, retry_after, &body, dates)
+    parse_response(status, retry_after, &body, dates, league)
 }
 pub fn merge(base: Vec<Match>, updates: Vec<Match>) -> Vec<Match> {
     let mut by_id: std::collections::HashMap<String, Match> =
@@ -295,16 +315,38 @@ pub fn merge(base: Vec<Match>, updates: Vec<Match>) -> Vec<Match> {
     result.sort_by(|a, b| a.kickoff.cmp(&b.kickoff).then(a.id.cmp(&b.id)));
     result
 }
-pub async fn fixtures(client: &reqwest::Client, today: NaiveDate) -> FetchOutcome {
-    let end = today + Duration::days(14);
-    let first = (today - Duration::days(1)).format("%Y%m").to_string();
-    let last = end.format("%Y%m").to_string();
-    let mut dates = vec![first.clone()];
-    if first != last {
-        dates.push(last);
+fn query_months(start: NaiveDate, end: NaiveDate) -> Vec<String> {
+    let mut months = Vec::new();
+    let Some(mut cursor) = NaiveDate::from_ymd_opt(start.year(), start.month(), 1) else {
+        return months;
+    };
+    let last = NaiveDate::from_ymd_opt(end.year(), end.month(), 1);
+    loop {
+        months.push(cursor.format("%Y%m").to_string());
+        if last.is_none_or(|last| cursor >= last) {
+            break;
+        }
+        let Some(next) = cursor.checked_add_months(Months::new(1)) else {
+            break;
+        };
+        cursor = next;
     }
-    let mut outcome = queries(client, &dates).await;
-    let start = today - Duration::days(1);
+    months
+}
+/// UCL is sparse, so it looks further ahead than the Premier League.
+pub fn fixture_window(league: Competition, today: NaiveDate) -> (NaiveDate, NaiveDate) {
+    (
+        today - Duration::days(1),
+        today + Duration::days(league.lookahead_days()),
+    )
+}
+pub async fn fixtures(
+    client: &reqwest::Client,
+    league: Competition,
+    today: NaiveDate,
+) -> FetchOutcome {
+    let (start, end) = fixture_window(league, today);
+    let mut outcome = queries(client, league, &query_months(start, end)).await;
     if let Some(matches) = &mut outcome.matches {
         matches.retain(|m| {
             parse_kickoff(&m.kickoff)
@@ -314,17 +356,15 @@ pub async fn fixtures(client: &reqwest::Client, today: NaiveDate) -> FetchOutcom
     outcome
 }
 pub fn recent_query_dates(today: NaiveDate) -> Vec<String> {
-    let first = (today - Duration::days(14)).format("%Y%m").to_string();
-    let last = today.format("%Y%m").to_string();
-    let mut dates = vec![first.clone()];
-    if first != last {
-        dates.push(last);
-    }
-    dates
+    query_months(today - Duration::days(14), today)
 }
-pub async fn recent_results(client: &reqwest::Client, today: NaiveDate) -> FetchOutcome {
+pub async fn recent_results(
+    client: &reqwest::Client,
+    league: Competition,
+    today: NaiveDate,
+) -> FetchOutcome {
     let dates = recent_query_dates(today);
-    let mut outcome = queries(client, &dates).await;
+    let mut outcome = queries(client, league, &dates).await;
     if let Some(matches) = &mut outcome.matches {
         matches.retain(|m| recent_result(m, today));
     }
@@ -336,28 +376,34 @@ pub fn recent_result(m: &Match, today: NaiveDate) -> bool {
             d.date_naive() >= today - Duration::days(14) && d.date_naive() <= today
         })
 }
-pub async fn scores(client: &reqwest::Client, today: NaiveDate, cached: &[Match]) -> FetchOutcome {
+pub async fn scores(
+    client: &reqwest::Client,
+    league: Competition,
+    today: NaiveDate,
+    cached: &[Match],
+) -> FetchOutcome {
     let mut dates = vec![today.format("%Y%m%d").to_string()];
     if cached.iter().any(|m| {
-        (m.status == "live" || m.status == "halftime")
+        m.league == league
+            && (m.status == "live" || m.status == "halftime")
             && parse_kickoff(&m.kickoff)
                 .is_some_and(|d| d.date_naive() == today - Duration::days(1))
     }) {
         dates.push((today - Duration::days(1)).format("%Y%m%d").to_string());
     }
-    queries(client, &dates).await
+    queries(client, league, &dates).await
 }
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
     fn rejects_bad_fixture() {
-        assert!(normalize(&serde_json::json!({"id":"1"})).is_none());
+        assert!(normalize(&serde_json::json!({"id":"1"}), Competition::PremierLeague).is_none());
     }
     #[test]
     fn normalizes_home_away_by_role() {
         let v = serde_json::json!({"id":"1","date":"2026-08-22T14:00:00Z","status":{"type":{"state":"in","name":"STATUS_IN_PROGRESS"},"displayClock":"67'"},"competitions":[{"competitors":[{"homeAway":"away","score":"1","team":{"id":"2","displayName":"Away"}},{"homeAway":"home","score":"2","team":{"id":"1","displayName":"Home"}}]}]});
-        let m = normalize(&v).unwrap();
+        let m = normalize(&v, Competition::PremierLeague).unwrap();
         assert_eq!(m.home.name, "Home");
         assert_eq!(m.status, "live");
         assert_eq!(m.home_score, Some(2));
@@ -372,31 +418,49 @@ mod response_tests {
     #[test]
     fn successful_response_accepts_espn_minute_timestamp() {
         let body = serde_json::json!({"events":[event()]}).to_string();
-        let matches = parse_response(200, None, &body, "20261031").unwrap();
+        let matches =
+            parse_response(200, None, &body, "20261031", Competition::PremierLeague).unwrap();
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].kickoff, "2026-10-31T12:30:00+00:00");
     }
     #[test]
     fn bad_request_reports_status_and_query() {
-        let err = parse_response(400, None, "{}", "20261031").err().unwrap();
+        let err = parse_response(400, None, "{}", "20261031", Competition::PremierLeague)
+            .err()
+            .unwrap();
         assert!(err.message.contains("HTTP 400"));
         assert!(err.message.contains("20261031"));
     }
     #[test]
     fn rejects_unexpected_json() {
-        assert!(parse_response(200, None, "{}", "202610").is_err());
-        assert!(parse_response(200, None, "no json", "202610").is_err());
-        assert!(parse_response(200, None, "{\"events\":[{}]}", "202610").is_err());
+        assert!(parse_response(200, None, "{}", "202610", Competition::PremierLeague).is_err());
+        assert!(
+            parse_response(200, None, "no json", "202610", Competition::PremierLeague).is_err()
+        );
+        assert!(parse_response(
+            200,
+            None,
+            "{\"events\":[{}]}",
+            "202610",
+            Competition::PremierLeague
+        )
+        .is_err());
     }
     #[test]
     fn empty_events_are_success() {
-        assert!(parse_response(200, None, "{\"events\":[]}", "202610")
-            .unwrap()
-            .is_empty());
+        assert!(parse_response(
+            200,
+            None,
+            "{\"events\":[]}",
+            "202610",
+            Competition::PremierLeague
+        )
+        .unwrap()
+        .is_empty());
     }
     #[test]
     fn deduplicates_and_prefers_latest() {
-        let m = normalize(&event()).unwrap();
+        let m = normalize(&event(), Competition::PremierLeague).unwrap();
         let mut update = m.clone();
         update.status = "live".into();
         let merged = merge(vec![m], vec![update]);
@@ -409,14 +473,38 @@ mod response_tests {
         let body = serde_json::json!({"events":[event()]}).to_string();
         for invalid in ["no JSON", "{}", "{\"events\":[{}]}"] {
             let mut outcome = FetchOutcome::default();
-            outcome.record(parse_response(200, None, &body, "202610"));
-            outcome.record(parse_response(200, None, invalid, "202611"));
+            outcome.record(parse_response(
+                200,
+                None,
+                &body,
+                "202610",
+                Competition::PremierLeague,
+            ));
+            outcome.record(parse_response(
+                200,
+                None,
+                invalid,
+                "202611",
+                Competition::PremierLeague,
+            ));
             assert_eq!(outcome.matches.as_ref().unwrap().len(), 1);
             assert!(outcome.error.is_some());
         }
         let mut outcome = FetchOutcome::default();
-        outcome.record(parse_response(200, None, "{\"events\":[]}", "202610"));
-        outcome.record(parse_response(429, Some(300), "{}", "202611"));
+        outcome.record(parse_response(
+            200,
+            None,
+            "{\"events\":[]}",
+            "202610",
+            Competition::PremierLeague,
+        ));
+        outcome.record(parse_response(
+            429,
+            Some(300),
+            "{}",
+            "202611",
+            Competition::PremierLeague,
+        ));
         assert!(outcome.matches.as_ref().unwrap().is_empty());
         assert!(outcome.error.as_ref().unwrap().rate_limited());
         assert_eq!(outcome.error.unwrap().retry_after, Some(300));
@@ -542,6 +630,7 @@ mod captured_history_tests {
             None,
             include_str!("../../tests/fixtures/recent-scoreboard.json"),
             "202610",
+            Competition::PremierLeague,
         )
         .unwrap();
         let today = NaiveDate::from_ymd_opt(2026, 10, 29).unwrap();
@@ -552,5 +641,82 @@ mod captured_history_tests {
         assert!(matches
             .iter()
             .all(|m| parse_kickoff(&m.kickoff).unwrap().date_naive() < today - Duration::days(1)));
+    }
+}
+
+#[cfg(test)]
+mod competition_tests {
+    use super::*;
+
+    fn event() -> Value {
+        serde_json::json!({"id":"401915418","date":"2026-10-13T16:45Z","status":{"type":{"state":"post","name":"STATUS_FULL_TIME"}},"competitions":[{"competitors":[{"homeAway":"home","score":"2","team":{"id":"169","displayName":"Lens","abbreviation":"RCL"}},{"homeAway":"away","score":"1","team":{"id":"225","displayName":"Sporting CP","abbreviation":"SCP"}}]}]})
+    }
+
+    #[test]
+    fn champions_league_normalization_is_attributed_and_era_agnostic() {
+        let m = normalize(&event(), Competition::ChampionsLeague).unwrap();
+        assert_eq!(m.league, Competition::ChampionsLeague);
+        assert_eq!(m.competition, "Champions League");
+        assert_eq!(m.status, "fulltime");
+        assert_eq!(m.home.name, "Lens");
+        assert_eq!(m.home_score, Some(2));
+        let body = serde_json::json!({"events":[event()]}).to_string();
+        let parsed =
+            parse_response(200, None, &body, "202610", Competition::ChampionsLeague).unwrap();
+        assert_eq!(parsed[0].league, Competition::ChampionsLeague);
+        let pl = normalize(&event(), Competition::PremierLeague).unwrap();
+        assert_eq!(pl.league, Competition::PremierLeague);
+        assert_eq!(pl.competition, "Premier League");
+    }
+
+    #[test]
+    fn upcoming_windows_and_month_queries_cover_the_whole_lookahead() {
+        let today = NaiveDate::from_ymd_opt(2026, 1, 31).unwrap();
+        assert_eq!(
+            fixture_window(Competition::PremierLeague, today),
+            (today - Duration::days(1), today + Duration::days(14))
+        );
+        assert_eq!(
+            fixture_window(Competition::ChampionsLeague, today),
+            (today - Duration::days(1), today + Duration::days(30))
+        );
+        // UCL's 30-day window can touch three calendar months.
+        assert_eq!(
+            query_months(today - Duration::days(1), today + Duration::days(30)),
+            ["202601", "202602", "202603"]
+        );
+        assert_eq!(
+            query_months(
+                NaiveDate::from_ymd_opt(2026, 10, 28).unwrap(),
+                NaiveDate::from_ymd_opt(2026, 11, 20).unwrap()
+            ),
+            ["202610", "202611"]
+        );
+    }
+
+    #[test]
+    fn ucl_empty_and_malformed_responses_never_invent_fixtures() {
+        assert!(parse_response(
+            200,
+            None,
+            "{\"events\":[]}",
+            "202611",
+            Competition::ChampionsLeague
+        )
+        .unwrap()
+        .is_empty());
+        assert!(parse_response(
+            200,
+            None,
+            "{\"events\":[{}]}",
+            "202611",
+            Competition::ChampionsLeague
+        )
+        .is_err());
+        let limited = parse_response(429, Some(120), "{}", "202611", Competition::ChampionsLeague)
+            .err()
+            .unwrap();
+        assert!(limited.rate_limited());
+        assert_eq!(limited.retry_after, Some(120));
     }
 }

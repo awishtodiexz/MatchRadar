@@ -53,7 +53,7 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
     </div>
     <div ref={panel} className="settings-body" role="tabpanel" id="settings-panel" aria-labelledby={'settings-tab-'+section} tabIndex={0}>
       {section==='Teams'&&<>
-        <div className="section-intro"><h3>Your clubs</h3><p>Follow clubs to put their matches first.</p></div>
+        <div className="section-intro"><h3>Your clubs</h3><p>Follow clubs from the Premier League or Champions League; clubs appear as their fixtures load.</p></div>
         <Toggle label="Following only" value={settings.followedOnly} onChange={followedOnly=>update({followedOnly})}/>
         <label className="search"><Search size={15} aria-hidden="true"/><input ref={search} type="search" aria-label="Search clubs" placeholder="Search clubs" value={query} onChange={e=>setQuery(e.target.value)}/></label>
         <div className="club-list">{filteredClubs.map(club=><button className="club" key={club.id} title={club.name} aria-pressed={settings.favorites.includes(club.id)} onClick={()=>update({favorites:settings.favorites.includes(club.id)?settings.favorites.filter(id=>id!==club.id):[...settings.favorites,club.id]})}>
@@ -85,7 +85,7 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
         <div className="section-intro"><h3>MatchRadar <span className="version">1.0.0</span></h3><p>Your personal matchday companion.</p></div>
         <Toggle label="Launch with Windows" description={!native?'Available in the desktop app':startupError?'Startup preference unavailable':autostart===null?'Checking startup preference…':'Open MatchRadar when you sign in'} disabled={!native||autostart===null} value={autostart??false} onChange={value=>{void (value?enable():disable()).then(()=>setAutostart(value)).catch(()=>setNotice('Could not change the Windows startup setting.'));}}/>
         {startupError&&<p className="notice" role="status">Could not read the Windows startup setting. Reopen Settings to try again.</p>}
-        <div className="about"><CircleHelp size={17}/><p>Scores use ESPN’s unofficial endpoints and may be unavailable or change. MatchRadar is not affiliated with ESPN or the Premier League.</p></div>
+        <div className="about"><CircleHelp size={17}/><p>Scores use ESPN’s unofficial endpoints and may be unavailable or change. MatchRadar is not affiliated with ESPN, the Premier League, or UEFA.</p></div>
         <button className="outline-button" onClick={refresh} disabled={refreshing}><RefreshCw size={15}/>Refresh data</button>
         <p className="field-note">X keeps MatchRadar running in the tray. Choose Quit in the tray to exit.</p>
       </>}

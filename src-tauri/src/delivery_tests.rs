@@ -309,8 +309,9 @@ fn partial_provider_results_and_restart_retain_pending_events_without_planning_s
     let pending = s.pending_notifications.clone();
     let mut month = s.matches[0].clone();
     month.home_score = Some(2); // Monthly progress is not a newly confirmed goal.
-    let applied = crate::refresh::apply(
+    let applied = crate::refresh::apply_league(
         &mut s,
+        crate::model::Competition::PremierLeague,
         crate::provider::FetchOutcome {
             matches: Some(vec![month]),
             error: None,
@@ -321,6 +322,7 @@ fn partial_provider_results_and_restart_retain_pending_events_without_planning_s
         }),
         now() + Duration::seconds(10),
     );
+    crate::refresh::finish(&mut s, applied.any_response);
     enqueue(&mut s, &applied.score_ids, now() + Duration::seconds(10));
     assert!(s.partial && s.matches[0].score_stale);
     assert_eq!(s.alert_baselines["match-1"].seen_at, baseline);

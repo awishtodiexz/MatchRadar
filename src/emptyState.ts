@@ -1,7 +1,7 @@
 import type { MatchView } from './matchViews';
 
-export function liveEmptyState({scoreError, savedLive, live, followedOnly, view}: {
-  scoreError: boolean; savedLive: boolean; live: number; followedOnly: boolean; view: MatchView;
+export function liveEmptyState({scoreError, savedLive, live, followedOnly, view, competition = 'Premier League', both = false}: {
+  scoreError: boolean; savedLive: boolean; live: number; followedOnly: boolean; view: MatchView; competition?: string; both?: boolean;
 }): {title:string; message:string; canShowAll:boolean} | null {
   if (view !== 'Live') return null;
   if (savedLive) return {
@@ -11,7 +11,7 @@ export function liveEmptyState({scoreError, savedLive, live, followedOnly, view}
   };
   if (scoreError) return {
     title:'Live status unavailable',
-    message:'Could not check the latest Premier League scores. Please try again.',
+    message:`Could not check the latest ${competition} scores. Please try again.`,
     canShowAll:followedOnly&&live>0
   };
   if (followedOnly && live > 0) return {
@@ -19,5 +19,5 @@ export function liveEmptyState({scoreError, savedLive, live, followedOnly, view}
     message:'Live matches are hidden by your following filter.',
     canShowAll:true
   };
-  return {title:'No Premier League matches are live right now',message:'Check Upcoming for the next matches.',canShowAll:false};
+  return {title:both?'No matches are live right now':`No ${competition} matches are live right now`,message:'Check Upcoming for the next matches.',canShowAll:false};
 }

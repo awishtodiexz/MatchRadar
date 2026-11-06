@@ -1,4 +1,5 @@
-//! On-demand Premier League summary data; never an authority for scoreboard scores.
+//! On-demand match summary data for supported competitions; never an authority for scores.
+use crate::model::Competition;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
@@ -34,6 +35,9 @@ pub struct Player {
 #[serde(rename_all = "camelCase")]
 pub struct Details {
     pub match_id: String,
+    /// Missing in saved Premier League caches, which default to that competition.
+    #[serde(default)]
+    pub league: Competition,
     #[serde(default)]
     pub venue: Option<String>,
     pub events: Vec<Event>,
@@ -49,7 +53,7 @@ fn text(v: &Value, key: &str) -> String {
 fn array(v: &Value) -> &[Value] {
     v.as_array().map(Vec::as_slice).unwrap_or(&[])
 }
-pub fn normalize(v: &Value, id: &str) -> Result<Details, String> {
+pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, String> {
     if v["header"]["id"].as_str() != Some(id) || array(&v["header"]["competitions"]).is_empty() {
         return Err("Summary identity/shape mismatch".into());
     }
@@ -129,6 +133,7 @@ pub fn normalize(v: &Value, id: &str) -> Result<Details, String> {
     }
     Ok(Details {
         match_id: id.into(),
+        league,
         venue: v["gameInfo"]["venue"]["fullName"]
             .as_str()
             .map(str::trim)
@@ -179,13 +184,17 @@ fn valid_cached(d: &Details) -> bool {
             .iter()
             .all(|p| bounded(&p.team_id, 128) && bounded(&p.name, 500) && bounded(&p.position, 500))
 }
+fn cache_key(league: Competition, id: &str) -> String {
+    format!("{}:{id}", league.slug())
+}
+
 pub fn deserialize_cache<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Details>, D::Error> {
     let value = Value::deserialize(d)?;
     let mut entries = HashMap::new();
     for item in array(&value).iter().take(48) {
         if let Ok(detail) = serde_json::from_value::<Details>(item.clone()) {
             if valid_cached(&detail) {
-                entries.insert(detail.match_id.clone(), detail);
+                entries.insert(cache_key(detail.league, &detail.match_id), detail);
             }
         }
     }
@@ -202,20 +211,26 @@ impl Cache {
     pub fn seed(&mut self, saved: &[Details]) {
         if self.entries.is_empty() {
             for d in saved.iter().filter(|d| valid_cached(d)).take(24) {
-                self.entries.insert(d.match_id.clone(), d.clone());
+                self.entries
+                    .insert(cache_key(d.league, &d.match_id), d.clone());
             }
         }
     }
 
-    pub async fn get(&mut self, id: &str, active: bool) -> Result<Details, String> {
+    pub async fn get(
+        &mut self,
+        league: Competition,
+        id: &str,
+        active: bool,
+    ) -> Result<Details, String> {
         if self.client.is_none() {
             self.client = crate::provider::client().ok();
         }
         let client = self.client.clone();
-        self.get_with(id, active, Utc::now(), || async {
+        self.get_with(league, id, active, Utc::now(), || async {
             let client =
                 client.ok_or_else(|| Failure::temporary("Could not create summary client"))?;
-            fetch(&client, id).await
+            fetch(&client, league, id).await
         })
         .await
     }
@@ -223,6 +238,7 @@ impl Cache {
     // The clock and transport boundary allow failure/restart tests without ESPN or sleeps.
     async fn get_with<F, Fut>(
         &mut self,
+        league: Competition,
         id: &str,
         active: bool,
         now: DateTime<Utc>,
@@ -232,7 +248,8 @@ impl Cache {
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = Result<Details, Failure>>,
     {
-        let old = self.entries.get(id).cloned();
+        let key = cache_key(league, id);
+        let old = self.entries.get(&key).cloned();
         if let Some(d) = &old {
             let age = DateTime::parse_from_rfc3339(&d.updated_at)
                 .map(|t| now.timestamp() - t.timestamp())
@@ -249,23 +266,23 @@ impl Cache {
         }
         match fetch().await {
             Ok(mut d) => {
-                if d.match_id != id {
+                if d.match_id != id || d.league != league {
                     return self.failed(old, Failure::temporary("Summary identity mismatch"), now);
                 }
                 d.updated_at = now.to_rfc3339();
                 d.stale = false;
                 d.error = None;
-                if self.entries.len() >= 24 && !self.entries.contains_key(id) {
-                    if let Some(key) = self
+                if self.entries.len() >= 24 && !self.entries.contains_key(&key) {
+                    if let Some(oldest) = self
                         .entries
                         .iter()
                         .min_by_key(|(_, v)| &v.updated_at)
                         .map(|(k, _)| k.clone())
                     {
-                        self.entries.remove(&key);
+                        self.entries.remove(&oldest);
                     }
                 }
-                self.entries.insert(id.into(), d.clone());
+                self.entries.insert(key, d.clone());
                 Ok(d)
             }
             Err(e) => self.failed(old, e, now),
@@ -307,6 +324,7 @@ impl Failure {
 }
 fn parse_response(
     id: &str,
+    league: Competition,
     status: u16,
     retry: Option<u64>,
     bytes: &[u8],
@@ -322,11 +340,21 @@ fn parse_response(
     }
     let value: Value = serde_json::from_slice(bytes)
         .map_err(|e| Failure::temporary(format!("Summary {id} JSON: {e}")))?;
-    normalize(&value, id).map_err(|e| Failure::temporary(format!("Summary {id}: {e}")))
+    normalize(&value, id, league).map_err(|e| Failure::temporary(format!("Summary {id}: {e}")))
 }
-async fn fetch(client: &reqwest::Client, id: &str) -> Result<Details, Failure> {
+fn summary_url(league: Competition) -> String {
+    format!(
+        "https://site.api.espn.com/apis/site/v2/sports/soccer/{}/summary",
+        league.slug()
+    )
+}
+async fn fetch(
+    client: &reqwest::Client,
+    league: Competition,
+    id: &str,
+) -> Result<Details, Failure> {
     let mut response = client
-        .get("https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/summary")
+        .get(summary_url(league))
         .query(&[("event", id)])
         .send()
         .await
@@ -338,7 +366,7 @@ async fn fetch(client: &reqwest::Client, id: &str) -> Result<Details, Failure> {
         .and_then(|h| h.to_str().ok())
         .and_then(|s| crate::provider::retry_after(s, Utc::now()));
     if !(200..300).contains(&status) {
-        return parse_response(id, status, retry, &[]);
+        return parse_response(id, league, status, retry, &[]);
     }
     if response.content_length().is_some_and(|n| n > 4_000_000) {
         return Err(Failure::temporary("Summary exceeds size limit"));
@@ -354,7 +382,7 @@ async fn fetch(client: &reqwest::Client, id: &str) -> Result<Details, Failure> {
         }
         bytes.extend_from_slice(&chunk);
     }
-    parse_response(id, status, retry, &bytes)
+    parse_response(id, league, status, retry, &bytes)
 }
 
 #[cfg(test)]

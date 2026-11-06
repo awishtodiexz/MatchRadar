@@ -7,6 +7,13 @@ and versions use semantic versioning.
 
 ### Added
 
+- UEFA Champions League support alongside the Premier League: a persisted
+  Premier League / Champions League / Both selector, chronological Both view
+  with PL/UCL card tags, competition-scoped live counts, a 30-day UCL fixture
+  window, per-competition results and detail caches, and followed-team/match
+  alerts that keep monitoring both leagues regardless of the selected view.
+  Existing Premier League saves, favorites and notification state migrate
+  unchanged; the selector defaults to the Premier League.
 - Automatic off-screen window recovery: after display removal, DPI/resolution
   changes or restore, a widget with no usable monitor area is re-centered on the
   primary work area. Runs at startup, on focus/scale events, and every 30 seconds

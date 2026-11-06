@@ -16,7 +16,7 @@ function alertPresentation(settings:Settings, match:Match) {
   return {state, ended, description, enabled:state==='on', label:state==='on'?'All alerts on':state==='muted'?'Muted':'Team settings'};
 }
 
-export function MatchCard({match, settings, onOpen}: {match:Match; settings:Settings; onOpen:()=>void}) {
+export function MatchCard({match, settings, onOpen, showCompetition=false}: {match:Match; settings:Settings; onOpen:()=>void; showCompetition?:boolean}) {
   const save = useApp(state=>state.save);
   const alerts = alertPresentation(settings, match);
   const name = `${match.home.name} versus ${match.away.name}`;
@@ -32,7 +32,10 @@ export function MatchCard({match, settings, onOpen}: {match:Match; settings:Sett
       <div className={'result '+(match.status==='scheduled'?'scheduled':'')}>
         {match.status==='scheduled' ? <strong className="kickoff">{timeLabel(match.kickoff)}</strong>
           : <div className="scores"><strong>{match.homeScore ?? '–'}</strong><strong>{match.awayScore ?? '–'}</strong></div>}
-        <span className={isLive(match)&&!match.scoreStale?'live-text':''}>{match.status==='live'&&!match.scoreStale&&<i className="dot"/>}{match.scoreStale?'Saved · ':''}{match.detail || match.status}</span>
+        <span className="result-meta">
+          {showCompetition&&<span className="competition-tag" title={match.competition} aria-label={`${match.competition} match`}>{match.league==='championsLeague'?'UCL':'PL'}</span>}
+          <span className={isLive(match)&&!match.scoreStale?'live-text':''}>{match.status==='live'&&!match.scoreStale&&<i className="dot"/>}{match.scoreStale?'Saved · ':''}{match.detail || match.status}</span>
+        </span>
       </div><ChevronRight size={13} className="row-arrow" aria-hidden="true"/>
     </button>
     <button className="icon-button match-bell" data-alert-state={alerts.state} aria-label={alerts.ended?`Match ended: ${name}`:`${action}: ${name}`} aria-pressed={alerts.enabled}
