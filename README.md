@@ -2,70 +2,96 @@
 
 **Your matchday companion, right on your Windows desktop.**
 
-MatchRadar is a compact football widget for keeping Premier League fixtures and scores in view while you work, browse, or play. Built with Tauri, Rust, and React, it puts the match list first and keeps your preferences and cached data locally.
+MatchRadar is a compact Premier League widget that keeps fixtures and scores in
+view while you work, browse, or play. It is built with Tauri 2, Rust, React, and
+TypeScript, keeps preferences and cached data local, and ships as a small NSIS
+installer for 64-bit Windows 10/11.
 
-> **Release status:** Version 1.0.0 is available as a private GitHub release for repository collaborators. Public distribution is still pending the remaining [native runtime checks](docs/VALIDATION.md).
+> **Release status:** [v1.0.0](https://github.com/awishtodiexz/MatchRadar/releases/tag/v1.0.0)
+> is available as a private release for repository collaborators. Public
+> distribution is pending the remaining [native runtime checks](docs/VALIDATION.md).
 
 <table>
   <tr><th>Dark</th><th>Light</th></tr>
   <tr>
-    <td><img src="docs/screenshots/widget-dark.png" alt="MatchRadar widget in dark theme showing demo fixtures" width="390"></td>
-    <td><img src="docs/screenshots/widget-light.png" alt="MatchRadar widget in light theme showing demo fixtures" width="390"></td>
+    <td><img src="docs/screenshots/widget-dark.png" alt="MatchRadar widget in dark theme with test fixtures" width="390"></td>
+    <td><img src="docs/screenshots/widget-light.png" alt="MatchRadar widget in light theme with test fixtures" width="390"></td>
   </tr>
 </table>
 
-*Home screenshots show an earlier browser-rendered interface with test fixtures, not live scores or a native Windows capture. The current build also includes compact fixture filters.*
+*Earlier browser render with test fixtures, not a live or native Windows capture.*
 
-## At a glance
+## What it does
 
-- **A widget for your desktop:** frameless, resizable, with compact and expanded views, adjustable background opacity, and dark or light themes.
-- **Premier League at a glance:** live scores, upcoming fixtures, local kickoff times, competition context, and a league-wide live count. Follow clubs or filter the list to your favorites.
-- **Match Centre:** open a card for an on-demand timeline, team statistics and lineups when ESPN supplies them. Scores remain sourced from the scoreboard.
-- **Find the matches that matter:** switch between All, Live, Following, Upcoming and Results. Results can show completed Premier League games from the previous 14 days, with a separate cache.
-- **Alerts that fit your matchday:** followed-team reminders and match-start alerts, optional goal alerts, and per-match subscribe, mute, or team-default settings.
-- **Built for interruptions:** separate fixture and score refreshes, cached matches, stale-data indicators, retry handling, and a persistent notification queue.
-- **Windows controls:** minimize to the taskbar, hide to the system tray, pin above other windows, and optionally launch at sign-in. See the [runtime checklist](docs/VALIDATION.md) for features still requiring packaged-app verification.
-- **Privacy by design:** no account, API key, analytics, or telemetry. Preferences and cache stay on your device; ESPN requests and crest downloads require network access.
+- **Widget first:** frameless and resizable, with compact and expanded views,
+  adjustable background opacity, dark and light themes, always-on-top, tray
+  controls, and optional launch at sign-in.
+- **Premier League at a glance:** live scores, upcoming fixtures, local kickoff
+  times, competition context, and a league-wide live count. Follow clubs or
+  filter to favorites.
+- **Match Centre:** on-demand timeline, team statistics, and lineups when ESPN
+  supplies them. Scores remain sourced from the scoreboard.
+- **Views that fit matchday:** All, Live, Following, Upcoming, and Results.
+  Results covers completed matches from the previous 14 days with a separate
+  cache.
+- **Alerts:** followed-team reminders, match-start and optional goal alerts,
+  per-match subscribe/mute, persistent deduplication, and a durable retry queue.
+- **Built for interruptions:** independent fixture and score refreshes, offline
+  cache, stale-data labels, and retry/backoff handling.
+- **Private by design:** no account, API key, analytics, or telemetry.
+  Preferences and cache stay on the device; ESPN requests and crest downloads
+  need network access.
 
-## Explore Match Centre
+<img src="docs/screenshots/match-centre-timeline.png" alt="Match Centre timeline for a completed Arsenal and Leeds United fixture" width="320">
 
-<img src="docs/screenshots/match-centre-timeline.png" alt="Match Centre timeline with events from a completed Arsenal and Leeds United fixture" width="320">
+*Browser capture using a recorded completed-match response through mocked IPC;
+not a live or packaged Windows screenshot.*
 
-*Browser capture of the interface using a recorded completed-match response and mocked desktop IPC. It is not a live or packaged Windows screenshot. Timeline, Stats and Lineups appear only when the provider supplies data.*
+## Install
 
-## Install a Windows test build
+MatchRadar targets 64-bit Windows 10/11 with the Microsoft Edge WebView2 runtime.
 
-MatchRadar targets **64-bit Windows 10 and 11** with the Microsoft Edge WebView2 runtime. Installer packaging runs on version tags and manual workflow dispatches; ordinary pushes run lint, tests, and the Rust checks without packaging. Supported versions and native integrations still require the runtime checks described below.
+1. Open the private [v1.0.0 release](https://github.com/awishtodiexz/MatchRadar/releases/tag/v1.0.0)
+   and download `MatchRadar_1.0.0_x64-setup.exe`.
+2. Quit any running MatchRadar instance from its tray menu.
+3. Run the installer and launch MatchRadar. The installer is unsigned, so
+   Windows may show a reputation prompt.
+4. Work through the [Windows runtime checklist](docs/VALIDATION.md).
 
-1. Sign in to GitHub with access to this private repository and open [Windows validation runs](https://github.com/awishtodiexz/MatchRadar/actions/workflows/windows.yml).
-2. Select a successful run for the commit you want to test. Under **Artifacts**, download `matchradar-windows-installer`. Artifacts expire; an older run will not contain later changes.
-3. Quit any running MatchRadar instance from its tray menu. Extract the ZIP and run `MatchRadar_1.0.0_x64-setup.exe`.
-4. Launch MatchRadar and use the [Windows runtime checklist](docs/VALIDATION.md) to test the installer. The installer is unsigned and Windows may display a reputation prompt.
-
-A private [v1.0.0 release](https://github.com/awishtodiexz/MatchRadar/releases/tag/v1.0.0) is available to repository collaborators. Public distribution is still pending.
+For unreleased commits, download the `matchradar-windows-installer` artifact from
+a successful [Windows validation run](https://github.com/awishtodiexz/MatchRadar/actions/workflows/windows.yml).
+Installer packaging runs on `v*` tags and manual dispatches; ordinary pushes run
+checks without packaging. Artifacts expire.
 
 ## Develop
 
-Install Node.js 22 and npm, stable Rust, Microsoft C++ build tools, and WebView2. Follow the official [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/) for Windows.
+Install Node.js 22 and npm, stable Rust, the Microsoft C++ build tools, and
+WebView2. Follow the official [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/)
+for Windows.
 
 ```powershell
 npm ci
-npm run tauri dev
+npm run tauri dev        # native app with live IPC
+npm run dev              # browser shell with test fixtures
 ```
 
-For a browser shell preview, run `npm run dev`. Match data and native controls require the desktop app. Browser verification injects test-only fixtures through mocked IPC and does not validate notifications, tray behavior, or native window sizing.
+Browser previews use test-only fixtures and mocked IPC; they do not validate
+native notifications, tray behavior, or window sizing.
 
 ```powershell
-npm run lint
-npm test
-npm run build
+npm run verify:fast      # lint + frontend tests + production build
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 ```
 
-To build a Windows installer locally, run `.\scripts\build-local.ps1`. It loads the Visual Studio C++ environment, keeps compiler temporary files inside `src-tauri/target`, runs lint, tests, and the frontend build, and prints the installer path and SHA-256. The NSIS output is placed under `src-tauri/target/release/bundle/nsis/`. If your shell already has the MSVC environment loaded, `npm run tauri build` alone is enough. Use `npm.cmd` in PowerShell if script execution policy blocks `npm`; run the script through `powershell -ExecutionPolicy Bypass -File .\scripts\build-local.ps1` if needed.
+To build the installer locally, run `.\scripts\build-local.ps1`. It loads the
+Visual Studio environment, keeps MSVC temp files inside `src-tauri/target`, runs
+the checks, and prints the installer path and SHA-256. Output lands in
+`src-tauri/target/release/bundle/nsis/`. If the MSVC environment is already
+loaded, `npm run tauri build` is enough. If PowerShell blocks unsigned scripts,
+run `powershell -ExecutionPolicy Bypass -File .\scripts\build-local.ps1`.
 
-## Find your way around the code
+## Project layout
 
 | Area | Start here |
 | --- | --- |
@@ -76,27 +102,42 @@ To build a Windows installer locally, run `.\scripts\build-local.ps1`. It loads 
 | ESPN, summaries and results | `src-tauri/src/provider.rs`, `src-tauri/src/details.rs`, `src-tauri/src/results.rs` |
 | Cache and notification reliability | `src-tauri/src/persistence.rs`, `src-tauri/src/alerts.rs`, `src-tauri/src/delivery.rs` |
 
-See the [documentation index](docs/README.md) for the full map and historical evidence.
-
-## Technology
-
-Tauri 2 and Rust handle the native window, background fetching, persistence, and notifications. The interface uses React, TypeScript, Vite, Tailwind CSS, Zustand, and Lucide icons. Vitest and React Testing Library cover frontend behavior; Rust tests cover native domain and reliability logic.
+Tauri and Rust own the native window, networking, persistence, notifications, and
+background refresh. The interface uses React, TypeScript, Vite, Tailwind CSS,
+Zustand, and Lucide icons. Vitest and React Testing Library cover frontend
+behavior; Rust tests cover native domain and reliability logic.
 
 ## Validation and limitations
 
-The [Windows workflow](.github/workflows/windows.yml) runs lint, frontend tests, the TypeScript/Vite build, Rust formatting and tests on every code change, and builds and uploads the Tauri installer for version tags and manual dispatches. The [validation notes](docs/VALIDATION.md) record what has been tested and the remaining Windows checks. A passing build does not prove notification delivery, startup, tray restoration, scaling, sleep/resume, or multi-monitor recovery.
+CI runs lint, frontend tests, the TypeScript/Vite build, Rust formatting, and Rust
+tests on pushes and pull requests; installers are packaged only for `v*` tags and
+manual dispatches. See the [validation notes](docs/VALIDATION.md) for current
+evidence. A passing build does not prove runtime behavior.
 
-- Match Centre events, statistics and lineups depend on provider availability; live/halftime summary shapes still need real-match validation.
-- Dedicated off-screen window recovery is not implemented. HTTP-date and numeric `Retry-After` are parsed; cooldowns are process-local. Sleep/resume behavior and real notification delivery need further validation.
-- Provider outages and changes can affect coverage. Cached data can be stale; the widget labels unconfirmed scores accordingly.
+- Match Centre events, statistics, and lineups depend on provider availability;
+  live and halftime summary shapes still need real-match validation.
+- Off-screen window recovery is not implemented; `Retry-After` cooldowns are
+  process-local. Sleep/resume and real notification delivery need validation.
+- Provider outages can reduce coverage. Cached data can be stale, and the widget
+  labels unconfirmed scores accordingly.
 - Performance has not been benchmarked for release.
 
-## Data, assets, and public release
+## Data, assets, and licensing
 
-Scores and fixtures come from ESPN's **unofficial, undocumented** public JSON endpoints. Their availability, format, rate limits, and usage rights are not guaranteed; MatchRadar is not affiliated with ESPN or the Premier League. Team crests load from ESPN's CDN when available, with initials as a fallback. The competition shield is original MatchRadar artwork. See [data provider notes](docs/DATA_PROVIDER.md).
+Scores and fixtures come from ESPN's **unofficial, undocumented** public JSON
+endpoints. Availability, format, rate limits, and usage rights are not guaranteed;
+MatchRadar is not affiliated with ESPN or the Premier League. Crests load from
+ESPN's CDN when available, with initials as a fallback; the competition shield is
+original artwork. See [data provider notes](docs/DATA_PROVIDER.md).
 
-Before public distribution, select and add a software license, review rights and terms for football data and third-party crests, establish appropriate permissions or replacements, sign the Windows installer, and complete the [release and runtime checks](docs/VALIDATION.md). No distribution rights are asserted here.
+Before public distribution, add a software license, review rights for football
+data and third-party crests, sign the installer, and complete the
+[release and runtime checks](docs/VALIDATION.md). No distribution rights are
+asserted here.
 
 ## Documentation
 
-[Documentation index](docs/README.md) · [Product](docs/PRODUCT.md) · [Architecture](docs/ARCHITECTURE.md) · [Design system](docs/DESIGN_SYSTEM.md) · [Data provider](docs/DATA_PROVIDER.md) · [Validation](docs/VALIDATION.md) · [Roadmap](docs/ROADMAP.md) · [Changelog](CHANGELOG.md) · [Archive](docs/archive/README.md)
+[Index](docs/README.md) · [Product](docs/PRODUCT.md) · [Architecture](docs/ARCHITECTURE.md) ·
+[Design system](docs/DESIGN_SYSTEM.md) · [Data provider](docs/DATA_PROVIDER.md) ·
+[Validation](docs/VALIDATION.md) · [Roadmap](docs/ROADMAP.md) ·
+[Changelog](CHANGELOG.md) · [Archive](docs/archive/README.md)
