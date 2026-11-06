@@ -2,9 +2,9 @@
 
 <!-- snapshot:start -->
 ## Snapshot
-- Updated: 2026-11-06 11:15 (+02:00)
+- Updated: 2026-11-06 11:20 (+02:00)
 - Branch: main
-- Recent: 7498092 docs: add session handoff workflow | a99d3ac docs: tighten README and changelog | 3f3a897 docs: tighten agent guide
+- Recent: 88ae9ae docs: refresh handoff snapshot | 7498092 docs: add session handoff workflow | a99d3ac docs: tighten README and changelog
 <!-- snapshot:end -->
 
 ## Objective
@@ -33,4 +33,5 @@ Keep project state and documentation current across sessions without relying on 
 - `cargo test --locked --manifest-path src-tauri/Cargo.toml` — 87 Rust tests.
 - `.\scripts\build-local.ps1` — local NSIS installer.
 - `.\scripts\handoff.ps1 -Check` — verify handoff freshness.
+- `.\scripts\handoff.ps1 -Check -Strict` — also fail on uncommitted work (use at session start).
 - `git push origin main` — publish (requires user approval).

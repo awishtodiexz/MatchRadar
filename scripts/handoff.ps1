@@ -3,7 +3,8 @@ param(
     [string]$Objective,
     [string[]]$Next,
     [string[]]$Blocker,
-    [switch]$Check
+    [switch]$Check,
+    [switch]$Strict
 )
 
 $ErrorActionPreference = 'Stop'
@@ -50,6 +51,17 @@ if ($Check) {
     }
 
     Write-Host "HANDOFF is current (last updated in $($handoffCommit.Substring(0, 7)))." -ForegroundColor Green
+
+    if ($Strict) {
+        $pending = @((Invoke-Git @('status', '--porcelain')).Output) |
+            Where-Object { $_ -and -not ($_ -match '(^|\s)HANDOFF\.md$') }
+        if (@($pending).Count -gt 0) {
+            Write-Host "Uncommitted work is not described by HANDOFF ($(@($pending).Count) file(s))." -ForegroundColor Yellow
+            @($pending) | ForEach-Object { Write-Host "  $_" }
+            exit 1
+        }
+    }
+
     exit 0
 }
 
