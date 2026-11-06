@@ -1,10 +1,19 @@
 # Validation and Windows runtime checks
 
-For the real-data campaign, current test results, request observations and remaining checks, see [Real data quality report](REAL_DATA_QUALITY_REPORT.md). Browser verification uses a test-only IPC bridge and does not verify a native installation.
+For the real-data campaign, current test results, request observations and remaining checks, see the [archived real data quality report](archive/REAL_DATA_QUALITY_REPORT.md). Browser verification uses a test-only IPC bridge and does not verify a native installation.
 
-Demo mode has been removed; earlier demo references below describe historical checks. Browser checks now use test-only mocked IPC. Local Rust compilation requires the MSVC linker; Windows CI must validate the native migration and installer.
+Demo mode has been removed; earlier demo references below describe historical checks. Browser checks now use test-only mocked IPC.
 
-For the latest feature-branch evidence and acceptance checklist, see [Match Centre integration report](MATCH_CENTRE_EVOLUTION_REPORT.md). Earlier sections below are historical checkpoints and do not validate later commits.
+For the latest feature-branch evidence and acceptance checklist, see the [archived Match Centre integration report](archive/MATCH_CENTRE_EVOLUTION_REPORT.md). Earlier sections below are historical checkpoints and do not validate later commits.
+
+## Current status — 6 November 2026
+
+- `main` at `40c9f05`: Windows validation run [42179795144](https://github.com/awishtodiexz/MatchRadar/actions/runs/42179795144) passed in 3m47s. Installer packaging is skipped on branch pushes and runs for `v*` tags or manual dispatches.
+- MSVC build tools are available locally. `scripts/build-local.ps1` passes lint, 74 frontend tests, the production build, Rust formatting, 87 Rust tests, and produces `MatchRadar_1.0.0_x64-setup.exe` (about 3.35 MB; the SHA-256 changes on each rebuild).
+- The packaged app cannot be launched from the coding-agent sandbox (WebView2 and app-data access are blocked there), so tray, notifications, autostart, DPI, sleep/resume and monitor recovery still require manual Windows checks.
+- Version 1.0.0 exists as a private GitHub release with the CI-built installer.
+
+> Sections below are dated checkpoints. Statements about unavailable MSVC, demo mode, or unbuilt installers describe those dates, not current status.
 
 ## Verification Lite
 
@@ -13,11 +22,11 @@ The subsequent targeted demo/live isolation change adds native regression tests 
 Run `npm ci`, then use these commands from the repository root (`npm.cmd` if needed in PowerShell):
 
 - `npm run verify:fast`: existing ESLint, all frontend tests, and TypeScript/production build. Stops on failure.
-- `npm run verify:ui`: builds the frontend and runs seven Playwright journeys against a local production preview in installed Microsoft Edge. Covers all fixture filters, independent bells, Match Centre tabs and keyboard navigation, back-navigation scroll/focus restoration, both themes, demo progression/reset, unavailable details, and 320/390px overflow. The server is started and stopped by Playwright; port 1420 must be free.
+- `npm run verify:ui`: builds the frontend and runs seven Playwright journeys against a local production preview in installed Microsoft Edge. Covers all fixture filters, independent bells, Match Centre tabs and keyboard navigation, back-navigation scroll/focus restoration, both themes, unavailable details, and 320/390px overflow. The server is started and stopped by Playwright; port 1420 must be free.
 
-Browser tests fix time, locale and timezone, disable motion, block external HTTP and use the existing labelled demo dataset. No native IPC or notifications are sent. Failure screenshots and traces are saved under ignored `verification/artifacts/browser/`; inspect a trace with `npx playwright show-trace <path-to-trace.zip>`. There are no automatically accepted screenshot baselines. Stable behavioral assertions and failure screenshots keep the suite small; pixel comparisons can be added later for a demonstrated regression.
+Browser tests fix time, locale and timezone, disable motion, block external HTTP and use test fixtures. No native IPC or notifications are sent. Failure screenshots and traces are saved under ignored `verification/artifacts/browser/`; inspect a trace with `npx playwright show-trace <path-to-trace.zip>`. There are no automatically accepted screenshot baselines. Stable behavioral assertions and failure screenshots keep the suite small; pixel comparisons can be added later for a demonstrated regression.
 
-The existing Windows workflow remains responsible for Rust compilation/tests and installer packaging. Browser coverage does not certify native notifications, tray/autostart, window sizing, sleep/resume, monitor handling or DPI. Existing F01–F04/provider/store/cache regression tests are retained rather than duplicated. Local MSVC `link.exe` is unavailable, so native tests were not executed for this tooling-only change. Product demo build-time exclusion remains unfinished as documented in [Demo isolation report](DEMO_ISOLATION_REPORT.md); this verification work does not claim otherwise.
+The existing Windows workflow remains responsible for Rust compilation/tests and builds the installer on version tags and manual dispatches. Browser coverage does not certify native notifications, tray/autostart, window sizing, sleep/resume, monitor handling or DPI. Existing F01–F04/provider/store/cache regression tests are retained rather than duplicated.
 
 Future improvement workflow: identify a concrete issue, reproduce or measure it, make one focused change, run the relevant verification tier, compare the outcome, and retain it only when the intended result improves without regressions. Record meaningful evidence in the relevant change description. Stop when the bounded issue is resolved; do not introduce a campaign engine or change tests to conceal failures.
 
@@ -56,7 +65,7 @@ Before accepting a new Windows installer, test the actual outer-window size befo
 
 ## F01–F04 consolidated reliability validation
 
-This integration preserves the audit baseline in `V1_COMPREHENSIVE_AUDIT.md`; its findings describe the pre-fix `ac04df5` implementation. The combined changes cover atomic snapshot replacement/recovery (F01), independent feed/settings ordering and Rust normalization (F02/F14), partial provider results with source freshness (F03), and a bounded durable submission queue (F04). No public-release readiness is implied.
+This integration preserves the audit baseline in `archive/V1_COMPREHENSIVE_AUDIT.md`; its findings describe the pre-fix `ac04df5` implementation. The combined changes cover atomic snapshot replacement/recovery (F01), independent feed/settings ordering and Rust normalization (F02/F14), partial provider results with source freshness (F03), and a bounded durable submission queue (F04). No public-release readiness is implied.
 
 Local integration checks: ESLint, all 30 frontend tests, TypeScript/Vite production build, Rust formatting, workflow YAML validation, and diff checks pass. Native Rust tests were attempted with the locked dependencies but remain unexecuted locally because MSVC `link.exe` is unavailable. No local MSVC installation or Windows installer build was performed. The Windows workflow must run the complete Rust suite and Tauri packaging for the pushed commit before native build success is claimed; report the exact successful run and artifact separately.
 
@@ -110,7 +119,7 @@ Automated build results and artifact URLs should be reported for their exact com
 
 ## Match Centre integration hardening
 
-The local hardening checkpoint passed 57 frontend tests, lint, TypeScript/build and Rust formatting. A dependency-free scheduling metadata compile succeeded; the full native suite (75 test declarations, not a passing count) remains unexecuted without MSVC link.exe. A 213-state browser matrix and actual browser keyboard/reduced-motion checks passed using recorded fixtures through an IPC mock. See MATCH_CENTRE_EVOLUTION_REPORT.md for exact coverage and the Windows checklist. No Windows installer was built for this checkpoint, and prior installer evidence does not validate it.
+The local hardening checkpoint passed 57 frontend tests, lint, TypeScript/build and Rust formatting. A dependency-free scheduling metadata compile succeeded; the full native suite (75 test declarations, not a passing count) remains unexecuted without MSVC link.exe. A 213-state browser matrix and actual browser keyboard/reduced-motion checks passed using recorded fixtures through an IPC mock. See the [archived Match Centre report](archive/MATCH_CENTRE_EVOLUTION_REPORT.md) for exact coverage and the Windows checklist. No Windows installer was built for this checkpoint, and prior installer evidence does not validate it.
 
 ## Rich demo and recent-results follow-up
 

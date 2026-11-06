@@ -4,7 +4,7 @@
 
 MatchRadar is a compact football widget for keeping Premier League fixtures and scores in view while you work, browse, or play. Built with Tauri, Rust, and React, it puts the match list first and keeps your preferences and cached data locally.
 
-> **Release candidate:** Version 1.0.0 is under development and is not yet a public release. Windows installers have built and launched; the remaining [native runtime checks](docs/VALIDATION.md) are still needed.
+> **Release status:** Version 1.0.0 is available as a private GitHub release for repository collaborators. Public distribution is still pending the remaining [native runtime checks](docs/VALIDATION.md).
 
 <table>
   <tr><th>Dark</th><th>Light</th></tr>
@@ -14,7 +14,7 @@ MatchRadar is a compact football widget for keeping Premier League fixtures and 
   </tr>
 </table>
 
-*Home screenshots show an earlier browser-rendered interface with labelled demo fixtures, not live scores or a native Windows capture. The current build also includes compact fixture filters.*
+*Home screenshots show an earlier browser-rendered interface with test fixtures, not live scores or a native Windows capture. The current build also includes compact fixture filters.*
 
 ## At a glance
 
@@ -42,7 +42,7 @@ MatchRadar targets **64-bit Windows 10 and 11** with the Microsoft Edge WebView2
 3. Quit any running MatchRadar instance from its tray menu. Extract the ZIP and run `MatchRadar_1.0.0_x64-setup.exe`.
 4. Launch MatchRadar and use the [Windows runtime checklist](docs/VALIDATION.md) to test the installer. The installer is unsigned and Windows may display a reputation prompt.
 
-No public release is available yet.
+A private [v1.0.0 release](https://github.com/awishtodiexz/MatchRadar/releases/tag/v1.0.0) is available to repository collaborators. Public distribution is still pending.
 
 ## Develop
 
@@ -99,4 +99,4 @@ Before public distribution, select and add a software license, review rights and
 
 ## Documentation
 
-[Documentation index](docs/README.md) ? [Product](docs/PRODUCT.md) · [Architecture](docs/ARCHITECTURE.md) · [Design system](docs/DESIGN_SYSTEM.md) · [Data provider](docs/DATA_PROVIDER.md) · [Validation](docs/VALIDATION.md) · [Audit](docs/V1_COMPREHENSIVE_AUDIT.md) · [Roadmap](docs/ROADMAP.md) · [Changelog](CHANGELOG.md)
+[Documentation index](docs/README.md) · [Product](docs/PRODUCT.md) · [Architecture](docs/ARCHITECTURE.md) · [Design system](docs/DESIGN_SYSTEM.md) · [Data provider](docs/DATA_PROVIDER.md) · [Validation](docs/VALIDATION.md) · [Roadmap](docs/ROADMAP.md) · [Changelog](CHANGELOG.md) · [Archive](docs/archive/README.md)

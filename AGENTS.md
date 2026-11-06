@@ -9,14 +9,14 @@ v1.0 scope.
 
 - `src/App.tsx`: widget, settings, details, and native event subscriptions.
 - `src/store.ts`: Zustand snapshots and native commands; `src/types.ts`: UI models.
-- `src/fixtures.ts`: grouping and ordering; `src/mock.ts`: browser demo data.
+- `src/fixtures.ts`: grouping and ordering; `src/test-fixtures/fixtures.ts`: browser/test data.
 - `src/teams.ts`: supported club IDs and validated crest candidates.
 - `src/styles.css`: shared visual styling.
 - `src-tauri/src/main.rs`: commands, polling, persistence, notifications, and lifecycle.
 - `src-tauri/src/provider.rs`: ESPN requests, normalization, merging, and tests.
 - `src-tauri/src/model.rs`: native models and defaults.
 - `src-tauri/tauri.conf.json` and `src-tauri/capabilities/default.json`: native configuration.
-- `.github/workflows/windows.yml`: Windows validation and installer packaging.
+- `.github/workflows/windows.yml`: Windows validation; installer packaging on `v*` tags and manual dispatches.
 
 Read relevant context in `docs/ARCHITECTURE.md`, `docs/DATA_PROVIDER.md`,
 `docs/DESIGN_SYSTEM.md`, and `docs/PRODUCT.md` before changing behavior.
@@ -28,8 +28,7 @@ preference store or make polling depend on a mounted component.
 
 The repository contains tray, single-instance, window-state, autostart, and
 notification integration. Their presence does not prove packaged Windows behavior.
-Provider event/statistics details and deterministic demo transitions are not
-implemented; dedicated monitor-disconnection recovery is not implemented, and
+Provider event/statistics details are not fully implemented; dedicated monitor-disconnection recovery is not implemented, and
 sleep/resume and score-correction handling still need validation and hardening.
 
 The rules below are engineering requirements, not a declaration of completed
@@ -84,7 +83,7 @@ infer completion from old roadmap text, configured plugins, or a passing build.
 
 - Treat ESPN as unofficial, untrusted, and replaceable. Keep its response shape
   outside UI components; normalize stable IDs and UTC timestamps.
-- Never fill live-data gaps with fictional fixtures. Label explicit demo mode.
+- Never fill live-data gaps with fictional fixtures; demo mode has been removed.
 - Skip malformed individual fixtures; distinguish valid empty responses from
   invalid payloads or HTTP errors. Preserve cached fixtures when requests fail.
 - Retain monthly fixture and single-day score queries unless actual responses
@@ -109,14 +108,20 @@ Run commands from the repository root; use `npm.cmd` if PowerShell blocks npm.
 | Purpose | Command |
 | --- | --- |
 | Install locked dependencies | `npm ci` |
-| Browser demo preview | `npm run dev` |
+| Browser preview | `npm run dev` |
 | Native development | `npm run tauri dev` |
 | Frontend lint | `npm run lint` |
 | Frontend tests | `npm test` |
 | TypeScript and frontend build | `npm run build` |
 | Fast Rust check | `cargo check --manifest-path src-tauri/Cargo.toml` |
 | Rust tests | `cargo test --manifest-path src-tauri/Cargo.toml` |
-| Windows NSIS installer | `npm run tauri build` |
+| Windows NSIS installer | `.\scripts\build-local.ps1` (loads VS dev shell, checks, installer) |
+| Direct installer build | `npm run tauri build` (requires the MSVC environment already loaded) |
+
+- `scripts/build-local.ps1` loads the Visual Studio developer environment, keeps
+  MSVC temp files inside `src-tauri/target/.build-temp`, runs lint/frontend
+  tests/build, Rust formatting/tests, and prints the installer path and SHA-256.
+  It requires the Visual Studio Build Tools C++ workload.
 
 - Start with focused checks. Validate frontend changes with relevant tests, lint,
   and frontend build; Rust changes with relevant Rust checks/tests. Check both
@@ -129,15 +134,16 @@ Run commands from the repository root; use `npm.cmd` if PowerShell blocks npm.
 - Iterate with frontend previews, `cargo check`, focused tests, and native debug
   runs. Reserve full Tauri packaging for installer or native integration validation,
   requested artifacts, and release checkpoints—not every edit.
-- Batch related fixes before pushing: the current CI packages pushes and PRs.
-  Do not disable checks to save build time. Report missing prerequisites instead
-  of repeating unchanged failing builds.
+- Batch related fixes before pushing: CI runs checks on pushes and PRs and
+  packages installers only on `v*` tags or manual dispatch. Do not disable
+  checks to save build time. Report missing prerequisites instead of repeating
+  unchanged failing builds.
 
 ## Debugging and verification evidence
 
 - Reproduce the failure and inspect actual logs/responses. Trace the failing
   boundary: provider, normalization, cache, IPC, UI, or packaging.
-- Fix the cause; do not hide errors, weaken tests, or substitute demo data.
+- Fix the cause; do not hide errors, weaken tests, or substitute fixtures.
   Inspect the failed job and commit SHA before addressing CI failures.
 - Distinguish automated tests, browser inspection, native development, and packaged
   Windows testing. Installer success requires the intended GitHub commit's
