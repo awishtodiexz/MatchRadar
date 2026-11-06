@@ -4,7 +4,7 @@
 ## Snapshot
 - Updated: 2026-11-06 11:15 (+02:00)
 - Branch: main
-- Recent: 0c4b492 docs: add session handoff workflow | a99d3ac docs: tighten README and changelog | 3f3a897 docs: tighten agent guide
+- Recent: 7498092 docs: add session handoff workflow | a99d3ac docs: tighten README and changelog | 3f3a897 docs: tighten agent guide
 <!-- snapshot:end -->
 
 ## Objective
