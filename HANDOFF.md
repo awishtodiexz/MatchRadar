@@ -2,19 +2,20 @@
 
 <!-- snapshot:start -->
 ## Snapshot
-- Updated: 2026-11-06 11:20 (+02:00)
+- Updated: 2026-11-06 11:21 (+02:00)
 - Branch: main
-- Recent: 88ae9ae docs: refresh handoff snapshot | 7498092 docs: add session handoff workflow | a99d3ac docs: tighten README and changelog
+- Recent: 7947927 docs: add strict handoff check and refresh snapshot | 88ae9ae docs: refresh handoff snapshot | 7498092 docs: add session handoff workflow
 <!-- snapshot:end -->
 
 ## Objective
 
-Keep project state and documentation current across sessions without relying on chat history.
+Start a planned major update to MatchRadar. Requirements are not written down yet; gather them before changing code.
 
 ## Next steps
 
-1. Push the four local commits (docs cleanup, agent guide, README/CHANGELOG, handoff workflow) to origin/main and confirm CI.
-2. Start the next feature in a fresh thread using AGENTS.md and HANDOFF.md.
+1. Get the update described: goals, affected areas (UI, provider, native, packaging), and what must not regress.
+2. Write a short plan and confirm scope before editing.
+3. Work local-first; commit locally; push only when the user says so.
 
 ## Blockers
 
