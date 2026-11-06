@@ -131,7 +131,7 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
         {!!Object.keys(settings.matchAlerts).length&&<button className="text-button reset-all" onClick={()=>{panel.current?.focus();update({matchAlerts:{}});}}>Reset match bells to team defaults</button>}
       </>}
       {section==='App'&&<>
-        <div className="section-intro"><h3>MatchRadar <span className="version">1.0.0</span></h3><p>Your personal matchday companion.</p></div>
+        <div className="section-intro"><h3>MatchRadar <span className="version">1.1.0</span></h3><p>Your personal matchday companion.</p></div>
         <Toggle label="Launch with Windows" description={!native?'Available in the desktop app':startupError?'Startup preference unavailable':autostart===null?'Checking startup preference…':'Open MatchRadar when you sign in'} disabled={!native||autostart===null} value={autostart??false} onChange={value=>{void (value?enable():disable()).then(()=>setAutostart(value)).catch(()=>setNotice('Could not change the Windows startup setting.'));}}/>
         {startupError&&<p className="notice" role="status">Could not read the Windows startup setting. Reopen Settings to try again.</p>}
         <div className="about"><CircleHelp size={17}/><p>Scores use ESPN’s unofficial endpoints and may be unavailable or change. MatchRadar is not affiliated with ESPN, the Premier League, or UEFA.</p></div>

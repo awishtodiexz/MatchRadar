@@ -15,6 +15,10 @@ For the latest feature-branch evidence and acceptance checklist, see the [archiv
 
 > Sections below are dated checkpoints. Statements about unavailable MSVC, demo mode, or unbuilt installers describe those dates, not current status.
 
+## Release 1.1.0 local installer — 6 November 2026
+
+`v1.1.0` was packaged locally with `.\scripts\build-local.ps1`, not from a GitHub Actions artifact. The script passed locked dependency installation, lint, **88 frontend tests**, the production frontend build, Rust formatting and **107 Rust tests**, then compiled the release binary and produced `MatchRadar_1.1.0_x64-setup.exe` (3,381,075 bytes, SHA-256 `ABCA3D48AB8379977ABB52C563D2BBFE852D28ED6FD12A35D192DCAEED8AF641`). The installer is unsigned and was not executed or installed in the coding sandbox; packaged runtime behavior still needs the [Windows checklist](#packaged-windows-acceptance-checklist).
+
 ## Off-screen window recovery — 6 November 2026
 
 `src-tauri/src/window.rs` recovers the widget when no attached monitor shows a usable part of it (at least 64×48 physical pixels). Recovery runs after window-state restoration, on focus and scale-factor changes, and from a 30-second watchdog, because Windows can remove a display without delivering a window event. It centers on the primary work area (or a monitor that still overlaps), skips hidden/minimized windows, and pins oversized widgets to the work area's top-left. Placement is a pure function; the Tauri wrapper only reads monitors and applies the result.

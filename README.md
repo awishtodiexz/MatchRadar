@@ -11,9 +11,10 @@ and ships as a small NSIS installer for 64-bit Windows 10/11.
 
 **Requirements:** 64-bit Windows 10/11 with the Microsoft Edge WebView2 runtime.
 
-> **Release status:** [v1.0.0](https://github.com/awishtodiexz/MatchRadar/releases/tag/v1.0.0)
-> is available as a private release for repository collaborators. Public
-> distribution is pending the remaining [native runtime checks](docs/VALIDATION.md).
+> **Release status:** [v1.1.0](https://github.com/awishtodiexz/MatchRadar/releases/tag/v1.1.0)
+> is available as a private release for repository collaborators with the
+> Premier League + Champions League update. Public distribution is pending the
+> remaining [native runtime checks](docs/VALIDATION.md).
 
 ## Screenshots
 
@@ -58,8 +59,8 @@ ESPN's CDN. They are not packaged Windows captures.*
 
 MatchRadar targets 64-bit Windows 10/11 with the Microsoft Edge WebView2 runtime.
 
-1. Open the private [v1.0.0 release](https://github.com/awishtodiexz/MatchRadar/releases/tag/v1.0.0)
-   and download `MatchRadar_1.0.0_x64-setup.exe`.
+1. Open the private [v1.1.0 release](https://github.com/awishtodiexz/MatchRadar/releases/tag/v1.1.0)
+   and download `MatchRadar_1.1.0_x64-setup.exe`.
 2. Quit any running MatchRadar instance from its tray menu.
 3. Run the installer and launch MatchRadar. The installer is unsigned, so
    Windows may show a reputation prompt.

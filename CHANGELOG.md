@@ -5,6 +5,8 @@ and versions use semantic versioning.
 
 ## Unreleased
 
+## [1.1.0] — 2026-11-06
+
 ### Added
 
 - UEFA Champions League support alongside the Premier League: a persisted

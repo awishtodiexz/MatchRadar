@@ -2,20 +2,20 @@
 
 <!-- snapshot:start -->
 ## Snapshot
-- Updated: 2026-11-06 13:07 (+02:00)
+- Updated: 2026-11-06 13:22 (+02:00)
 - Branch: main
-- Recent: ea7f873 feat: add UEFA Champions League support | b4a2183 docs: record local window-recovery runtime evidence | 1444f11 docs: pair the widget and Match Centre screenshots
+- Recent: e273772 feat: unify club following and organize Teams settings | ea7f873 feat: add UEFA Champions League support | b4a2183 docs: record local window-recovery runtime evidence
 <!-- snapshot:end -->
 
 ## Objective
 
-Unified club following across the Premier League and Champions League, with Teams settings grouped into Followed / Premier League / Other clubs and Following filtering verified in every competition view.
+MatchRadar 1.1.0 (Premier League + Champions League, unified following, window recovery) is committed, built locally as an unsigned NSIS installer, and published as a downloadable GitHub release.
 
 ## Next steps
 
-1. Run packaged Windows acceptance for both competitions: selector persistence, Teams groups at 320/390px, following a non-PL club, UCL Match Centre/Results, alerts and tray delivery while viewing the other competition, DPI/monitor/sleep-resume checks.
+1. Install `MatchRadar_1.1.0_x64-setup.exe` and run the packaged Windows acceptance: selector persistence, Teams groups at 320/390px, following a non-PL club, UCL Match Centre/Results, alerts and tray delivery while viewing the other competition, DPI/monitor/sleep-resume checks.
 2. Verify UCL live/halftime summary shapes when a live UCL fixture is available.
-3. Push only when the user authorizes it; no installer was built for this change.
+3. Review signing, licensing and public-distribution decisions before a public release.
 
 ## Blockers
 
@@ -31,10 +31,11 @@ Unified club following across the Premier League and Champions League, with Team
 - ESPN event IDs are globally allocated; the stored competition keeps attribution and cache isolation explicit without rewriting legacy match IDs.
 - ESPN team IDs are identical for clubs in both competitions (verified against the real PL/UCL team feeds), so favorites remain one ID list and need no mapping. Match bells stay independent.
 - Teams groups Followed clubs, Premier League clubs (static catalog plus any PL fixture participant), and a collapsed Other clubs list for discovered non-PL sides; search spans all groups.
+- v1.1.0 is packaged locally (unsigned, SHA-256 `ABCA3D48AB8379977ABB52C563D2BBFE852D28ED6FD12A35D192DCAEED8AF641`) and attached to https://github.com/awishtodiexz/MatchRadar/releases/tag/v1.1.0; no Actions artifact is used for the release asset.
 
 ## Commands
 
-- `npm run verify:fast` — lint, 87 frontend tests, production build.
+- `npm run verify:fast` — lint, 88 frontend tests, production build.
 - `npm run verify:ui` — 28 Playwright journeys at 320/390px in both themes.
 - `cargo test --locked --manifest-path src-tauri/Cargo.toml` — 107 Rust tests (use the Visual Studio developer environment with `TEMP` under `src-tauri/target`, as `build-local.ps1` does).
 - `.\scripts\build-local.ps1` — local NSIS installer.
