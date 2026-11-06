@@ -19,7 +19,15 @@ For the latest feature-branch evidence and acceptance checklist, see the [archiv
 
 `src-tauri/src/window.rs` recovers the widget when no attached monitor shows a usable part of it (at least 64×48 physical pixels). Recovery runs after window-state restoration, on focus and scale-factor changes, and from a 30-second watchdog, because Windows can remove a display without delivering a window event. It centers on the primary work area (or a monitor that still overlaps), skips hidden/minimized windows, and pins oversized widgets to the work area's top-left. Placement is a pure function; the Tauri wrapper only reads monitors and applies the result.
 
-Nine deterministic unit tests cover fully lost, sliver, usable, spanning, detached-primary, oversized, taskbar-inset, no-monitor and idempotent cases. `cargo test --locked` passed 96 tests with the Visual Studio developer environment and `TEMP` redirected under `src-tauri/target`; a plain shell still reproduces the documented MSVC `D8050` temp-directory failure. `cargo fmt --check` and `npm run verify:fast` (74 tests, lint, production build) pass. Browser checks cannot exercise native monitor placement, and no installer was built for this change.
+Nine deterministic unit tests cover fully lost, sliver, usable, spanning, detached-primary, oversized, taskbar-inset, no-monitor and idempotent cases. `cargo test --locked` passed 96 tests with the Visual Studio developer environment and `TEMP` redirected under `src-tauri/target`; a plain shell still reproduces the documented MSVC `D8050` temp-directory failure. `cargo fmt --check` and `npm run verify:fast` (74 tests, lint, production build) pass. No installer was built for this change.
+
+The native window path was also exercised on this machine, outside the packaged app. The sandbox blocks WebView2's default profile and app-data writes, so the debug binary was built with a test-only `appDirectoriesOverride` pointing at `src-tauri/target/.build-temp/appdata` and launched with `WEBVIEW2_USER_DATA_FOLDER` inside the workspace. Using `SetProcessDpiAwarenessContext` and Win32 `GetWindowRect`/`SetWindowPos` against the running 390×700 window:
+
+- Moved to `(12000, 12000)`: the watchdog returned it to `(757, 161)`, centered in the 1920×1080 work area, without a restart.
+- Placed at `(1720, 100)` with 200 physical pixels visible: unchanged after 34 seconds (no false positive).
+- Placed at `(1900, 100)` with a 20-pixel sliver visible: recovered to `(757, 162)`.
+
+The test instance was stopped, the temporary app-data directories were removed, and the normal debug binary was rebuilt. This validates the placement arithmetic, monitor enumeration, watchdog cadence and Win32 integration on Windows 11, but not tray restore, physical monitor removal, mixed-DPI layouts or the packaged installer.
 
 Packaged Windows checks: move the widget to a secondary display, disconnect that display, and confirm the widget reappears centered on the primary within 30 seconds; repeat with the app hidden to tray, then show it. Change display scale, resolution and arrangement; test negative-origin (left/above) monitors; and confirm taskbar space is respected. Verify that intentionally edge-docked windows with a usable visible patch are not moved, and that focus/scale events do not cause placement loops at mixed DPI.
 

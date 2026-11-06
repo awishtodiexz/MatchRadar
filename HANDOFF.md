@@ -2,14 +2,14 @@
 
 <!-- snapshot:start -->
 ## Snapshot
-- Updated: 2026-11-06 12:03 (+02:00)
+- Updated: 2026-11-06 12:05 (+02:00)
 - Branch: main
-- Recent: 4582bf5 docs: refresh README presentation | def6223 feat: recover the widget when it is off-screen | 38d4d44 chore: normalize line endings and finish repo metadata
+- Recent: 1444f11 docs: pair the widget and Match Centre screenshots | 4582bf5 docs: refresh README presentation | def6223 feat: recover the widget when it is off-screen
 <!-- snapshot:end -->
 
 ## Objective
 
-Add off-screen window recovery so the widget returns to a visible display after monitor removal or DPI/resolution changes.
+Off-screen window recovery is implemented, unit-tested and exercised against the running native window; packaged Windows acceptance remains.
 
 ## Next steps
 
