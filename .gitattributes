@@ -1,0 +1,16 @@
+# Normalize line endings and mark binary assets.
+* text=auto
+
+.gitattributes text eol=lf
+
+# Shell scripts must stay LF or the Git hook fails with a bad interpreter.
+*.sh text eol=lf
+.githooks/* text eol=lf
+
+# PowerShell and TypeScript are fine with LF, but keep them text.
+*.ps1 text eol=lf
+*.md text eol=lf
+
+*.png binary
+*.ico binary
+*.exe binary

@@ -2,9 +2,9 @@
 
 <!-- snapshot:start -->
 ## Snapshot
-- Updated: 2026-11-06 11:21 (+02:00)
+- Updated: 2026-11-06 11:41 (+02:00)
 - Branch: main
-- Recent: 7947927 docs: add strict handoff check and refresh snapshot | 88ae9ae docs: refresh handoff snapshot | 7498092 docs: add session handoff workflow
+- Recent: 83e979f docs: point handoff at the upcoming update | 7947927 docs: add strict handoff check and refresh snapshot | 88ae9ae docs: refresh handoff snapshot
 <!-- snapshot:end -->
 
 ## Objective
