@@ -1,5 +1,7 @@
 # MatchRadar
 
+[![Windows validation](https://github.com/awishtodiexz/MatchRadar/actions/workflows/windows.yml/badge.svg)](https://github.com/awishtodiexz/MatchRadar/actions/workflows/windows.yml)
+
 **Your matchday companion, right on your Windows desktop.**
 
 MatchRadar is a compact Premier League widget that keeps fixtures and scores in
@@ -7,19 +9,26 @@ view while you work, browse, or play. It is built with Tauri 2, Rust, React, and
 TypeScript, keeps preferences and cached data local, and ships as a small NSIS
 installer for 64-bit Windows 10/11.
 
+**Requirements:** 64-bit Windows 10/11 with the Microsoft Edge WebView2 runtime.
+
 > **Release status:** [v1.0.0](https://github.com/awishtodiexz/MatchRadar/releases/tag/v1.0.0)
 > is available as a private release for repository collaborators. Public
 > distribution is pending the remaining [native runtime checks](docs/VALIDATION.md).
 
+## Screenshots
+
 <table>
   <tr><th>Dark</th><th>Light</th></tr>
   <tr>
-    <td><img src="docs/screenshots/widget-dark.png" alt="MatchRadar widget in dark theme with test fixtures" width="390"></td>
-    <td><img src="docs/screenshots/widget-light.png" alt="MatchRadar widget in light theme with test fixtures" width="390"></td>
+    <td><img src="docs/screenshots/widget-dark.png" alt="MatchRadar widget in dark theme" width="390"></td>
+    <td><img src="docs/screenshots/widget-light.png" alt="MatchRadar widget in light theme" width="390"></td>
   </tr>
 </table>
 
-*Earlier browser render with test fixtures, not a live or native Windows capture.*
+<img src="docs/screenshots/match-centre-timeline.png" alt="Match Centre timeline for a completed Arsenal and Chelsea fixture" width="320">
+
+*Browser renders from the current build using test fixtures and crests from
+ESPN's CDN. They are not packaged Windows captures.*
 
 ## What it does
 
@@ -42,11 +51,6 @@ installer for 64-bit Windows 10/11.
 - **Private by design:** no account, API key, analytics, or telemetry.
   Preferences and cache stay on the device; ESPN requests and crest downloads
   need network access.
-
-<img src="docs/screenshots/match-centre-timeline.png" alt="Match Centre timeline for a completed Arsenal and Leeds United fixture" width="320">
-
-*Browser capture using a recorded completed-match response through mocked IPC;
-not a live or packaged Windows screenshot.*
 
 ## Install
 
@@ -132,10 +136,12 @@ MatchRadar is not affiliated with ESPN or the Premier League. Crests load from
 ESPN's CDN when available, with initials as a fallback; the competition shield is
 original artwork. See [data provider notes](docs/DATA_PROVIDER.md).
 
+**License:** none selected yet. The repository is private and no distribution
+rights are granted.
+
 Before public distribution, add a software license, review rights for football
 data and third-party crests, sign the installer, and complete the
-[release and runtime checks](docs/VALIDATION.md). No distribution rights are
-asserted here.
+[release and runtime checks](docs/VALIDATION.md).
 
 ## Documentation
 
