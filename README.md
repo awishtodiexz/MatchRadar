@@ -18,14 +18,12 @@ installer for 64-bit Windows 10/11.
 ## Screenshots
 
 <table>
-  <tr><th>Dark</th><th>Light</th></tr>
+  <tr><th>Widget</th><th>Match Centre</th></tr>
   <tr>
-    <td><img src="docs/screenshots/widget-dark.png" alt="MatchRadar widget in dark theme" width="390"></td>
-    <td><img src="docs/screenshots/widget-light.png" alt="MatchRadar widget in light theme" width="390"></td>
+    <td><img src="docs/screenshots/widget-dark.png" alt="MatchRadar widget in dark theme showing fixtures and live scores" width="390"></td>
+    <td><img src="docs/screenshots/match-centre-timeline.png" alt="Match Centre timeline for a completed Arsenal and Chelsea fixture" width="320"></td>
   </tr>
 </table>
-
-<img src="docs/screenshots/match-centre-timeline.png" alt="Match Centre timeline for a completed Arsenal and Chelsea fixture" width="320">
 
 *Browser renders from the current build using test fixtures and crests from
 ESPN's CDN. They are not packaged Windows captures.*

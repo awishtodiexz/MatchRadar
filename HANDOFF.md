@@ -2,9 +2,9 @@
 
 <!-- snapshot:start -->
 ## Snapshot
-- Updated: 2026-11-06 11:57 (+02:00)
+- Updated: 2026-11-06 12:03 (+02:00)
 - Branch: main
-- Recent: 85e46d0 docs: refresh README presentation | def6223 feat: recover the widget when it is off-screen | 38d4d44 chore: normalize line endings and finish repo metadata
+- Recent: 4582bf5 docs: refresh README presentation | def6223 feat: recover the widget when it is off-screen | 38d4d44 chore: normalize line endings and finish repo metadata
 <!-- snapshot:end -->
 
 ## Objective
