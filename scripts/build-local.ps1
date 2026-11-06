@@ -55,6 +55,7 @@ try {
     if (-not $SkipInstall) {
         Invoke-Step 'Install locked dependencies' { & $npm ci --no-audit --no-fund }
     }
+    Invoke-Step 'Version check' { & node 'scripts/check-version.mjs' }
     Invoke-Step 'Lint' { & $npm run lint }
     if (-not $SkipTests) {
         Invoke-Step 'Frontend tests' { & $npm test }

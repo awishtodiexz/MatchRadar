@@ -401,6 +401,7 @@ async fn poll(app: tauri::AppHandle) {
                 }
             }
         }
+        let requests = provider::take_request_count();
         let mut retry_after: Option<u64> = None;
         {
             let mut s = state.snapshot.lock().unwrap();
@@ -443,6 +444,17 @@ async fn poll(app: tauri::AppHandle) {
                 }
             } else {
                 failures = 0;
+            }
+        }
+        if force && requests > 0 {
+            let message = format!("Manual refresh used {requests} scoreboard request(s)");
+            eprintln!("MatchRadar: {message}");
+            if let Ok(mut log) = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(state.path.with_file_name("provider.log"))
+            {
+                let _ = writeln!(log, "{} {message}", Utc::now().to_rfc3339());
             }
         }
         if let Ok(mut s) = state.snapshot.lock() {

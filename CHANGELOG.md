@@ -5,6 +5,16 @@ and versions use semantic versioning.
 
 ## Unreleased
 
+### Added
+
+- `scripts/release-local.ps1`: builds the installer, prints its SHA-256 and, with `-Publish`, creates a GitHub release from the local asset after requiring a clean tree and unused tag.
+- Request-count diagnostics for manual refreshes and a documented [local release process](docs/RELEASING.md).
+
+### Changed
+
+- Version is read from `package.json` in the UI; `npm run check:version` enforces agreement with `Cargo.toml` and `tauri.conf.json` in local builds and CI.
+- Teams labels clarify that Following-only spans every competition and Other clubs are outside the Premier League.
+
 ## [1.1.0] — 2026-11-06
 
 ### Added

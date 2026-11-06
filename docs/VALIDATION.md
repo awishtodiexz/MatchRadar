@@ -15,6 +15,12 @@ For the latest feature-branch evidence and acceptance checklist, see the [archiv
 
 > Sections below are dated checkpoints. Statements about unavailable MSVC, demo mode, or unbuilt installers describe those dates, not current status.
 
+### Refresh measurements — 6 November 2026
+
+Three manual refreshes from the running debug build (real ESPN data, both competitions) each issued **5 scoreboard HTTP requests**: one Premier League fixture month, one PL score day, two Champions League fixture months (its 30-day window crossed November/December) and one UCL score day. Manual refreshes deliberately force both competitions; ordinary polling keeps fixture queries to six-hour intervals per competition.
+
+After those refreshes, the debug process was sampled every five seconds for 60 seconds: working set **101.1–101.2 MB**, private memory **9.0–9.1 MB**, thread count settling from 33 to 29. This is a debug build including WebView2, not the packaged release; it is a short stability check, not a long soak or installer measurement. Release packages should be re-measured after installation.
+
 ## Release 1.1.0 local installer — 6 November 2026
 
 `v1.1.0` was packaged locally with `.\scripts\build-local.ps1`, not from a GitHub Actions artifact. The script passed locked dependency installation, lint, **88 frontend tests**, the production frontend build, Rust formatting and **107 Rust tests**, then compiled the release binary and produced `MatchRadar_1.1.0_x64-setup.exe` (3,381,075 bytes, SHA-256 `ABCA3D48AB8379977ABB52C563D2BBFE852D28ED6FD12A35D192DCAEED8AF641`). The installer is unsigned and was not executed or installed in the coding sandbox; packaged runtime behavior still needs the [Windows checklist](#packaged-windows-acceptance-checklist).

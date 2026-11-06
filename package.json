@@ -8,8 +8,9 @@
     "build": "tsc -b && vite build --configLoader runner",
     "test": "vitest run src --configLoader runner",
     "lint": "eslint .",
+    "check:version": "node scripts/check-version.mjs",
     "tauri": "tauri",
-    "verify:fast": "npm run lint && npm test && npm run build",
+    "verify:fast": "npm run check:version && npm run lint && npm test && npm run build",
     "verify:ui": "npm run build && playwright test --config verification/playwright.config.ts"
   },
   "dependencies": {

@@ -36,6 +36,7 @@ jobs:
         with:
           workspaces: src-tauri -> target
       - run: npm ci
+      - run: npm run check:version
       - run: npm run lint
       - run: npm test
       - run: npm run build

@@ -2,20 +2,20 @@
 
 <!-- snapshot:start -->
 ## Snapshot
-- Updated: 2026-11-06 13:22 (+02:00)
+- Updated: 2026-11-06 21:25 (+02:00)
 - Branch: main
-- Recent: e273772 feat: unify club following and organize Teams settings | ea7f873 feat: add UEFA Champions League support | b4a2183 docs: record local window-recovery runtime evidence
+- Recent: 33fb413 release: MatchRadar 1.1.0 | e273772 feat: unify club following and organize Teams settings | ea7f873 feat: add UEFA Champions League support
 <!-- snapshot:end -->
 
 ## Objective
 
-MatchRadar 1.1.0 (Premier League + Champions League, unified following, window recovery) is committed, built locally as an unsigned NSIS installer, and published as a downloadable GitHub release.
+1.1.0 is released; post-release improvements (single-sourced version checks, guarded local-release script, Teams captions, refresh request diagnostics and short measurements) are implemented locally and ready for a decision on 1.1.1.
 
 ## Next steps
 
 1. Install `MatchRadar_1.1.0_x64-setup.exe` and run the packaged Windows acceptance: selector persistence, Teams groups at 320/390px, following a non-PL club, UCL Match Centre/Results, alerts and tray delivery while viewing the other competition, DPI/monitor/sleep-resume checks.
 2. Verify UCL live/halftime summary shapes when a live UCL fixture is available.
-3. Review signing, licensing and public-distribution decisions before a public release.
+3. Decide whether the post-release version-check/release-script/Teams/diagnostic changes warrant a 1.1.1 build, and review signing, licensing and public-distribution decisions.
 
 ## Blockers
 
@@ -32,6 +32,8 @@ MatchRadar 1.1.0 (Premier League + Champions League, unified following, window r
 - ESPN team IDs are identical for clubs in both competitions (verified against the real PL/UCL team feeds), so favorites remain one ID list and need no mapping. Match bells stay independent.
 - Teams groups Followed clubs, Premier League clubs (static catalog plus any PL fixture participant), and a collapsed Other clubs list for discovered non-PL sides; search spans all groups.
 - v1.1.0 is packaged locally (unsigned, SHA-256 `ABCA3D48AB8379977ABB52C563D2BBFE852D28ED6FD12A35D192DCAEED8AF641`) and attached to https://github.com/awishtodiexz/MatchRadar/releases/tag/v1.1.0; no Actions artifact is used for the release asset.
+- The UI reads its version from `package.json`; `npm run check:version` enforces Cargo/Tauri agreement in `verify:fast`, local builds and CI. `scripts/release-local.ps1` builds, hashes and optionally publishes the local asset.
+- Manual refresh measured 5 scoreboard requests; a 60s debug-build sample held at ~101 MB working / ~9 MB private with stable threads. These are short debug measurements, not packaged-release numbers.
 
 ## Commands
 

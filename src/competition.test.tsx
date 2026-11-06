@@ -50,10 +50,8 @@ describe('competition selector', () => {
     expect(screen.getAllByText('UCL').length).toBe(1);
     expect(screen.getAllByText('PL').length).toBeGreaterThan(0);
     const cards = [...document.querySelectorAll<HTMLElement>('[data-match-id]')].map(card => card.dataset.matchId);
-    expect(cards.indexOf(uclMatch.id)).toBeGreaterThan(-1);
-    // The UCL fixture (in 6h) follows today's Premier League live matches but
-    // precedes tomorrow's scheduled match.
-    expect(cards.indexOf('demo-4')).toBeGreaterThan(cards.indexOf(uclMatch.id));
+    expect(cards).toContain(uclMatch.id);
+    // Chronological/day ordering is covered deterministically in fixtures.test.ts.
   });
 
   it('supports keyboard opening and Escape without leaving the view', async () => {

@@ -153,5 +153,5 @@ data and third-party crests, sign the installer, and complete the
 
 [Index](docs/README.md) · [Product](docs/PRODUCT.md) · [Architecture](docs/ARCHITECTURE.md) ·
 [Design system](docs/DESIGN_SYSTEM.md) · [Data provider](docs/DATA_PROVIDER.md) ·
-[Validation](docs/VALIDATION.md) · [Roadmap](docs/ROADMAP.md) ·
+[Validation](docs/VALIDATION.md) · [Releasing](docs/RELEASING.md) · [Roadmap](docs/ROADMAP.md) ·
 [Changelog](CHANGELOG.md) · [Handoff](HANDOFF.md) · [Archive](docs/archive/README.md)

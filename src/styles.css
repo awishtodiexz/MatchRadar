@@ -316,3 +316,4 @@ footer { min-height: 52px; display: flex; align-items: center; justify-content: 
 .team-group-toggle svg { margin-left: auto; color: var(--muted); transition: transform .16s; }
 .team-group-toggle svg.rotated { transform: rotate(180deg); }
 .team-group .club-list { margin-top: var(--space-1); }
+.team-group-title small { color: var(--muted); font-size: 9px; font-weight: 500; letter-spacing: .2px; }

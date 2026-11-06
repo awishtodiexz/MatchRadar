@@ -1,7 +1,15 @@
 use crate::model::{Competition, Match, Team};
 use chrono::{DateTime, Datelike, Duration, Months, NaiveDate, Utc};
 use serde_json::Value;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration as StdDuration;
+
+// Diagnostics only: scoreboard HTTP attempts since the last manual refresh.
+static REQUESTS: AtomicU64 = AtomicU64::new(0);
+
+pub fn take_request_count() -> u64 {
+    REQUESTS.swap(0, Ordering::Relaxed)
+}
 
 #[derive(Clone, Debug)]
 pub struct FetchError {
@@ -278,6 +286,7 @@ async fn query(
     league: Competition,
     dates: &str,
 ) -> Result<Vec<Match>, FetchError> {
+    REQUESTS.fetch_add(1, Ordering::Relaxed);
     let response = client
         .get(format!(
             "https://site.api.espn.com/apis/site/v2/sports/soccer/{}/scoreboard",
