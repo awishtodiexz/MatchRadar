@@ -8,7 +8,7 @@ Demo mode has been removed. References to it in the historical checkpoint sectio
 | --- | --- |
 | Native commands, state locks, task wakes, polling/delivery loops and tray lifecycle | `src-tauri/src/main.rs` |
 | Provider backoff deadlines and bounded sleep chunks | `src-tauri/src/scheduling.rs` |
-| Logical window sizing, resize calls and best-effort settings rollback | `src-tauri/src/window.rs` |
+| Logical window sizing, off-screen recovery and best-effort settings rollback | `src-tauri/src/window.rs` |
 | Serialized state, defaults, preference normalization and feed application | `src-tauri/src/model.rs` |
 | ESPN transport/normalization and source-result reconciliation | `src-tauri/src/provider.rs`, `src-tauri/src/refresh.rs` |
 | Atomic state storage and recovery | `src-tauri/src/persistence.rs` |
@@ -38,6 +38,8 @@ Settings saves are separate from data refresh. Appearance, pinning, favorites/fi
 The root window participates in the taskbar (`skipTaskbar: false`); the permitted frontend minimize command is separate from hide-to-tray. Rust applies pin changes and compact sizing. Compact mode targets a logical height of 460px and width no greater than 390px, respecting narrower windows; expanded dimensions are stored in the snapshot and restored when compact is disabled. The window-state plugin restores first, then compact sizing is applied explicitly to avoid competing startup restores. Native operation/persistence errors are returned to the UI.
 
 Settings deserialize with dark-theme defaults and opacity clamped to 70–100. `teamCatalogVersion` migrates old favorite IDs once, independently of provider match identities. `expandedSize` stores logical dimensions so display scaling is not baked into the saved expanded size. Native window restoration and actual taskbar behavior still require packaged Windows verification.
+
+Window placement recovery is a pure rectangle calculation in `window.rs`. After window-state restoration, on focus and scale-factor events, and from a 30-second placement watchdog, the widget is treated as lost when no monitor work area shows at least 64×48 physical pixels of it. It is then centered in the primary work area, or on the monitor that still overlaps it; hidden and minimized windows are skipped, and a widget larger than the work area is pinned to its top-left. The watchdog exists because Windows can remove a display without delivering a window event. This covers monitor removal and DPI/resolution changes, but mixed-DPI arrangements, negative-origin monitors and taskbar placement still require packaged Windows verification.
 
 `src-tauri/src/alerts.rs` plans notifications independently of native delivery so eligibility, timing, and persistence can be tested deterministically. Settings hold `matchAlerts` keyed by stable match ID: missing uses followed-team switches, enabled opts into reminder/start/goal alerts regardless of those switches, and disabled mutes that match even when a club is followed. Resetting match bells restores team defaults. The reminder lead time is shared. A bell opt-in explicitly enables goal alerts for that match; team goals remain off by default.
 

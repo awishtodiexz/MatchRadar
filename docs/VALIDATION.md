@@ -15,6 +15,14 @@ For the latest feature-branch evidence and acceptance checklist, see the [archiv
 
 > Sections below are dated checkpoints. Statements about unavailable MSVC, demo mode, or unbuilt installers describe those dates, not current status.
 
+## Off-screen window recovery — 6 November 2026
+
+`src-tauri/src/window.rs` recovers the widget when no attached monitor shows a usable part of it (at least 64×48 physical pixels). Recovery runs after window-state restoration, on focus and scale-factor changes, and from a 30-second watchdog, because Windows can remove a display without delivering a window event. It centers on the primary work area (or a monitor that still overlaps), skips hidden/minimized windows, and pins oversized widgets to the work area's top-left. Placement is a pure function; the Tauri wrapper only reads monitors and applies the result.
+
+Nine deterministic unit tests cover fully lost, sliver, usable, spanning, detached-primary, oversized, taskbar-inset, no-monitor and idempotent cases. `cargo test --locked` passed 96 tests with the Visual Studio developer environment and `TEMP` redirected under `src-tauri/target`; a plain shell still reproduces the documented MSVC `D8050` temp-directory failure. `cargo fmt --check` and `npm run verify:fast` (74 tests, lint, production build) pass. Browser checks cannot exercise native monitor placement, and no installer was built for this change.
+
+Packaged Windows checks: move the widget to a secondary display, disconnect that display, and confirm the widget reappears centered on the primary within 30 seconds; repeat with the app hidden to tray, then show it. Change display scale, resolution and arrangement; test negative-origin (left/above) monitors; and confirm taskbar space is respected. Verify that intentionally edge-docked windows with a usable visible patch are not moved, and that focus/scale events do not cause placement loops at mixed DPI.
+
 ## Verification Lite
 
 The subsequent targeted demo/live isolation change adds native regression tests for persisted pending alerts, separate demo preferences, restart, expiry, score corrections, synthetic event suppression and rapid mode changes. `verify:fast` passed 69 frontend tests and `verify:ui` passed seven Edge tests; Rust formatting passed. Local `cargo check --locked` stopped because MSVC `link.exe` is unavailable, so those new native tests and packaged notification behavior still require Windows CI and runtime verification.

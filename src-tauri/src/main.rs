@@ -30,7 +30,7 @@ use tauri::{
 };
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_window_state::{StateFlags, WindowExt};
-use window::{logical_size, resize, rollback_window};
+use window::{ensure_visible, logical_size, resize, rollback_window};
 
 struct State {
     snapshot: Mutex<Snapshot>,
@@ -440,6 +440,29 @@ async fn poll(app: tauri::AppHandle) {
         tokio::select! { _=tokio::time::sleep(scheduling::sleep_chunk(Duration::from_secs(delay)))=>{}, _=state.wake.notified()=>{} }
     }
 }
+async fn watch_window(app: tauri::AppHandle) {
+    // Windows can drop a display without delivering a window event, so re-check
+    // placement periodically. This is a small, non-blocking read of monitor data.
+    let mut tick = tokio::time::interval(Duration::from_secs(30));
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut error_logged = false;
+    loop {
+        tick.tick().await;
+        let Some(window) = app.get_webview_window("main") else {
+            continue;
+        };
+        match ensure_visible(&window) {
+            Ok(_) => error_logged = false,
+            Err(error) => {
+                if !error_logged {
+                    eprintln!("MatchRadar window recovery: {error}");
+                    error_logged = true;
+                }
+            }
+        }
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
@@ -447,6 +470,9 @@ fn main() {
                 let _ = w.show();
                 let _ = w.unminimize();
                 let _ = w.set_focus();
+                if let Err(error) = ensure_visible(&w) {
+                    eprintln!("MatchRadar window recovery: {error}");
+                }
             }
         }))
         // Restore explicitly in setup before applying compact mode; plugin ready hooks
@@ -491,6 +517,10 @@ fn main() {
                     let current = logical_size(&window)?;
                     resize(&window, current.compact())?;
                 }
+                // The saved position may belong to a monitor that is no longer attached.
+                if let Err(error) = ensure_visible(&window) {
+                    eprintln!("MatchRadar window recovery: {error}");
+                }
             }
             app.manage(tokio::sync::Mutex::new(details::Cache::default()));
             app.manage(results::History::default());
@@ -524,6 +554,9 @@ fn main() {
                                 let _ = w.show();
                                 let _ = w.unminimize();
                                 let _ = w.set_focus();
+                                if let Err(error) = ensure_visible(&w) {
+                                    eprintln!("MatchRadar window recovery: {error}");
+                                }
                                 if event.id.as_ref() == "settings" {
                                     let _ = app.emit("open-settings", ());
                                 }
@@ -538,13 +571,23 @@ fn main() {
             tray.build(app)?;
             tauri::async_runtime::spawn(poll(app.handle().clone()));
             tauri::async_runtime::spawn(deliver_notifications(app.handle().clone()));
+            tauri::async_runtime::spawn(watch_window(app.handle().clone()));
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
                 let _ = window.hide();
             }
+            // DPI changes and restored focus are cheap moments to confirm placement.
+            tauri::WindowEvent::Focused(true) | tauri::WindowEvent::ScaleFactorChanged { .. } => {
+                if let Some(window) = window.app_handle().get_webview_window("main") {
+                    if let Err(error) = ensure_visible(&window) {
+                        eprintln!("MatchRadar window recovery: {error}");
+                    }
+                }
+            }
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             get_snapshot,

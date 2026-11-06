@@ -13,6 +13,7 @@ requested v1.0 scope.
 - `src/teams.ts`: supported club IDs, validated crest candidates.
 - `src/styles.css`: shared visual styling.
 - `src-tauri/src/main.rs`: commands, polling, persistence, notifications, lifecycle.
+- `src-tauri/src/window.rs`: sizing, off-screen recovery, settings rollback.
 - `src-tauri/src/provider.rs`: ESPN requests, normalization, merging, tests.
 - `src-tauri/src/model.rs`: native models and defaults.
 - `src-tauri/tauri.conf.json`, `src-tauri/capabilities/default.json`: native config.
@@ -30,8 +31,10 @@ authoritative preference store or make polling depend on a mounted component.
 
 - Tray, single-instance, window-state, autostart, and notification integration
   exist, but their presence does not prove packaged Windows behavior.
-- Provider detail data is best-effort. Dedicated monitor-disconnection recovery
-  is not implemented; sleep/resume and score-correction handling need validation.
+- Provider detail data is best-effort. Off-screen window recovery is implemented
+  in `window.rs` (startup, focus/scale events, 30-second watchdog) but still needs
+  packaged Windows validation after monitor removal; sleep/resume and
+  score-correction handling also need validation.
 - Demo mode has been removed; legacy demo records are migrated or filtered.
 - The rules below are requirements, not evidence of completed features. Do not
   infer completion from plugins, roadmaps, docs, or a passing build.
@@ -66,8 +69,9 @@ authoritative preference store or make polling depend on a mounted component.
 - Scope capabilities to required commands/windows. Preserve CSP; avoid
   unrestricted filesystem, shell, or remote-content access.
 - Preserve close-to-tray, explicit Quit, single-instance restoration, and polling
-  while hidden. Visible-monitor recovery and persisted window behavior need
-  testing, not just plugin configuration.
+  while hidden. Preserve automatic recovery when no monitor shows a usable part
+  of the widget; visible-monitor recovery and persisted window behavior still
+  need packaged testing, not just plugin configuration.
 - Surface command failures in the UI. Browser previews do not validate native IPC.
 
 ## UI and accessibility

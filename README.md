@@ -37,7 +37,8 @@ installer for 64-bit Windows 10/11.
 - **Alerts:** followed-team reminders, match-start and optional goal alerts,
   per-match subscribe/mute, persistent deduplication, and a durable retry queue.
 - **Built for interruptions:** independent fixture and score refreshes, offline
-  cache, stale-data labels, and retry/backoff handling.
+  cache, stale-data labels, retry/backoff handling, and automatic recovery when
+  a display change leaves the widget off-screen.
 - **Private by design:** no account, API key, analytics, or telemetry.
   Preferences and cache stay on the device; ESPN requests and crest downloads
   need network access.
@@ -116,8 +117,9 @@ evidence. A passing build does not prove runtime behavior.
 
 - Match Centre events, statistics, and lineups depend on provider availability;
   live and halftime summary shapes still need real-match validation.
-- Off-screen window recovery is not implemented; `Retry-After` cooldowns are
-  process-local. Sleep/resume and real notification delivery need validation.
+- Off-screen window recovery runs after display changes but still needs packaged
+  Windows verification; `Retry-After` cooldowns are process-local. Sleep/resume
+  and real notification delivery need validation.
 - Provider outages can reduce coverage. Cached data can be stale, and the widget
   labels unconfirmed scores accordingly.
 - Performance has not been benchmarked for release.

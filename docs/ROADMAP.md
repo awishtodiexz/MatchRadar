@@ -2,6 +2,6 @@
 
 Before public release: validate the latest Windows installer and new recent-results implementation; test tray, notifications, startup, DPI, sleep/resume and monitor recovery on actual Windows installations; confirm live/halftime summary fields and score corrections against real provider responses; and measure performance.
 
-Review software licensing, data/crest permissions and installer signing before distribution. Keep future data work scoped to the Premier League; a properly licensed replacement provider and stronger offline or monitor recovery are possible later improvements.
+Review software licensing, data/crest permissions and installer signing before distribution. Keep future data work scoped to the Premier League; a properly licensed replacement provider and stronger offline recovery are possible later improvements. Off-screen window recovery now ships, but monitor removal, mixed-DPI setups and taskbar placement still need packaged Windows acceptance.
 
 The [Match Centre evolution report](archive/MATCH_CENTRE_EVOLUTION_REPORT.md) records earlier checkpoints and current acceptance gaps. The [Windows checklist](VALIDATION.md) distinguishes CI from runtime verification.

@@ -2,20 +2,20 @@
 
 <!-- snapshot:start -->
 ## Snapshot
-- Updated: 2026-11-06 11:41 (+02:00)
+- Updated: 2026-11-06 11:56 (+02:00)
 - Branch: main
-- Recent: 83e979f docs: point handoff at the upcoming update | 7947927 docs: add strict handoff check and refresh snapshot | 88ae9ae docs: refresh handoff snapshot
+- Recent: adf2261 feat: recover the widget when it is off-screen | 38d4d44 chore: normalize line endings and finish repo metadata | 83e979f docs: point handoff at the upcoming update
 <!-- snapshot:end -->
 
 ## Objective
 
-Start a planned major update to MatchRadar. Requirements are not written down yet; gather them before changing code.
+Add off-screen window recovery so the widget returns to a visible display after monitor removal or DPI/resolution changes.
 
 ## Next steps
 
-1. Get the update described: goals, affected areas (UI, provider, native, packaging), and what must not regress.
-2. Write a short plan and confirm scope before editing.
-3. Work local-first; commit locally; push only when the user says so.
+1. Run packaged Windows acceptance for recovery: disconnect a secondary monitor, restore from tray, mixed DPI, and negative-origin monitors.
+2. Get the remaining major-update requirements described before any further feature work.
+3. Push only when the user authorizes it; no installer was built for this change.
 
 ## Blockers
 
@@ -27,11 +27,12 @@ Start a planned major update to MatchRadar. Requirements are not written down ye
 - CI runs checks on pushes and PRs and packages installers only on `v*` tags or manual dispatch.
 - Demo mode was removed; dated reports live in `docs/archive/`.
 - HANDOFF is the cross-session state file; AGENTS.md documents how to read and update it.
+- No update requirements were supplied, so the session implemented the documented off-screen recovery gap rather than inventing a product feature.
 
 ## Commands
 
 - `npm run verify:fast` — lint, 74 frontend tests, production build.
-- `cargo test --locked --manifest-path src-tauri/Cargo.toml` — 87 Rust tests.
+- `cargo test --locked --manifest-path src-tauri/Cargo.toml` — 96 Rust tests (use the Visual Studio developer environment with `TEMP` under `src-tauri/target`, as `build-local.ps1` does).
 - `.\scripts\build-local.ps1` — local NSIS installer.
 - `.\scripts\handoff.ps1 -Check` — verify handoff freshness.
 - `.\scripts\handoff.ps1 -Check -Strict` — also fail on uncommitted work (use at session start).

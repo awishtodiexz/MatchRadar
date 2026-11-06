@@ -7,6 +7,10 @@ and versions use semantic versioning.
 
 ### Added
 
+- Automatic off-screen window recovery: after display removal, DPI/resolution
+  changes or restore, a widget with no usable monitor area is re-centered on the
+  primary work area. Runs at startup, on focus/scale events, and every 30 seconds
+  while running; placement is covered by deterministic unit tests.
 - `scripts/build-local.ps1` for local installer builds: loads the Visual Studio
   developer environment, keeps MSVC temp files inside `src-tauri/target`, runs
   the checks, and prints the installer path and SHA-256. Supports `-SkipInstall`
