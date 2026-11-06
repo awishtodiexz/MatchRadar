@@ -35,7 +35,7 @@ MatchRadar is a compact football widget for keeping Premier League fixtures and 
 
 ## Install a Windows test build
 
-MatchRadar targets **64-bit Windows 10 and 11** with the Microsoft Edge WebView2 runtime. Windows CI produces an NSIS installer; supported versions and native integrations still require the runtime checks described below.
+MatchRadar targets **64-bit Windows 10 and 11** with the Microsoft Edge WebView2 runtime. Installer packaging runs on version tags and manual workflow dispatches; ordinary pushes run lint, tests, and the Rust checks without packaging. Supported versions and native integrations still require the runtime checks described below.
 
 1. Sign in to GitHub with access to this private repository and open [Windows validation runs](https://github.com/awishtodiexz/MatchRadar/actions/workflows/windows.yml).
 2. Select a successful run for the commit you want to test. Under **Artifacts**, download `matchradar-windows-installer`. Artifacts expire; an older run will not contain later changes.
@@ -63,7 +63,7 @@ cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 ```
 
-To build a Windows installer locally, run `npm run tauri build`. The NSIS output is placed under `src-tauri/target/release/bundle/nsis/`. Use `npm.cmd` in PowerShell if script execution policy blocks `npm`.
+To build a Windows installer locally, run `.\scripts\build-local.ps1`. It loads the Visual Studio C++ environment, keeps compiler temporary files inside `src-tauri/target`, runs lint, tests, and the frontend build, and prints the installer path and SHA-256. The NSIS output is placed under `src-tauri/target/release/bundle/nsis/`. If your shell already has the MSVC environment loaded, `npm run tauri build` alone is enough. Use `npm.cmd` in PowerShell if script execution policy blocks `npm`; run the script through `powershell -ExecutionPolicy Bypass -File .\scripts\build-local.ps1` if needed.
 
 ## Find your way around the code
 
@@ -84,7 +84,7 @@ Tauri 2 and Rust handle the native window, background fetching, persistence, and
 
 ## Validation and limitations
 
-The [Windows workflow](.github/workflows/windows.yml) runs lint, frontend tests, the TypeScript/Vite build, Rust formatting and tests, Tauri packaging, and installer upload. The [validation notes](docs/VALIDATION.md) record what has been tested and the remaining Windows checks. A passing build does not prove notification delivery, startup, tray restoration, scaling, sleep/resume, or multi-monitor recovery.
+The [Windows workflow](.github/workflows/windows.yml) runs lint, frontend tests, the TypeScript/Vite build, Rust formatting and tests on every code change, and builds and uploads the Tauri installer for version tags and manual dispatches. The [validation notes](docs/VALIDATION.md) record what has been tested and the remaining Windows checks. A passing build does not prove notification delivery, startup, tray restoration, scaling, sleep/resume, or multi-monitor recovery.
 
 - Match Centre events, statistics and lineups depend on provider availability; live/halftime summary shapes still need real-match validation.
 - Dedicated off-screen window recovery is not implemented. HTTP-date and numeric `Retry-After` are parsed; cooldowns are process-local. Sleep/resume behavior and real notification delivery need further validation.
