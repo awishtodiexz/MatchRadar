@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { isTauri, invoke } from '@tauri-apps/api/core';
 import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
-import { Bell, Check, CircleHelp, RefreshCw, Search } from 'lucide-react';
+import { Bell, Check, ChevronDown, CircleHelp, RefreshCw, Search } from 'lucide-react';
 import { clubs } from '../teams';
-import type { Match, Settings } from '../types';
+import type { Match, Settings, Team } from '../types';
 import { Badge, Toggle, ViewHeading } from './WidgetUi';
 
 const sections = ['Teams','Appearance','Alerts','App'] as const;
@@ -15,6 +15,7 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
 }) {
   const [section,setSection] = useState<Section>('Teams');
   const [query,setQuery] = useState('');
+  const [showOtherClubs,setShowOtherClubs] = useState(false);
   const [notice,setNotice] = useState('');
   const [autostart,setAutostart] = useState<boolean|null>(null);
   const [startupError,setStartupError] = useState(false);
@@ -32,8 +33,45 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
     matches.flatMap(m=>[m.home,m.away]).forEach(team=>teams.set(team.id,team));
     return [...teams.values()];
   },[matches]);
-  const filteredClubs = availableClubs.filter(c=>c.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const byId = useMemo(()=>new Map(availableClubs.map(team=>[team.id,team])),[availableClubs]);
+  const favoriteIds = useMemo(()=>[...new Set(settings.favorites)],[settings.favorites]);
+  const favoriteSet = useMemo(()=>new Set(favoriteIds),[favoriteIds]);
+  const plIds = useMemo(()=>{
+    const ids = new Set(clubs.map(team=>team.id));
+    matches.filter(m=>m.league==='premierLeague').flatMap(m=>[m.home,m.away]).forEach(team=>ids.add(team.id));
+    return ids;
+  },[matches]);
+  const followedClubs = favoriteIds.map(id=>byId.get(id)).filter((club): club is Team => !!club);
+  const plClubs = useMemo(()=>{
+    const seen = new Set<string>();
+    const list: Team[] = [];
+    for(const club of [...clubs,...availableClubs]){
+      if(plIds.has(club.id)&&!favoriteSet.has(club.id)&&!seen.has(club.id)){seen.add(club.id);list.push(club);}
+    }
+    return list;
+  },[availableClubs,favoriteSet,plIds]);
+  const otherClubs = availableClubs
+    .filter(club=>!plIds.has(club.id)&&!favoriteSet.has(club.id))
+    .sort((a,b)=>a.name.localeCompare(b.name));
+  const needle = query.trim().toLocaleLowerCase();
+  const matchesQuery = (club:Team)=>club.name.toLocaleLowerCase().includes(needle);
+  const followedVisible = needle?followedClubs.filter(matchesQuery):followedClubs;
+  const plVisible = needle?plClubs.filter(matchesQuery):plClubs;
+  const otherVisible = needle?otherClubs.filter(matchesQuery):otherClubs;
+  const anyVisible = !!followedVisible.length||!!plVisible.length||!!otherVisible.length;
   const update = (patch:Partial<Settings>) => {void save(patch);};
+  const toggleFavorite = (id:string) => {
+    const following = favoriteSet.has(id);
+    const favorites = following?settings.favorites.filter(favorite=>favorite!==id):[...settings.favorites,id];
+    if (following&&!plIds.has(id)) setShowOtherClubs(true);
+    update({favorites});
+    // The club moves between sections; keep keyboard focus on it.
+    setTimeout(()=>document.getElementById('club-'+id)?.focus(),0);
+  };
+  const clubButton = (club:Team) => <button key={club.id} id={'club-'+club.id} className="club" title={club.name}
+    aria-pressed={favoriteSet.has(club.id)} onClick={()=>toggleFavorite(club.id)}>
+    <Badge team={club}/><span>{club.name}</span><span className={'check '+(favoriteSet.has(club.id)?'selected':'')} aria-hidden="true">{favoriteSet.has(club.id)&&<Check size={13}/>}</span>
+  </button>;
   const activate = (next:Section) => {setSection(next);setNotice('');if(panel.current) panel.current.scrollTop=0;};
   const tabKey = (event:KeyboardEvent<HTMLButtonElement>, index:number) => {
     const next = event.key==='ArrowRight'?(index+1)%sections.length:event.key==='ArrowLeft'?(index+sections.length-1)%sections.length:event.key==='Home'?0:event.key==='End'?sections.length-1:undefined;
@@ -53,13 +91,24 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
     </div>
     <div ref={panel} className="settings-body" role="tabpanel" id="settings-panel" aria-labelledby={'settings-tab-'+section} tabIndex={0}>
       {section==='Teams'&&<>
-        <div className="section-intro"><h3>Your clubs</h3><p>Follow clubs from the Premier League or Champions League; clubs appear as their fixtures load.</p></div>
+        <div className="section-intro"><h3>Your clubs</h3><p>Follow a club once — it counts in the Premier League and Champions League. Clubs appear as their fixtures load.</p></div>
         <Toggle label="Following only" value={settings.followedOnly} onChange={followedOnly=>update({followedOnly})}/>
         <label className="search"><Search size={15} aria-hidden="true"/><input ref={search} type="search" aria-label="Search clubs" placeholder="Search clubs" value={query} onChange={e=>setQuery(e.target.value)}/></label>
-        <div className="club-list">{filteredClubs.map(club=><button className="club" key={club.id} title={club.name} aria-pressed={settings.favorites.includes(club.id)} onClick={()=>update({favorites:settings.favorites.includes(club.id)?settings.favorites.filter(id=>id!==club.id):[...settings.favorites,club.id]})}>
-          <Badge team={club}/><span>{club.name}</span><span className={'check '+(settings.favorites.includes(club.id)?'selected':'')} aria-hidden="true">{settings.favorites.includes(club.id)&&<Check size={13}/>}</span>
-        </button>)}</div>
-        {!filteredClubs.length&&<div className="search-empty" role="status"><p>No clubs match “{query}”.</p><button className="text-button" onClick={()=>{search.current?.focus();setQuery('');}}>Clear search</button></div>}
+        {!!followedVisible.length&&<section className="team-group" aria-labelledby="team-group-followed">
+          <h4 id="team-group-followed" className="team-group-title">Followed clubs <span>{followedVisible.length}</span></h4>
+          <div className="club-list">{followedVisible.map(clubButton)}</div>
+        </section>}
+        {!!plVisible.length&&<section className="team-group" aria-labelledby="team-group-premier">
+          <h4 id="team-group-premier" className="team-group-title">Premier League clubs <span>{plVisible.length}</span></h4>
+          <div className="club-list">{plVisible.map(clubButton)}</div>
+        </section>}
+        {!!otherClubs.length&&(!needle||!!otherVisible.length)&&<section className="team-group" aria-labelledby="team-group-other">
+          {needle
+            ? <h4 id="team-group-other" className="team-group-title">Other clubs <span>{otherVisible.length}</span></h4>
+            : <button id="team-group-other" className="team-group-title team-group-toggle" aria-expanded={showOtherClubs} aria-controls="other-clubs-list" onClick={()=>setShowOtherClubs(open=>!open)}>Other clubs <span>{otherClubs.length}</span><ChevronDown size={14} aria-hidden="true" className={showOtherClubs?'rotated':''}/></button>}
+          {(needle||showOtherClubs)&&<div id="other-clubs-list" className="club-list">{otherVisible.map(clubButton)}</div>}
+        </section>}
+        {!anyVisible&&needle&&<div className="search-empty" role="status"><p>No clubs match “{query}”.</p><button className="text-button" onClick={()=>{search.current?.focus();setQuery('');}}>Clear search</button></div>}
       </>}
       {section==='Appearance'&&<>
         <div className="section-intro"><h3>Set the mood</h3><p>The same matchday, in your style.</p></div>

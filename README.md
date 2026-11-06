@@ -36,7 +36,8 @@ ESPN's CDN. They are not packaged Windows captures.*
 - **Two competitions at a glance:** switch between Premier League, Champions
   League, or Both. The choice persists; Both shows one chronological list with a
   small PL/UCL tag per card, and the live count follows the selection. UCL looks
-  30 days ahead so sparse fixtures still appear.
+  30 days ahead so sparse fixtures still appear. Follow a club once — ESPN uses
+  the same ID in both competitions, so its UCL matches and alerts come along.
 - **Match Centre:** on-demand timeline, team statistics, and lineups for either
   competition when ESPN supplies them. Scores remain sourced from the scoreboard.
 - **Views that fit matchday:** All, Live, Following, Upcoming, and Results.

@@ -307,3 +307,12 @@ footer { min-height: 52px; display: flex; align-items: center; justify-content: 
   .competition-long { display: none; }
   .competition-short { display: inline; }
 }
+
+/* Settings → Teams groups: followed, Premier League, other competitions. */
+.team-group { margin-top: var(--space-3); }
+.team-group-title { display: flex; width: 100%; align-items: center; gap: 6px; margin: 0; padding: 2px 0; text-align: left; font-size: 12px; font-weight: 650; color: var(--text); }
+.team-group-title > span { color: var(--muted); font-size: 10px; font-weight: 600; }
+.team-group-toggle { min-height: 32px; }
+.team-group-toggle svg { margin-left: auto; color: var(--muted); transition: transform .16s; }
+.team-group-toggle svg.rotated { transform: rotate(180deg); }
+.team-group .club-list { margin-top: var(--space-1); }

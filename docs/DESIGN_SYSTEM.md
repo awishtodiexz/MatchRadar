@@ -18,6 +18,8 @@ Match cards have sibling details and notification buttons, never nested interact
 
 ## Spacing, reading and interaction refinements
 
+Teams settings uses three groups in this order: **Followed clubs** (favorites first, unfollow in place), **Premier League clubs** (static catalog plus any club seen in a PL fixture, excluding followed clubs), and a collapsed **Other clubs** disclosure for discovered non-PL sides. Search spans all three groups and reveals other clubs while typing. Membership moves between groups without duplicating a club, and focus follows the moved club. Keep the existing 36px club row and checkbox styling; do not add nested scroll regions.
+
 Use the shared `.shell` spacing tokens (4/8/12/16/20px), a 16px page gutter (12px at narrow widths), and a 10px settings-row rhythm (8px in compact view). Keep component rules together instead of appending overrides. The header is 56px (50px compact); the footer is at least 52px (48px compact), with 32px toolbar targets and separate status/timestamp lines. Settings use a 64px subheader and compact tab strip. Let short sections end naturally; never stretch controls or resize the native window when switching tabs.
 
 Secondary settings/detail text is 12px; footer and match status text is 11px. Match names can wrap to two lines and retain full-name titles and full accessible button names. Scores remain tabular. Use semantic warning/scrollbar tokens in both themes. Low-opacity light panels use stronger muted ink (`#2E4234`) for readability; background opacity must leave foreground CSS opacity at 1.

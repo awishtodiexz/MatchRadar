@@ -23,5 +23,6 @@ export const mockMatches: Match[] = plMatches.map(pl);
 const uclTeam = {id:'86',name:'Real Madrid',short:'RMA'};
 const uclTeam2 = {id:'133',name:'Bayern Munich',short:'FCB'};
 export const uclMatch: Match = {id:'ucl-demo-1',league:'championsLeague',competition:'Champions League',home:uclTeam,away:uclTeam2,kickoff:time(6),status:'scheduled',detail:'Scheduled'};
+export const uclArsenalMatch: Match = {id:'ucl-demo-2',league:'championsLeague',competition:'Champions League',home:clubs[0],away:{id:'133',name:'Bayern Munich',short:'FCB'},kickoff:time(5),status:'scheduled',detail:'Scheduled'};
 export const mockSnapshot: Snapshot = { matches: mockMatches, updatedAt: new Date().toISOString(), settings: defaults };
 export const mockSnapshotWithUcl: Snapshot = { ...mockSnapshot, matches: [...mockMatches, uclMatch] };

@@ -14,6 +14,11 @@ and versions use semantic versioning.
   alerts that keep monitoring both leagues regardless of the selected view.
   Existing Premier League saves, favorites and notification state migrate
   unchanged; the selector defaults to the Premier League.
+- Unified club following across competitions: ESPN uses the same team IDs for a
+  club in the Premier League and Champions League, so following Arsenal once
+  covers both. Settings → Teams now groups **Followed clubs**, **Premier League
+  clubs**, and a collapsed **Other clubs** list (discovered UCL sides), with
+  search across all groups and focus retained when a club moves.
 - Automatic off-screen window recovery: after display removal, DPI/resolution
   changes or restore, a widget with no usable monitor area is re-centered on the
   primary work area. Runs at startup, on focus/scale events, and every 30 seconds
