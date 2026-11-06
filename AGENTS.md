@@ -36,6 +36,17 @@ authoritative preference store or make polling depend on a mounted component.
 - The rules below are requirements, not evidence of completed features. Do not
   infer completion from plugins, roadmaps, docs, or a passing build.
 
+## Session handoff
+
+- Start by reading `HANDOFF.md` and running `.\scripts\handoff.ps1 -Check`
+  (add `-ExecutionPolicy Bypass` if scripts are blocked). If it reports stale,
+  refresh it before working.
+- Before finishing a session that changed state, run
+  `.\scripts\handoff.ps1` with `-Objective`, `-Next`, and `-Blocker`, then commit
+  `HANDOFF.md` with the change.
+- Keep HANDOFF short: no secrets, logs, or duplicated architecture. It records
+  current state and next steps; details belong in `docs/`.
+
 ## Code conventions
 
 - Keep TypeScript strict. Model optional data explicitly; avoid `any`, unchecked

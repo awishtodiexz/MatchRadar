@@ -140,4 +140,4 @@ asserted here.
 [Index](docs/README.md) · [Product](docs/PRODUCT.md) · [Architecture](docs/ARCHITECTURE.md) ·
 [Design system](docs/DESIGN_SYSTEM.md) · [Data provider](docs/DATA_PROVIDER.md) ·
 [Validation](docs/VALIDATION.md) · [Roadmap](docs/ROADMAP.md) ·
-[Changelog](CHANGELOG.md) · [Archive](docs/archive/README.md)
+[Changelog](CHANGELOG.md) · [Handoff](HANDOFF.md) · [Archive](docs/archive/README.md)
