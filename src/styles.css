@@ -505,3 +505,55 @@ footer { min-height: 52px; display: flex; align-items: center; justify-content: 
 .theme-light .pitch-name { text-shadow: none; }
 /* Keep the centered status clear of team names at 320px. */
 .versus { grid-template-columns: minmax(0,1fr) 86px minmax(0,1fr); }
+
+/* Overview facts, form and leaders; timeline filtering. */
+.match-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 4px 0 12px; }
+.match-facts > div { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; padding: 8px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-soft); }
+.match-facts svg { flex: none; color: var(--muted); }
+.match-facts span { color: var(--muted); font-size: 8px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; }
+.match-facts strong { flex-basis: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 650; }
+.section-note { margin-left: 4px; color: var(--muted); font-size: 9px; font-weight: 500; letter-spacing: 0; }
+.overview-bar { margin: 2px 0 4px; }
+.overview-stat { padding-bottom: 5px; }
+.overview-link { margin-top: 4px; }
+.form-grid, .leaders-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.form-team, .leader-team { min-width: 0; padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); }
+.form-head, .leader-head { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.form-head .badge, .leader-head .badge { width: 18px; height: 18px; border-radius: 5px; font-size: 7px; }
+.form-head > span, .leader-head > span { flex: none; font-size: 10px; font-weight: 750; }
+.form-head > small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 8px; }
+.form-pills { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 6px; }
+.form-pill { display: grid; place-items: center; width: 19px; height: 19px; border: 1px solid var(--border); border-radius: 4px; font-size: 9px; font-weight: 800; }
+.form-pill.w { border-color: var(--accent-border); background: var(--accent-soft); color: var(--accent); }
+.form-pill.d { background: var(--surface-soft); color: var(--muted); }
+.form-pill.l { border-color: var(--danger-border); background: var(--danger-bg); color: var(--danger); }
+.form-last { display: block; margin-top: 5px; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.leader-list, .leader-list li { list-style: none; margin: 0; padding: 0; }
+.leader-list { margin-top: 4px; }
+.leader-list li { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 6px; padding: 5px 0; border-top: 1px solid var(--border); }
+.leader-list li > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.leader-list span { color: var(--muted); font-size: 8px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; }
+.leader-list strong { overflow: hidden; color: var(--text); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.leader-list b { color: var(--accent); font-size: 11px; font-variant-numeric: tabular-nums; }
+.timeline-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 0 8px; color: var(--muted); font-size: 10px; }
+.timeline-filter { display: flex; gap: 10px; }
+.timeline-filter button { padding: 4px 0 5px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); font-size: 10px; font-weight: 650; }
+.timeline-filter button[aria-pressed=true] { color: var(--accent); border-bottom-color: var(--accent); }
+.event.goal { border-radius: 6px; background: linear-gradient(90deg, var(--accent-soft), transparent 78%); }
+@media (max-width: 350px) {
+  .form-grid, .leaders-grid { grid-template-columns: 1fr; }
+}
+
+/* Keep period labels visible through long timelines. */
+.timeline-period { position: sticky; top: -1px; z-index: 2; margin: 10px 0 2px; padding: 8px 0 5px; background: var(--surface-solid); box-shadow: 0 1px 0 var(--border); }
+.event.goal { padding-left: 8px; margin-left: -8px; box-shadow: inset 2px 0 var(--accent); }
+/* Filled shirt markers read clearly in both themes. */
+.pitch-shirt { background: var(--accent); border-color: var(--accent); color: #10180d; }
+.theme-light .pitch-shirt { color: #fff; }
+.pitch-shirt.away { background: var(--surface-soft); border-color: var(--border-strong); color: var(--text); }
+.pitch-shirt.is-keeper { background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning); }
+.event-kind { display: inline-flex; align-items: center; gap: 3px; }
+.event-kind svg { flex: none; }
+.overview-cta { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 8px; padding: 9px 0; border-top: 1px solid var(--border); color: var(--accent); font-size: 11px; font-weight: 650; }
+.overview-cta small { margin-left: auto; color: var(--muted); font-size: 9px; font-weight: 500; }
+.overview-cta svg { flex: none; }

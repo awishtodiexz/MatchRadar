@@ -61,6 +61,26 @@ pub struct Substitution {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct FormGame {
+    opponent: String,
+    opponent_id: String,
+    result: String,
+    score: String,
+    at_home: bool,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamLeader {
+    team_id: String,
+    category: String,
+    name: String,
+    #[serde(default)]
+    jersey: Option<String>,
+    position: String,
+    value: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Details {
     pub match_id: String,
     /// Missing in saved Premier League caches, which default to that competition.
@@ -68,6 +88,12 @@ pub struct Details {
     pub league: Competition,
     #[serde(default)]
     pub venue: Option<String>,
+    #[serde(default)]
+    pub attendance: Option<u32>,
+    #[serde(default)]
+    pub form: HashMap<String, Vec<FormGame>>,
+    #[serde(default)]
+    pub leaders: Vec<TeamLeader>,
     pub events: Vec<Event>,
     pub statistics: Vec<Statistic>,
     pub players: Vec<Player>,
@@ -523,6 +549,94 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
             )
             .then(a.name.cmp(&b.name))
     });
+    let attendance = v["gameInfo"]["attendance"]
+        .as_u64()
+        .or_else(|| {
+            v["gameInfo"]["attendance"]
+                .as_str()
+                .and_then(|value| value.parse::<u64>().ok())
+        })
+        .filter(|n| (1..=1_000_000).contains(n))
+        .map(|n| n as u32);
+    let mut form = HashMap::new();
+    for team in array(&v["lastFiveGames"]).iter().take(2) {
+        let team_id = text(&team["team"], "id");
+        if team_id.is_empty() {
+            continue;
+        }
+        let games = array(&team["events"])
+            .iter()
+            .take(5)
+            .filter_map(|game| {
+                let opponent = text(&game["opponent"], "displayName");
+                let result = text(game, "gameResult").to_uppercase();
+                if opponent.is_empty() || !matches!(result.as_str(), "W" | "D" | "L") {
+                    return None;
+                }
+                Some(FormGame {
+                    opponent: opponent.chars().take(100).collect(),
+                    opponent_id: text(&game["opponent"], "id"),
+                    result,
+                    score: text(game, "score").chars().take(20).collect(),
+                    at_home: text(game, "atVs") == "vs",
+                })
+            })
+            .collect::<Vec<_>>();
+        if !games.is_empty() {
+            form.insert(team_id, games);
+        }
+    }
+    let mut leaders = Vec::new();
+    let mut seen_leaders = HashSet::new();
+    for team in array(&v["leaders"]).iter().take(2) {
+        let team_id = text(&team["team"], "id");
+        if team_id.is_empty() {
+            continue;
+        }
+        for category in array(&team["leaders"]).iter().take(8) {
+            let Some(entry) = array(&category["leaders"]).first() else {
+                continue;
+            };
+            let name = text(&entry["athlete"], "displayName");
+            let value = text(entry, "displayValue");
+            let display = text(category, "displayName");
+            if name.is_empty() || value.is_empty() || display.is_empty() {
+                continue;
+            }
+            let category = match display.as_str() {
+                "Total Shots" => "Shots",
+                "Accurate Passes" => "Passes",
+                "Defensive Interventions" => "Duels",
+                other => other,
+            };
+            if !seen_leaders.insert(format!("{team_id}:{category}:{name}")) {
+                continue;
+            }
+            let jersey = entry["athlete"]["jersey"]
+                .as_str()
+                .map(str::to_owned)
+                .or_else(|| entry["athlete"]["jersey"].as_u64().map(|n| n.to_string()))
+                .filter(|value| {
+                    !value.is_empty()
+                        && value.len() <= 4
+                        && value.bytes().all(|b| b.is_ascii_digit())
+                });
+            leaders.push(TeamLeader {
+                team_id: team_id.clone(),
+                category: category.chars().take(60).collect(),
+                name: name.chars().take(120).collect(),
+                jersey,
+                position: text(&entry["athlete"]["position"], "abbreviation")
+                    .chars()
+                    .take(50)
+                    .collect(),
+                value: value.chars().take(40).collect(),
+            });
+            if leaders.len() >= 16 {
+                break;
+            }
+        }
+    }
     Ok(Details {
         match_id: id.into(),
         league,
@@ -531,6 +645,9 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
             .map(str::trim)
             .filter(|name| !name.is_empty() && !name.chars().any(char::is_control))
             .map(|name| name.chars().take(200).collect()),
+        attendance,
+        form,
+        leaders,
         events,
         statistics,
         players,
@@ -557,6 +674,29 @@ fn valid_cached(d: &Details) -> bool {
         && d.statistics.len() <= 80
         && d.players.len() <= 80
         && d.venue.as_ref().is_none_or(|venue| bounded(venue, 200))
+        && d.attendance.is_none_or(|value| value <= 1_000_000)
+        && d.form.len() <= 2
+        && d.form.iter().all(|(team_id, games)| {
+            bounded(team_id, 128)
+                && games.len() <= 5
+                && games.iter().all(|game| {
+                    bounded(&game.opponent, 100)
+                        && bounded(&game.opponent_id, 128)
+                        && matches!(game.result.as_str(), "W" | "D" | "L")
+                        && bounded(&game.score, 20)
+                })
+        })
+        && d.leaders.len() <= 16
+        && d.leaders.iter().all(|leader| {
+            bounded(&leader.team_id, 128)
+                && bounded(&leader.category, 60)
+                && bounded(&leader.name, 120)
+                && bounded(&leader.position, 50)
+                && bounded(&leader.value, 40)
+                && leader.jersey.as_ref().is_none_or(|value| {
+                    value.len() <= 4 && value.bytes().all(|b| b.is_ascii_digit())
+                })
+        })
         && DateTime::parse_from_rfc3339(&d.updated_at).is_ok()
         && d.events.iter().all(|e| {
             !e.id.is_empty()

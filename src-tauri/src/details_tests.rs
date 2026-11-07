@@ -356,6 +356,26 @@ fn commentary_enriches_live_timelines_and_scorers_carry_lineup_context() {
                 {"jersey": 19, "starter": false, "subbedIn": true, "position": {"abbreviation": "SUB"}, "athlete": {"displayName": "Leandro Trossard"}}
             ]
         }],
+        "gameInfo": {"attendance": 36924},
+        "lastFiveGames": [{
+            "team": {"id": "359"},
+            "events": [{
+                "opponent": {"id": "363", "displayName": "Chelsea"},
+                "gameResult": "W",
+                "score": "2-1",
+                "atVs": "vs"
+            }]
+        }],
+        "leaders": [{
+            "team": {"id": "359"},
+            "leaders": [{
+                "displayName": "Total Shots",
+                "leaders": [{
+                    "displayValue": "3",
+                    "athlete": {"displayName": "Bukayo Saka", "jersey": "7", "position": {"abbreviation": "RW"}}
+                }]
+            }]
+        }],
         "boxscore": {"teams": []}
     });
     let d = normalize(&v, "1", Competition::PremierLeague).unwrap();
@@ -377,6 +397,16 @@ fn commentary_enriches_live_timelines_and_scorers_carry_lineup_context() {
     let starter = d.players.iter().find(|p| p.name == "Bukayo Saka").unwrap();
     assert_eq!(starter.jersey.as_deref(), Some("7"));
     assert_eq!(starter.formation_place, Some(5));
+    assert_eq!(d.attendance, Some(36924));
+    let form = d.form.get("359").unwrap();
+    assert_eq!(form.len(), 1);
+    assert_eq!(form[0].result, "W");
+    assert_eq!(form[0].opponent, "Chelsea");
+    assert!(form[0].at_home);
+    assert_eq!(d.leaders.len(), 1);
+    assert_eq!(d.leaders[0].category, "Shots");
+    assert_eq!(d.leaders[0].name, "Bukayo Saka");
+    assert_eq!(d.leaders[0].value, "3");
     let sub = d
         .players
         .iter()

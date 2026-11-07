@@ -8,9 +8,12 @@ const state=vi.hoisted(()=>({data:{matchId:'1',updatedAt:'2026-10-29T12:00:00Z',
 vi.mock('../useMatchSummary',()=>({useMatchSummary:()=>state}));
 afterEach(cleanup);
 it('offers available sections and displays explicit zero stats and player names',()=>{render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Timeline'}));expect(screen.getByText("45+2'")).toBeTruthy();expect(screen.getByText('Verified provider goal')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getByText('0')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));expect(screen.getByText('A long player name')).toBeTruthy();});
-it('uses a singular event count when there is one event',()=>{
+it('uses a singular event count and sends the CTA to Timeline',()=>{
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);
- expect(screen.getByText('1 event available in Timeline.')).toBeTruthy();
+ const cta=screen.getByRole('button',{name:/Full timeline/});
+ expect(cta.textContent).toContain('1 event');
+ fireEvent.click(cta);
+ expect(screen.getByRole('tab',{name:'Timeline'}).getAttribute('aria-selected')).toBe('true');
 });
 it('omits unavailable sections rather than displaying empty tabs',()=>{const old=state.data;state.data={...old,events:[],statistics:[],players:[]};render(<MatchCentre match={mockSnapshot.matches[0]}/>);expect(screen.queryByRole('tab',{name:'Timeline'})).toBeNull();expect(screen.getByText('No event timeline is available for this match.')).toBeTruthy();state.data=old;});
 it('retains visible detail content without inserting a skeleton during a refresh',()=>{
@@ -85,6 +88,37 @@ it('shows scorers, formation, jersey numbers and substitutes without inventing d
  expect(screen.getByText(/↑ 60'/)).toBeTruthy();
  expect(screen.getByText('Substitutions')).toBeTruthy();
  expect(screen.getByText(/for Bukayo Saka/)).toBeTruthy();
+ state.data=old;
+});
+
+it('shows real venue, attendance, form and team leaders on Overview',()=>{
+ const old=state.data;
+ state.data={...old,venue:'Elland Road',attendance:36924,
+  form:{'359':[{opponent:'Chelsea',opponentId:'363',result:'W',score:'2-1',atHome:true}],
+   '363':[{opponent:'Leeds United',opponentId:'357',result:'L',score:'1-2',atHome:false}]},
+  leaders:[{teamId:'359',category:'Shots',name:'Bukayo Saka',jersey:'7',position:'RW',value:'3'}]};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ expect(screen.getByText('Elland Road')).toBeTruthy();
+ expect(screen.getByText('36,924')).toBeTruthy();
+ expect(screen.getByRole('heading',{name:/Form/})).toBeTruthy();
+ expect(screen.getByLabelText(/Win against Chelsea/)).toBeTruthy();
+ expect(screen.getByText('Team leaders')).toBeTruthy();
+ expect(screen.getByText(/Bukayo Saka/)).toBeTruthy();
+ state.data=old;
+});
+
+it('filters the timeline to key events without losing the full list',()=>{
+ const old=state.data;
+ state.data={...old,events:[...old.events,{id:'foul-1',minute:"15'",period:1,seconds:900,kind:'foul',text:'Foul by a defender.',teamId:'359'}]};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ fireEvent.click(screen.getByRole('tab',{name:'Timeline'}));
+ expect(screen.getByText('Foul by a defender.')).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Key events'}));
+ expect(screen.queryByText('Foul by a defender.')).toBeNull();
+ expect(screen.getByText('Verified provider goal')).toBeTruthy();
+ expect(screen.getByRole('button',{name:'Key events'}).getAttribute('aria-pressed')).toBe('true');
+ fireEvent.click(screen.getByRole('button',{name:'All'}));
+ expect(screen.getByText('Foul by a defender.')).toBeTruthy();
  state.data=old;
 });
 

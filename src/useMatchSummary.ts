@@ -10,6 +10,9 @@ export interface MatchSummary {
   scorers?:MatchScorer[];
   substitutions?:Array<{teamId:string;playerIn:string;playerOut:string;minute:string}>;
   formations?:Record<string,string>;
+  attendance?:number|null;
+  form?:Record<string,Array<{opponent:string;opponentId:string;result:string;score:string;atHome:boolean}>>;
+  leaders?:Array<{teamId:string;category:string;name:string;jersey?:string|null;position:string;value:string}>;
 }
 type SummaryState={id:string;data:MatchSummary|null;loading:boolean;error:string|null};
 export function useMatchSummary(id:string, active:boolean) {

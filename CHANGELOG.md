@@ -29,10 +29,12 @@ set.
   changes, or restore, covered by deterministic unit tests.
 - `scripts/build-local.ps1` for unsigned local NSIS builds and
   `scripts/release-local.ps1` for guarded local releases.
-- Match Centre Overview with goal scorers, key stats, venue, and an event count;
-  the duplicate Latest feed was removed.
+- Match Centre Overview with venue/attendance facts, goal scorers, key-stat
+  bars, last-five form (with team-perspective scores), per-team leaders, and a
+  full-timeline call to action; the duplicate Latest feed was removed.
 - Timeline merging ESPN commentary with key events, grouped by half, with team
-  badges and labels for goals, cards, substitutions, shots, corners and fouls.
+  badges, icons and labels for goals, cards, substitutions, shots, corners and
+  fouls; key-event filtering and sticky period headings keep long timelines readable.
 - Lineups with a horizontal two-team formation pitch, both formations, shirt
   number markers, home/away tabs, position groups, kickoff starters, substitutes,
   and paired substitutions with provider minutes. Player lists remain the

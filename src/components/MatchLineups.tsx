@@ -42,7 +42,7 @@ function LineupPitch({match,home,away}:{match:Match;home:PitchData;away:PitchDat
   const awayColumns:MatchSummary['players'][] = [...away.lines].reverse().concat([[away.keeper]]);
   return <>
     <div className="formation-strip" aria-label={`Formations: ${match.home.name} ${home.formation}, ${match.away.name} ${away.formation}`}>
-      <strong>{home.formation}</strong><span>FORMATION</span><strong>{away.formation}</strong>
+      <strong>{match.home.short} {home.formation}</strong><span>FORMATION</span><strong>{away.formation} {match.away.short}</strong>
     </div>
     <div className="lineup-pitch split" aria-hidden="true">
       <span className="pitch-halfway"/><span className="pitch-circle"/>

@@ -5,7 +5,7 @@ type Stat = MatchSummary['statistics'][number];
 type Pair = { name:string; home?:Stat; away?:Stat };
 
 const SECTIONS: {title:string; keys:string[]}[] = [
-  {title:'Overview',keys:['possessionPct','totalShots','shotsOnTarget','shotPct','wonCorners']},
+  {title:'Match',keys:['possessionPct','totalShots','shotsOnTarget','shotPct','wonCorners']},
   {title:'Attack',keys:['blockedShots','penaltyKickGoals','penaltyKickShots']},
   {title:'Passing',keys:['totalPasses','accuratePasses','passPct','totalCrosses','accurateCrosses','crossPct','totalLongBalls','accurateLongBalls','longballPct']},
   {title:'Defending',keys:['totalTackles','effectiveTackles','tacklePct','interceptions','totalClearance','effectiveClearance','saves']},
