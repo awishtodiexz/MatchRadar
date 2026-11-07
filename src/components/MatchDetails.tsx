@@ -10,6 +10,7 @@ export function MatchDetails({match, settings, back}: {match:Match; settings:Set
   const status = live
     ? (match.status==='halftime'?'HALF-TIME':`LIVE ${match.detail || ''}`.trim())
     : match.status==='fulltime'?'FULL-TIME':match.status==='scheduled'?'SCHEDULED':(match.detail||match.status).toUpperCase();
+  const statusText = match.scoreStale ? `${status} · Saved` : status;
   return <>
     <ViewHeading title="Match details" eyebrow="MATCH CENTRE" back={back} actions={<MatchAlertsButton match={match} settings={settings}/>}/>
     <div className="detail-body">
@@ -18,8 +19,7 @@ export function MatchDetails({match, settings, back}: {match:Match; settings:Set
         <div><Badge team={match.home}/><b title={match.home.name}>{match.home.name}</b></div>
         <div className="detail-score">
           <span>{match.status==='scheduled'?timeLabel(match.kickoff):`${match.homeScore ?? '–'} : ${match.awayScore ?? '–'}`}</span>
-          <small className={'detail-status '+match.status}>{live&&!match.scoreStale&&<i className="dot"/>}{status}</small>
-          {match.scoreStale&&<small className="detail-saved">Saved</small>}
+          <small className={'detail-status '+match.status}>{live&&!match.scoreStale&&<i className="dot"/>}{statusText}</small>
         </div>
         <div><Badge team={match.away}/><b title={match.away.name}>{match.away.name}</b></div>
       </div>

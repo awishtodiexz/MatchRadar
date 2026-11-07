@@ -76,9 +76,11 @@ it('shows scorers, formation, jersey numbers and substitutes without inventing d
  expect(screen.getByText('#22')).toBeTruthy();
  expect(screen.getByText('Substitutes')).toBeTruthy();
  expect(screen.getByText('#19')).toBeTruthy();
- expect(screen.getByText(/Trossard/)).toBeTruthy();
- expect(screen.getByText(/off 60'/)).toBeTruthy();
- expect(screen.getByText(/on 60'/)).toBeTruthy();
+ expect(screen.getAllByText(/Trossard/).length).toBeGreaterThan(0);
+ expect(screen.getByText(/↓ 60'/)).toBeTruthy();
+ expect(screen.getByText(/↑ 60'/)).toBeTruthy();
+ expect(screen.getByText('Substitutions')).toBeTruthy();
+ expect(screen.getByText(/for Bukayo Saka/)).toBeTruthy();
  state.data=old;
 });
 

@@ -1,4 +1,5 @@
 import { useId, useState } from 'react';
+import { ArrowDown, ArrowUp } from 'lucide-react';
 import type { Match } from '../types';
 import type { MatchSummary } from '../useMatchSummary';
 
@@ -27,7 +28,7 @@ function PlayerList({players, substitutions}: {players:MatchSummary['players']; 
         return <li key={`${player.name}-${index}`}>
           {player.jersey && <span className="jersey">#{player.jersey}</span>}
           <span>{player.name}</span>
-          <small>{player.position}{off?` · off ${off.minute}`:player.subbedOut?' · off':''}{on?` · on ${on.minute}`:player.subbedIn?' · on':''}</small>
+          <small>{player.position}{off&&<span className="sub-marker off" title={`Substituted off at ${off.minute}`}> ↓ {off.minute}</span>}{on&&<span className="sub-marker on" title={`Substituted on at ${on.minute}`}> ↑ {on.minute}</span>}{!on&&!off&&player.subbedOut?' · off':!on&&!off&&player.subbedIn?' · on':''}</small>
         </li>;
       })}</ul>
     </div> : null;
@@ -45,6 +46,7 @@ export function MatchLineups({match,players,substitutions=[],formations={}}: {ma
   const starters = selected.filter(player=>player.starter);
   const substitutes = selected.filter(player=>!player.starter);
   const formation = formations[active.id];
+  const teamSubs = substitutions.filter(sub=>!sub.teamId||sub.teamId===active.id);
   return <div className="lineups">
     <div className="lineup-tabs" role="tablist" aria-label="Lineups by team">
       {teams.map(team=><button key={team.id} role="tab" id={sectionId+'-tab-'+team.id} aria-selected={active.id===team.id}
@@ -68,9 +70,13 @@ export function MatchLineups({match,players,substitutions=[],formations={}}: {ma
       {substitutes.length>0&&<><h4>Substitutes</h4><ul className="lineup-list">{substitutes.sort(byPlace).map((player,index)=>{
         const on=substitutions.find(sub=>sub.playerIn===player.name);
         return <li key={`${player.name}-${index}`}>
-          {player.jersey&&<span className="jersey">#{player.jersey}</span>}<span>{player.name}</span><small>{player.position}{on?` · on ${on.minute}`:player.subbedIn?' · on':''}</small>
+          {player.jersey&&<span className="jersey">#{player.jersey}</span>}<span>{player.name}</span><small>{player.position}{on&&<span className="sub-marker on" title={`Substituted on at ${on.minute}`}> ↑ {on.minute}</span>}{!on&&player.subbedIn?' · on':''}</small>
         </li>;
       })}</ul></>}
+      {!!teamSubs.length&&<><h4>Substitutions</h4><ul className="subs-list">{teamSubs.map(sub=><li key={`${sub.minute}-${sub.playerIn}-${sub.playerOut}`}>
+        <time>{sub.minute}</time>
+        <div><span className="sub-in"><ArrowUp size={11} aria-hidden="true"/>{sub.playerIn}</span><span className="sub-out"><ArrowDown size={11} aria-hidden="true"/>for {sub.playerOut}</span></div>
+      </li>)}</ul></>}
     </div>
   </div>;
 }
