@@ -2,14 +2,14 @@
 
 <!-- snapshot:start -->
 ## Snapshot
-- Updated: 2026-11-07 18:55 (+02:00)
+- Updated: 2026-11-07 19:01 (+02:00)
 - Branch: main
-- Recent: ce9ba9a feat: align match layouts with Flashscore patterns | 864d49d fix: refine 1.2 match details from review | ef18713 feat: redesign match details for 1.2.0
+- Recent: 54df191 fix: finish Flashscore alignment and substitution clarity | ce9ba9a feat: align match layouts with Flashscore patterns | 864d49d fix: refine 1.2 match details from review
 <!-- snapshot:end -->
 
 ## Objective
 
-MatchRadar 1.2.0 is built locally (3,423,539 bytes, SHA-256 C98A1387...): Flashscore-style tabs everywhere, centered score/clock with aligned dot, uniform 72px cards, and paired substitution minutes. It is not published or pushed.
+MatchRadar 1.2.0 is built locally (3,423,009 bytes, SHA-256 B76A24FE...): Flashscore tabs, centered score/clock, fitted stoppage-time pills, uniform cards and paired substitutions. It is not published or pushed.
 
 ## Next steps
 
@@ -31,7 +31,7 @@ MatchRadar 1.2.0 is built locally (3,423,539 bytes, SHA-256 C98A1387...): Flashs
 - ESPN event IDs are globally allocated; the stored competition keeps attribution and cache isolation explicit without rewriting legacy match IDs.
 - ESPN team IDs are identical for clubs in both competitions (verified against the real PL/UCL team feeds), so favorites remain one ID list and need no mapping. Match bells stay independent.
 - Teams groups Followed clubs, Premier League clubs (static catalog plus any PL fixture participant), and a collapsed Other clubs list for discovered non-PL sides; search spans all groups.
-- v1.1.0 remains the published release (unsigned, SHA-256 `ABCA3D48AB8379977ABB52C563D2BBFE852D28ED6FD12A35D192DCAEED8AF641`); v1.2.0 is built locally with SHA-256 `C98A13871AA639AAC39AB6BE826268488024395BDA5802770700D24DEF6E9BFA` and not published.
+- v1.1.0 remains the published release (unsigned, SHA-256 `ABCA3D48AB8379977ABB52C563D2BBFE852D28ED6FD12A35D192DCAEED8AF641`); v1.2.0 is built locally with SHA-256 `B76A24FED6CE06A34678D0D0EB685AA1787946D031348CC944CE28FA34035B98` and not published.
 - Match details merge commentary only with a clock, require provider period or derive it from half text/clock, extract scorers/formation/jersey/subs, and show substitution minutes from provider substitution events with safe defaults for older caches.
 - Match alerts live behind a header bell popover; Overview no longer duplicates Timeline with a Latest feed. Detail layout follows Flashscore (centered score/clock, underlined tabs everywhere, stat bars); list rows are a uniform 72px with stable scrollbar gutters and one-line club names. Lineups pair each substitution with the replaced player and minute. Version 1.2.0 is local-only.
 - The UI reads its version from `package.json`; `npm run check:version` enforces Cargo/Tauri agreement in `verify:fast`, local builds and CI. `scripts/release-local.ps1` builds, hashes and optionally publishes the local asset.
@@ -39,7 +39,7 @@ MatchRadar 1.2.0 is built locally (3,423,539 bytes, SHA-256 C98A1387...): Flashs
 
 ## Commands
 
-- `npm run verify:fast` — lint, 90 frontend tests, production build.
+- `npm run verify:fast` — lint, 91 frontend tests, production build.
 - `npm run verify:ui` — 28 Playwright journeys at 320/390px in both themes.
 - `cargo test --locked --manifest-path src-tauri/Cargo.toml` — 108 Rust tests (use the Visual Studio developer environment with `TEMP` under `src-tauri/target`, as `build-local.ps1` does).
 - `.\scripts\build-local.ps1` — local NSIS installer.

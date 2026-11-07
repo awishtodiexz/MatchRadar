@@ -6,6 +6,11 @@ import type { Match, Settings } from '../types';
 import { Badge } from './WidgetUi';
 import { matchButtonId, timeLabel } from '../presentation';
 
+const clockText = (detail:string) => {
+  const stoppage = detail.match(/^(\d+)'\+(\d+)'?$/);
+  return stoppage ? `${stoppage[1]}+${stoppage[2]}'` : detail;
+};
+
 function alertPresentation(settings:Settings, match:Match) {
   const preference = settings.matchAlerts[match.id];
   const state = preference ? preference.enabled ? 'on' : 'muted' : 'team';
@@ -39,7 +44,7 @@ export function MatchCard({match, settings, onOpen, showCompetition=false}: {mat
             {isLive(match)&&match.scoreStale&&<span>saved</span>}
           </span>
         </div>
-        {isLive(match)&&<span className={'live-clock '+(match.scoreStale?'saved':'')} title={match.scoreStale?'Saved live score':undefined}><i className="dot"/>{match.status==='halftime'?'HT':match.detail||'LIVE'}</span>}
+        {isLive(match)&&<span className={'live-clock '+(match.scoreStale?'saved':'')} title={match.scoreStale?'Saved live score':match.detail||'Live'}><i className="dot"/>{match.status==='halftime'?'HT':clockText(match.detail||'LIVE')}</span>}
       </div><ChevronRight size={13} className="row-arrow" aria-hidden="true"/>
     </button>
     <button className="icon-button match-bell" data-alert-state={alerts.state} aria-label={alerts.ended?`Match ended: ${name}`:`${action}: ${name}`} aria-pressed={alerts.enabled}

@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { mockSnapshot } from './test-fixtures/fixtures';
 import { useApp } from './store';
 import App from './App';
+import { MatchCard } from './components/MatchCard';
 import type { Settings } from './types';
 import { isEnabled } from '@tauri-apps/plugin-autostart';
 
@@ -30,6 +31,11 @@ describe('widget controls', () => {
   expect(await screen.findByText('Could not read the Windows startup setting. Reopen Settings to try again.')).toBeTruthy();
   expect(screen.getByRole('checkbox',{name:'Launch with Windows'}).hasAttribute('disabled')).toBe(true);
  });
+ it('compacts stoppage time so the live clock pill can contain it', () => {
+  render(<MatchCard match={{...mockSnapshot.matches[0],status:'live',detail:"90'+2'",scoreStale:false}} settings={mockSnapshot.settings} onOpen={vi.fn()}/>);
+  expect(screen.getByText("90+2'")).toBeTruthy();
+ });
+
  it('shows partial fixture success and saved live scores without claiming they were freshly confirmed', async () => {
   bridge.native=true;
   const snapshot={...mockSnapshot,settings:{...mockSnapshot.settings},partial:true,error:'Scores: HTTP 500',scoreError:'HTTP 500',updatedAt:'2026-10-28T11:00:00Z',fixtureUpdatedAt:'2026-10-28T12:00:00Z',matches:mockSnapshot.matches.map(m=>({...m,scoreStale:m.status==='live'||m.status==='halftime'}))};

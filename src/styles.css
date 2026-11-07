@@ -451,3 +451,10 @@ footer { min-height: 52px; display: flex; align-items: center; justify-content: 
 .subs-list .sub-in, .subs-list .sub-out { display: flex; align-items: center; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
 .subs-list .sub-out { color: var(--muted); font-size: 11px; }
 .detail-score .detail-saved { display: none; }
+
+/* Fitted live clock: stoppage-time labels must fit inside the pill. */
+.match-open { grid-template-columns: minmax(0,1fr) 82px 13px; }
+.match-state { width: 82px; min-width: 82px; gap: 4px; }
+.match-state .result { flex: 0 0 34px; width: 34px; }
+.match-state:not(.is-live) .result { flex: 1; width: 82px; }
+.match-state .live-clock { flex: 0 0 auto; width: auto; min-width: 30px; max-width: 44px; padding: 1px 4px; font-size: 9px; }

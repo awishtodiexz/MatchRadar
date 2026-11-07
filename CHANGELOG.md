@@ -15,6 +15,7 @@ and versions use semantic versioning.
 - Match details follows the Flashscore pattern: centered score with a centered LIVE/HALF-TIME/FULL-TIME clock, underlined section tabs, and comparison bars on supported statistics.
 - Fixture rows use a stable scrollbar gutter, a fixed centered score/clock column and a uniform 72px height across All/Live/Following/Upcoming/Results; list team names truncate to one line with full names retained in the title/accessible label.
 - All tab strips (fixture filters, Settings, Match Centre and lineup teams) use the Flashscore underline pattern.
+- Stoppage-time clock labels are compacted (`90+2'`) and the pill auto-fits, so the green background always contains the text.
 - Lineups add an explicit Substitutions list pairing each player on with the player they replaced and the provider minute, plus compact ↑/↓ markers in the player rows.
 - `scripts/release-local.ps1`: builds the installer, prints its SHA-256 and, with `-Publish`, creates a GitHub release from the local asset after requiring a clean tree and unused tag.
 - Request-count diagnostics for manual refreshes and a documented [local release process](docs/RELEASING.md).
