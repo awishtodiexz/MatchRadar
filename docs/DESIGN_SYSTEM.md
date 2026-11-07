@@ -4,7 +4,7 @@ MatchRadar is dark by default, with an optional light theme. Both use the same l
 
 Panel opacity ranges from 70% to 100%, defaulting to 96%. Apply it to the panel background, never the shell's CSS `opacity`, so text, controls, and crests stay opaque. Home, settings, and details share the same panel treatment. Cards retain stronger surfaces for legibility; verify contrast over bright and dark wallpapers at the lowest opacity.
 
-Keep rounded corners, compact typography, tabular scores, and consistent badge/team/result alignment. The header contains branding and native minimize/hide controls; the footer contains Settings, pin, following filter, and refresh. Toggle buttons expose pressed state and match their Settings switches. Compact mode reduces the native window and layout together; it is not minimization.
+Keep rounded corners, compact typography, tabular scores, and consistent badge/team/result alignment. The header contains the official MatchRadar mark (33px cropped mark), the wordmark, and native minimize/hide controls; the full rounded tile supplies the favicon, window/installer icon and multi-size Windows ICO. The footer contains Settings, pin, following filter, and refresh. Toggle buttons expose pressed state and match their Settings switches. Compact mode reduces the native window and layout together; it is not minimization.
 
 Use one content scroll surface, fixed header/footer, visible keyboard focus, and reduced-motion support. Inspect home, Teams, Appearance, and details at 390px and the 320px minimum width, including the compact window. Check packaged Windows at 100%, 125%, and 150% scaling separately from browser layout checks.
 

@@ -44,6 +44,8 @@ set.
 - Stable 72px fixture rows with a fixed score/clock column, stable scrollbar
   gutter, and one-line truncated club names with full titles/accessible names.
 - Compact stoppage-time clock labels (`90+2'`) that fit inside the live pill.
+- Official MatchRadar mark used in the header, window/installer icon and
+  favicon, with generated multi-size Windows ICO assets.
 - Request-count diagnostics for manual refreshes and a documented
   [local release process](docs/RELEASING.md).
 

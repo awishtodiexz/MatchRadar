@@ -1,5 +1,7 @@
 # MatchRadar
 
+<p align="center"><img src="src/assets/logo.png" alt="MatchRadar logo" width="96"></p>
+
 [![Windows validation](https://github.com/awishtodiexz/MatchRadar/actions/workflows/windows.yml/badge.svg)](https://github.com/awishtodiexz/MatchRadar/actions/workflows/windows.yml)
 
 **Your matchday companion, right on your Windows desktop.**

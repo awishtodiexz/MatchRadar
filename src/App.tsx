@@ -4,6 +4,7 @@ import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ListFilter, Minus, Pin, Radio, RefreshCw, Settings2, X } from 'lucide-react';
+import logo from './assets/logo-mark.png';
 import { groupFixtures, isLive } from './fixtures';
 import { competitionLeagues, competitionName, competitionSlug, competitionStatus, resultsStatus, updateStatus } from './freshness';
 import { useApp } from './store';
@@ -117,7 +118,7 @@ export default function App() {
   };
   return <main ref={root} onKeyDown={keyDown} onContextMenu={contextMenu} className={'shell theme-'+(settings?.theme??'dark')+' '+((settings?.opacity??96)<85?'transparent-panel ':'')+(settings?.compact?'compact-view ':'')+(settings?.reducedMotion?'reduced':'')} style={{'--panel-opacity':Math.min(100,Math.max(70,settings?.opacity??96))/100} as CSSProperties}>
     <header className="header" data-tauri-drag-region>
-      <div className="brand" data-tauri-drag-region><span className="brand-icon"><Radio size={19}/></span><div data-tauri-drag-region><h1>match<span>radar</span><i>®</i></h1><p>YOUR MATCHDAY COMPANION</p></div></div>
+      <div className="brand" data-tauri-drag-region><span className="brand-icon"><img src={logo} alt=""/></span><div data-tauri-drag-region><h1>match<span>radar</span><i>®</i></h1><p>YOUR MATCHDAY COMPANION</p></div></div>
       <div className="header-actions">
         <button className="icon-button" title={native?'Minimize to taskbar':'Minimize is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().minimize().catch(()=>useApp.setState({error:'Could not minimize the widget.'}))} aria-label="Minimize widget"><Minus size={17}/></button>
         <button className="icon-button close" title={native?'Hide to system tray':'Hide is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().hide().catch(()=>useApp.setState({error:'Could not hide the widget.'}))} aria-label="Hide widget"><X size={16}/></button>

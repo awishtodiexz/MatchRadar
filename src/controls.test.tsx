@@ -129,7 +129,7 @@ describe('widget controls', () => {
   expect(useApp.getState().snapshot?.settings).toMatchObject({alwaysOnTop:false, theme:'light', opacity:70});
  });
  it('retries a trusted crest once before showing initials', async () => {
-  render(<App/>); const image = document.querySelector('img') as HTMLImageElement;
+  render(<App/>); const image = document.querySelector('.match-row .badge img') as HTMLImageElement;
   expect(image.src).toContain('/500-dark/'); fireEvent.error(image);
   expect(image.src).toContain('/500/'); fireEvent.error(image);
   await waitFor(() => expect(image.isConnected).toBe(false));
