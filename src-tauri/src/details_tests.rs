@@ -352,7 +352,7 @@ fn commentary_enriches_live_timelines_and_scorers_carry_lineup_context() {
             "team": {"id": "359"},
             "formation": "4-2-3-1",
             "roster": [
-                {"jersey": "7", "starter": true, "formationPlace": 5, "position": {"abbreviation": "RW"}, "athlete": {"displayName": "Bukayo Saka"}},
+                {"jersey": "7", "starter": true, "formationPlace": "5", "position": {"abbreviation": "RW"}, "athlete": {"displayName": "Bukayo Saka"}},
                 {"jersey": 19, "starter": false, "subbedIn": true, "position": {"abbreviation": "SUB"}, "athlete": {"displayName": "Leandro Trossard"}}
             ]
         }],

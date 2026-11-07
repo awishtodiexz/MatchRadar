@@ -500,6 +500,11 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
                 jersey,
                 formation_place: p["formationPlace"]
                     .as_u64()
+                    .or_else(|| {
+                        p["formationPlace"]
+                            .as_str()
+                            .and_then(|value| value.parse::<u64>().ok())
+                    })
                     .filter(|n| (1..=11).contains(n))
                     .map(|n| n as u32),
                 subbed_in: p["subbedIn"].as_bool().unwrap_or(false),

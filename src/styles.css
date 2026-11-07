@@ -309,7 +309,7 @@ footer { min-height: 52px; display: flex; align-items: center; justify-content: 
   .competition-short { display: inline; }
 }
 
-/* Settings → Teams groups: followed, Premier League, other competitions. */
+/* Settings â†’ Teams groups: followed, Premier League, other competitions. */
 .team-group { margin-top: var(--space-3); }
 .team-group-title { display: flex; width: 100%; align-items: center; gap: 6px; margin: 0; padding: 2px 0; text-align: left; font-size: 12px; font-weight: 650; color: var(--text); }
 .team-group-title > span { color: var(--muted); font-size: 10px; font-weight: 600; }
@@ -482,3 +482,26 @@ footer { min-height: 52px; display: flex; align-items: center; justify-content: 
 .stat-row .stat-leading { color: var(--accent); font-weight: 800; }
 .stat-bar .bar-home i, .stat-bar .bar-away i { background: var(--muted); opacity: .55; }
 .stat-bar .bar-home.winning i, .stat-bar .bar-away.winning i { background: var(--accent); opacity: .95; }
+
+/* Two-team formation pitch inspired by Flashscore. */
+:root { --pitch-bg: #0d2118; --pitch-line: #ffffff1c; }
+.theme-light { --pitch-bg: #e4efdf; --pitch-line: #286c3530; }
+.formation-strip { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin: 9px 0 4px; color: var(--muted); font-size: 9px; font-weight: 750; letter-spacing: .4px; }
+.formation-strip strong { color: var(--text); font-size: 11px; letter-spacing: 0; }
+.formation-strip strong:last-child { text-align: right; }
+.lineup-pitch.split { position: relative; height: 204px; margin: 0 0 12px; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: linear-gradient(180deg, #ffffff05, transparent 45%), var(--pitch-bg); }
+.pitch-halfway { position: absolute; left: 50%; top: 0; bottom: 0; border-left: 1px solid var(--pitch-line); }
+.pitch-circle { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; border: 1px solid var(--pitch-line); border-radius: 50%; transform: translate(-50%,-50%); }
+.pitch-box { position: absolute; top: 23%; height: 54%; width: 22px; border: 1px solid var(--pitch-line); }
+.pitch-box-left { left: -1px; border-left: 0; }
+.pitch-box-right { right: -1px; border-right: 0; }
+.pitch-side { position: absolute; top: 12px; bottom: 12px; display: flex; align-items: stretch; justify-content: space-around; gap: 2px; }
+.pitch-side.home { left: 10px; right: 50%; }
+.pitch-side.away { left: 50%; right: 10px; }
+.pitch-column { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: space-around; min-width: 0; }
+.pitch-shirt { display: grid; place-items: center; width: 17px; height: 17px; border: 1px solid var(--accent-border); border-radius: 50%; background: var(--surface-solid); color: var(--accent); font-size: 7.5px; font-weight: 800; font-variant-numeric: tabular-nums; box-shadow: 0 1px 5px #0005; }
+.pitch-shirt.away { border-color: var(--border-strong); background: var(--surface-soft); color: var(--text); }
+.pitch-shirt.is-keeper { border-color: var(--warning-border); color: var(--warning); }
+.theme-light .pitch-name { text-shadow: none; }
+/* Keep the centered status clear of team names at 320px. */
+.versus { grid-template-columns: minmax(0,1fr) 86px minmax(0,1fr); }

@@ -2,14 +2,14 @@
 
 <!-- snapshot:start -->
 ## Snapshot
-- Updated: 2026-11-07 19:27 (+02:00)
+- Updated: 2026-11-07 19:39 (+02:00)
 - Branch: main
-- Recent: 62910d0 feat: adopt the official MatchRadar logo | 2b4dfe1 feat: redesign the match stats tab | b313581 chore: hold all builds at version 1.0.0
+- Recent: 78f8c24 fix: use lime only for the leading stat | 62910d0 feat: adopt the official MatchRadar logo | 2b4dfe1 feat: redesign the match stats tab
 <!-- snapshot:end -->
 
 ## Objective
 
-MatchRadar is held at version 1.0.0 because no public release has been made. The current local installer is MatchRadar_1.0.0_x64-setup.exe with official logo, lime-leading/gray stats, Flashscore layouts and paired substitutions; it is not published or pushed.
+MatchRadar is held at version 1.0.0 because no public release has been made. The current local installer is MatchRadar_1.0.0_x64-setup.exe with the official logo, two-team formation pitch, grouped stats, Flashscore layouts and paired substitutions; it is not published or pushed.
 
 ## Next steps
 
@@ -31,15 +31,15 @@ MatchRadar is held at version 1.0.0 because no public release has been made. The
 - ESPN event IDs are globally allocated; the stored competition keeps attribution and cache isolation explicit without rewriting legacy match IDs.
 - ESPN team IDs are identical for clubs in both competitions (verified against the real PL/UCL team feeds), so favorites remain one ID list and need no mapping. Match bells stay independent.
 - Teams groups Followed clubs, Premier League clubs (static catalog plus any PL fixture participant), and a collapsed Other clubs list for discovered non-PL sides; search spans all groups.
-- No public release exists. All local builds are version 1.0.0; the newest local installer is `MatchRadar_1.0.0_x64-setup.exe` (3,612,770 bytes, SHA-256 `8372F7C60CB8C191DC71E86F325FB88D9046D4000700E22534A1027C143FF49F`).
+- No public release exists. All local builds are version 1.0.0; the newest local installer is `MatchRadar_1.0.0_x64-setup.exe` (3,610,849 bytes, SHA-256 `AE7BC9ECBD2C713B56C4A145A8BD2119186A893FE8ADB1C8CEAB6A912665C838`).
 - Match details merge commentary only with a clock, require provider period or derive it from half text/clock, extract scorers/formation/jersey/subs, and show substitution minutes from provider substitution events with safe defaults for older caches.
-- Match alerts live behind a header bell popover; Overview no longer duplicates Timeline with a Latest feed. Detail layout follows Flashscore (centered score/clock, underlined tabs everywhere, grouped percentage-correct stats with center-origin lime-leading/gray bars); list rows are a uniform 72px with stable scrollbar gutters and one-line club names. Lineups pair each substitution with the replaced player and minute. The supplied official mark is used in the header, favicon, and multi-size window/installer icon. Version 1.0.0 is local-only.
+- Match alerts live behind a header bell popover; Overview no longer duplicates Timeline with a Latest feed. Detail layout follows Flashscore (centered score/clock, underlined tabs everywhere, grouped percentage-correct stats with center-origin lime-leading/gray bars); list rows are a uniform 72px with stable scrollbar gutters and one-line club names. Lineups use a two-team formation pitch and pair each substitution with the replaced player and minute. The supplied official mark is used in the header, favicon, and multi-size window/installer icon. Version 1.0.0 is local-only.
 - The UI reads its version from `package.json`; `npm run check:version` enforces Cargo/Tauri agreement in `verify:fast`, local builds and CI. `scripts/release-local.ps1` builds, hashes and optionally publishes the local asset.
 - Manual refresh measured 5 scoreboard requests; a 60s debug-build sample held at ~101 MB working / ~9 MB private with stable threads. These are short debug measurements, not packaged-release numbers.
 
 ## Commands
 
-- `npm run verify:fast` — lint, 91 frontend tests, production build.
+- `npm run verify:fast` — lint, 92 frontend tests, production build.
 - `npm run verify:ui` — 28 Playwright journeys at 320/390px in both themes.
 - `cargo test --locked --manifest-path src-tauri/Cargo.toml` — 108 Rust tests (use the Visual Studio developer environment with `TEMP` under `src-tauri/target`, as `build-local.ps1` does).
 - `.\scripts\build-local.ps1` — local NSIS installer.

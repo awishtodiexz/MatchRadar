@@ -88,6 +88,22 @@ it('shows scorers, formation, jersey numbers and substitutes without inventing d
  state.data=old;
 });
 
+it('draws both formations when all twenty-two starter places are known',()=>{
+ const old=state.data;
+ const squad=(teamId:string)=>Array.from({length:11},(_,i)=>({
+  teamId,name:`${teamId} Player ${i+1}`,position:i===0?'G':i<5?'CD':i<8?'CM':'CF',starter:true,jersey:String(i+1),formationPlace:i+1
+ }));
+ state.data={...old,formations:{'359':'4-3-3','363':'4-3-3'},players:[...squad('359'),...squad('363')]};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));
+ const pitch=document.querySelector('.lineup-pitch');
+ expect(pitch).toBeTruthy();
+ expect(pitch?.getAttribute('aria-hidden')).toBe('true');
+ expect(pitch?.querySelectorAll('.pitch-shirt')).toHaveLength(22);
+ expect(screen.getAllByText('4-3-3').length).toBeGreaterThan(0);
+ state.data=old;
+});
+
 it('labels timeline periods and event types',()=>{
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);
  fireEvent.click(screen.getByRole('tab',{name:'Timeline'}));

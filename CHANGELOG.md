@@ -33,8 +33,10 @@ set.
   the duplicate Latest feed was removed.
 - Timeline merging ESPN commentary with key events, grouped by half, with team
   badges and labels for goals, cards, substitutions, shots, corners and fouls.
-- Lineups with home/away tabs, formation, shirt numbers, position groups,
-  kickoff starters, substitutes, and paired substitutions with provider minutes.
+- Lineups with a horizontal two-team formation pitch, both formations, shirt
+  number markers, home/away tabs, position groups, kickoff starters, substitutes,
+  and paired substitutions with provider minutes. Player lists remain the
+  accessible name source below the pitch.
 - Flashscore-inspired detail hierarchy: centered score and LIVE/HALF-TIME/
   FULL-TIME clock, underlined tabs, split stat bars, and unified tab styling
   across fixtures, Settings, Match Centre and lineup teams.
