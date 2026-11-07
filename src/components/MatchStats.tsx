@@ -75,11 +75,13 @@ export function MatchStats({match,statistics}:{match:Match;statistics:MatchSumma
         const peak=comparable?Math.max(leftValue,rightValue):0;
         const leftWidth=comparable&&peak>0?Math.round((leftValue/peak)*100):0;
         const rightWidth=comparable&&peak>0?Math.round((rightValue/peak)*100):0;
+        const homeLeads=comparable&&!NEGATIVE.has(pair.name)&&leftValue>rightValue;
+        const awayLeads=comparable&&!NEGATIVE.has(pair.name)&&rightValue>leftValue;
         return <div className="stat-row" role="row" key={pair.name}>
-          <span role="cell" className={comparable&&!NEGATIVE.has(pair.name)&&leftValue>rightValue?'stat-leading':undefined}>{shown(pair.name,pair.home)}</span>
+          <span role="cell" className={homeLeads?'stat-leading':undefined}>{shown(pair.name,pair.home)}</span>
           <span role="cell">{LABELS[pair.name]||pair.home?.label||pair.away?.label||pair.name}</span>
-          <span role="cell" className={comparable&&!NEGATIVE.has(pair.name)&&rightValue>leftValue?'stat-leading':undefined}>{shown(pair.name,pair.away)}</span>
-          {comparable&&<div className="stat-bar" aria-hidden="true"><span className="bar-home"><i style={{width:`${leftWidth}%`}}/></span><span className="bar-away"><i style={{width:`${rightWidth}%`}}/></span></div>}
+          <span role="cell" className={awayLeads?'stat-leading':undefined}>{shown(pair.name,pair.away)}</span>
+          {comparable&&<div className="stat-bar" aria-hidden="true"><span className={'bar-home '+(homeLeads?'winning':'')}><i style={{width:`${leftWidth}%`}}/></span><span className={'bar-away '+(awayLeads?'winning':'')}><i style={{width:`${rightWidth}%`}}/></span></div>}
         </div>;
       })}
     </div>)}

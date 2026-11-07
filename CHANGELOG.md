@@ -40,7 +40,8 @@ set.
   across fixtures, Settings, Match Centre and lineup teams.
 - Stats tab groups all provider metrics under Overview, Attack, Passing,
   Defending and Discipline; percentage fields render as percentages and
-  comparison bars grow from the center for both teams.
+  comparison bars grow from the center. Lime marks the side leading a stat,
+  the other side is gray, and the leading value is lime; no team-color mapping.
 - Stable 72px fixture rows with a fixed score/clock column, stable scrollbar
   gutter, and one-line truncated club names with full titles/accessible names.
 - Compact stoppage-time clock labels (`90+2'`) that fit inside the live pill.
