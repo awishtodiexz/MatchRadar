@@ -188,7 +188,7 @@ describe('focused usability refinements',()=>{
     render(<App/>);fireEvent.click(screen.getByRole('button',{name:detailName}));
     act(()=>useApp.setState({snapshot:{...mockSnapshot,matches:mockSnapshot.matches.map(m=>m.id==='demo-1'?{...m,homeScore:3,detail:"72'"}:m)}}));
     expect(document.querySelector('.detail-score')?.textContent).toContain('3 : 1');
-    expect(document.querySelector('.match-status-pill')?.textContent).toContain("72'");
+    expect(document.querySelector('.detail-status')?.textContent).toContain("72'");
     act(()=>useApp.setState({snapshot:{...mockSnapshot,matches:mockSnapshot.matches.filter(m=>m.id!=='demo-1')}}));
     expect(screen.getByRole('heading',{name:'Match details'})).toBeTruthy();
     expect(document.querySelector('.detail-score')?.textContent).toContain('3 : 1');

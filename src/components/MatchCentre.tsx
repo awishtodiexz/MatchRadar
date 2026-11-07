@@ -50,10 +50,14 @@ export function MatchCentre({match}:{match:Match}) {
     return home||away?[{name,label,home:home?.value??'—',away:away?.value??'—'}]:[];
   });
   const periodGroups=[...new Set(events.map(event=>event.period))].sort((a,b)=>a-b).map(period=>({period,events:events.filter(event=>event.period===period)}));
+  const select=(name:string)=>{
+    setSelected(name);
+    requestAnimationFrame(()=>document.querySelector<HTMLElement>('.detail-body')?.scrollTo({top:0}));
+  };
   return <section className="match-centre" aria-label="Match centre" aria-busy={loading}>
-    <div className="centre-tabs" role="tablist" aria-label="Match centre sections">{tabs.map((name,index)=><button key={name} role="tab" id={sectionId+'-'+name} aria-controls={sectionId+'-panel'} aria-selected={tab===name} tabIndex={tab===name?0:-1} onClick={()=>setSelected(name)} onKeyDown={event=>{
+    <div className="centre-tabs" role="tablist" aria-label="Match centre sections">{tabs.map((name,index)=><button key={name} role="tab" id={sectionId+'-'+name} aria-controls={sectionId+'-panel'} aria-selected={tab===name} tabIndex={tab===name?0:-1} onClick={()=>select(name)} onKeyDown={event=>{
       const next=event.key==='ArrowRight'?(index+1)%tabs.length:event.key==='ArrowLeft'?(index+tabs.length-1)%tabs.length:event.key==='Home'?0:event.key==='End'?tabs.length-1:undefined;
-      if(next===undefined)return;event.preventDefault();setSelected(tabs[next]);document.getElementById(sectionId+'-'+tabs[next])?.focus();
+      if(next===undefined)return;event.preventDefault();select(tabs[next]);document.getElementById(sectionId+'-'+tabs[next])?.focus();
     }}>{name}</button>)}</div>
     <div role="tabpanel" id={sectionId+'-panel'} aria-labelledby={sectionId+'-'+tab} tabIndex={0}>
     {loading&&!data&&<div className="skeletons" role="status" aria-label="Loading match details"><div/></div>}

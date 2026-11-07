@@ -13,10 +13,14 @@ export function MatchDetails({match, settings, back}: {match:Match; settings:Set
   return <>
     <ViewHeading title="Match details" eyebrow="MATCH CENTRE" back={back} actions={<MatchAlertsButton match={match} settings={settings}/>}/>
     <div className="detail-body">
-      <div className="detail-league"><CompetitionMark league={match.league}/>{match.competition}<span className={'match-status-pill '+match.status}>{live&&!match.scoreStale&&<i className="dot"/>}{status}</span></div>
+      <div className="detail-league"><CompetitionMark league={match.league}/>{match.competition}</div>
       <div className="versus">
         <div><Badge team={match.home}/><b title={match.home.name}>{match.home.name}</b></div>
-        <div className="detail-score">{match.status==='scheduled'?timeLabel(match.kickoff):`${match.homeScore ?? '–'} : ${match.awayScore ?? '–'}`}{match.scoreStale&&<small>Saved</small>}</div>
+        <div className="detail-score">
+          <span>{match.status==='scheduled'?timeLabel(match.kickoff):`${match.homeScore ?? '–'} : ${match.awayScore ?? '–'}`}</span>
+          <small className={'detail-status '+match.status}>{live&&!match.scoreStale&&<i className="dot"/>}{status}</small>
+          {match.scoreStale&&<small className="detail-saved">Saved</small>}
+        </div>
         <div><Badge team={match.away}/><b title={match.away.name}>{match.away.name}</b></div>
       </div>
       <p className="detail-date"><time dateTime={match.kickoff}>{dateLabel(match.kickoff)} · {timeLabel(match.kickoff)}</time> local time</p>

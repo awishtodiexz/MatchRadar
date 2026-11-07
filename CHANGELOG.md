@@ -12,6 +12,8 @@ and versions use semantic versioning.
 - Match Centre Overview now shows goal scorers with minutes and teams, compact key stats (possession, shots, on target, corners), and the venue instead of only a venue and event count; the duplicate Latest feed was removed.
 - Timeline merges ESPN's full commentary with key events, groups by half/period, drops untimed boilerplate, and labels goals, cards, substitutions, shots, corners and fouls with team badges.
 - Lineups use home/away tabs and show formation, shirt numbers, position groups, substitutes, and on/off markers with the provider's substitution minute; the Starting XI is labelled as the kickoff lineup.
+- Match details follows the Flashscore pattern: centered score with a centered LIVE/HALF-TIME/FULL-TIME clock, underlined section tabs, and comparison bars on supported statistics.
+- Fixture rows use a stable scrollbar gutter, a fixed centered score/clock column and a uniform 72px height across All/Live/Following/Upcoming/Results; list team names truncate to one line with full names retained in the title/accessible label.
 - `scripts/release-local.ps1`: builds the installer, prints its SHA-256 and, with `-Publish`, creates a GitHub release from the local asset after requiring a clean tree and unused tag.
 - Request-count diagnostics for manual refreshes and a documented [local release process](docs/RELEASING.md).
 

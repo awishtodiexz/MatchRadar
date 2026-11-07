@@ -23,7 +23,7 @@ for (const [width,theme,compact] of [[320,'light',true],[390,'dark',false]] as c
       const card=page.getByRole('button',{name:`Match details: ${name}`});
       await card.scrollIntoViewIfNeeded();await card.click();
       await expect(page.getByRole('heading',{name:'Match details'})).toBeFocused();
-      await expect(page.locator('.match-status-pill')).toContainText(status);
+      await expect(page.locator('.detail-status')).toContainText(status);
       await expect(page.locator('.detail-body')).toBeVisible();
       expect(await page.locator('.detail-body').evaluate(e=>e.scrollWidth<=e.clientWidth)).toBe(true);
       if(status==='FULL-TIME') {

@@ -29,7 +29,7 @@ export function MatchCard({match, settings, onOpen, showCompetition=false}: {mat
         <Badge team={team}/><span className="team-name" title={team.name}>{team.name}</span>
         {settings.favorites.includes(team.id) && <Star aria-label={`Following ${team.name}`} role="img" className="fav" size={11} fill="currentColor"/>}
       </div>)}</div>
-      <div className="match-state">
+      <div className={'match-state '+(isLive(match)?'is-live':'')}>
         <div className={'result '+(match.status==='scheduled'?'scheduled':'')}>
           {match.status==='scheduled' ? <strong className="kickoff">{timeLabel(match.kickoff)}</strong>
             : <div className="scores"><strong>{match.homeScore ?? '–'}</strong><strong>{match.awayScore ?? '–'}</strong></div>}

@@ -12,7 +12,11 @@ export function MatchStats({match,statistics}:{match:Match;statistics:MatchSumma
       const number=(value:string|undefined)=>value&&/^\d+(?:\.\d+)?%?$/.test(value.trim())?Number.parseFloat(value):null;
       const left=number(home?.value),right=number(away?.value);
       const highlight=comparable&&left!==null&&right!==null;
-      return <div className="stat-row" role="row" key={key}><span role="cell" className={highlight&&left>right?'stat-leading':undefined}>{home?.value??'—'}</span><span role="cell">{home?.label||away?.label||key}</span><span role="cell" className={highlight&&right>left?'stat-leading':undefined}>{away?.value??'—'}</span></div>;
+      const split=highlight&&left+right>0?Math.round((left/(left+right))*100):50;
+      return <div className="stat-row" role="row" key={key}>
+        <span role="cell" className={highlight&&left>right?'stat-leading':undefined}>{home?.value??'—'}</span><span role="cell">{home?.label||away?.label||key}</span><span role="cell" className={highlight&&right>left?'stat-leading':undefined}>{away?.value??'—'}</span>
+        {highlight&&<div className="stat-bar" aria-hidden="true"><i style={{width:`${split}%`}}/><i style={{width:`${100-split}%`}}/></div>}
+      </div>;
     })}
   </div>;
 }
