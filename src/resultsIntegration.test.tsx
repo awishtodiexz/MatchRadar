@@ -41,7 +41,7 @@ it('shows a completed provider summary through Results, including events, statis
  fireEvent.click(card);await screen.findByText('Emirates Stadium');
  fireEvent.click(screen.getByRole('tab',{name:'Timeline'}));
  expect(screen.getByText(/Ao Tanaka.*yellow card/)).toBeTruthy();expect(screen.getByText(/James Justin.*right footed shot/)).toBeTruthy();expect(screen.getByText(/Timber replaces Ben White/)).toBeTruthy();expect(screen.getByText('A player is shown a red card.')).toBeTruthy();
- fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getByRole('row',{name:/Possession/}).textContent).toBe('58.2Possession41.8');
+ fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getByRole('row',{name:/Possession/}).textContent).toBe('58.2%Possession41.8%');
  fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));expect(screen.getByText('Starting XI')).toBeTruthy();
  expect(screen.getByText('David Raya')).toBeTruthy();expect(screen.getByText('Bruno Guimarães')).toBeTruthy();
  expect(screen.getByText('Substitutes')).toBeTruthy();

@@ -38,6 +38,9 @@ set.
 - Flashscore-inspired detail hierarchy: centered score and LIVE/HALF-TIME/
   FULL-TIME clock, underlined tabs, split stat bars, and unified tab styling
   across fixtures, Settings, Match Centre and lineup teams.
+- Stats tab groups all provider metrics under Overview, Attack, Passing,
+  Defending and Discipline; percentage fields render as percentages and
+  comparison bars grow from the center for both teams.
 - Stable 72px fixture rows with a fixed score/clock column, stable scrollbar
   gutter, and one-line truncated club names with full titles/accessible names.
 - Compact stoppage-time clock labels (`90+2'`) that fit inside the live pill.

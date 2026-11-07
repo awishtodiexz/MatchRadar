@@ -38,12 +38,16 @@ it('highlights comparable ESPN statistics while keeping disciplinary counts neut
   {teamId:'359',name:'totalShots',label:'Shots',value:'13'},
   {teamId:'363',name:'totalShots',label:'Shots',value:'11'},
   {teamId:'359',name:'foulsCommitted',label:'Fouls',value:'12'},
-  {teamId:'363',name:'foulsCommitted',label:'Fouls',value:'20'}
+  {teamId:'363',name:'foulsCommitted',label:'Fouls',value:'20'},
+  {teamId:'359',name:'passPct',label:'Pass Completion %',value:'0.8'},
+  {teamId:'363',name:'passPct',label:'Pass Completion %',value:'0.7'}
  ]};
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Stats'}));
- expect(screen.getByRole('row',{name:/Possession/}).querySelector('.stat-leading')?.textContent).toBe('58.2');
+ expect(screen.getByText('Passing')).toBeTruthy();
+ expect(screen.getByRole('row',{name:/Possession/}).querySelector('.stat-leading')?.textContent).toBe('58.2%');
  expect(screen.getByRole('row',{name:/Shots/}).querySelector('.stat-leading')?.textContent).toBe('13');
- expect(screen.getByRole('row',{name:/Fouls/}).querySelector('.stat-leading')).toBeNull();state.data=old;
+ expect(screen.getByRole('row',{name:/Fouls/}).querySelector('.stat-leading')).toBeNull();
+ expect(screen.getByRole('row',{name:/Pass completion/}).textContent).toBe('80%Pass completion70%');state.data=old;
 });
 it('groups known positions without inventing a position for unknown players',()=>{
  const old=state.data;state.data={...old,players:[...old.players,{teamId:'359',name:'Unknown Player',position:'',starter:true}]};
