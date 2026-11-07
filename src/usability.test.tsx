@@ -141,9 +141,9 @@ describe('focused usability refinements',()=>{
     const base=structuredClone(mockSnapshot);
     await load({...base,settings:{...base.settings,matchAlerts:{'demo-5':{enabled:true,expiresAt:'2099-01-01T00:00:00Z'}}}});
     render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Match details: Brighton & Hove Albion versus Everton'}));
-    expect(screen.getByText('This match has ended. You can mute or reset its alerts.')).toBeTruthy();
+    expect(screen.getByText('This match has ended. Mute it or use team settings.')).toBeTruthy();
     const mute=screen.getByRole('button',{name:'Mute this match'});mute.focus();fireEvent.click(mute);
-    await waitFor(()=>expect(screen.getByText('This match has ended. You can reset its muted setting.')).toBeTruthy());
+    await waitFor(()=>expect(screen.getByText('This match has ended. Reset it to use team settings.')).toBeTruthy());
     expect(document.activeElement).toBe(screen.getByRole('heading',{name:'Match alerts'}));
     expect(screen.queryByRole('button',{name:'Notify me about this match'})).toBeNull();
     expect(screen.getByRole('button',{name:'Use team settings'})).toBeTruthy();
@@ -183,14 +183,14 @@ describe('focused usability refinements',()=>{
     render(<App/>);fireEvent.click(screen.getByRole('button',{name:detailName}));
     act(()=>useApp.setState({snapshot:{...mockSnapshot,matches:mockSnapshot.matches.map(m=>m.id==='demo-1'?{...m,homeScore:3,detail:"72'"}:m)}}));
     expect(document.querySelector('.detail-score')?.textContent).toContain('3 : 1');
-    expect(document.querySelector('.detail-score')?.textContent).toContain("72'");
+    expect(document.querySelector('.match-status-pill')?.textContent).toContain("72'");
     act(()=>useApp.setState({snapshot:{...mockSnapshot,matches:mockSnapshot.matches.filter(m=>m.id!=='demo-1')}}));
     expect(screen.getByRole('heading',{name:'Match details'})).toBeTruthy();
     expect(document.querySelector('.detail-score')?.textContent).toContain('3 : 1');
-    expect(document.querySelector('.detail-score')?.textContent).toContain('saved');
+    expect(document.querySelector('.detail-score')?.textContent).toContain('Saved');
     act(()=>useApp.setState({snapshot:{...mockSnapshot,matches:mockSnapshot.matches.map(m=>m.id==='demo-1'?{...m,homeScore:4,detail:"80'"}:m)}}));
     expect(document.querySelector('.detail-score')?.textContent).toContain('4 : 1');
-    expect(document.querySelector('.detail-score')?.textContent).not.toContain('saved');
+    expect(document.querySelector('.detail-score')?.textContent).not.toContain('Saved');
   });
 
   it('announces selected tabs, implements arrow/Home/End navigation and restores Settings focus',()=>{

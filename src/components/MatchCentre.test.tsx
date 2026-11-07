@@ -3,7 +3,8 @@ import { cleanup,fireEvent,render,screen } from '@testing-library/react';
 import { afterEach,expect,it,vi } from 'vitest';
 import { MatchCentre } from './MatchCentre';
 import { mockSnapshot } from '../test-fixtures/fixtures';
-const state=vi.hoisted(()=>({data:{matchId:'1',updatedAt:'2026-10-29T12:00:00Z',error:null,stale:false,venue:null as string|null,events:[{id:'e',minute:"45+2'",kind:'goal',text:'Verified provider goal',teamId:'359'}],statistics:[{teamId:'359',name:'redCards',label:'Red cards',value:'0'}],players:[{teamId:'359',name:'A long player name',position:'G',starter:true}]},loading:false,error:null,retry:vi.fn()}));
+import type { MatchSummary } from '../useMatchSummary';
+const state=vi.hoisted(()=>({data:{matchId:'1',updatedAt:'2026-10-29T12:00:00Z',error:null,stale:false,venue:null as string|null,events:[{id:'e',minute:"45+2'",period:1,seconds:2820,kind:'goal',text:'Verified provider goal',teamId:'359'}],statistics:[{teamId:'359',name:'redCards',label:'Red cards',value:'0'}],players:[{teamId:'359',name:'A long player name',position:'G',starter:true}]} as MatchSummary,loading:false,error:null,retry:vi.fn()}));
 vi.mock('../useMatchSummary',()=>({useMatchSummary:()=>state}));
 afterEach(cleanup);
 it('offers available sections and displays explicit zero stats and player names',()=>{render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Timeline'}));expect(screen.getByText("45+2'")).toBeTruthy();expect(screen.getByText('Verified provider goal')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getByText('0')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));expect(screen.getByText('A long player name')).toBeTruthy();});
@@ -53,8 +54,35 @@ it('groups known positions without inventing a position for unknown players',()=
 it('explains when one team has no lineup rather than showing an empty starting XI',()=>{
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);
  fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));
- expect(screen.getAllByText('Starting XI')).toHaveLength(1);
+ expect(screen.getByText('Starting XI')).toBeTruthy();
+ fireEvent.click(screen.getByRole('tab',{name:/Chelsea/}));
  expect(screen.getByText('Lineup unavailable')).toBeTruthy();
+});
+
+it('shows scorers, formation, jersey numbers and substitutes without inventing data',()=>{
+ const old=state.data;
+ state.data={...old,
+  scorers:[{teamId:'359',teamName:'Arsenal',name:'Bukayo Saka',minute:"23'",ownGoal:false,penalty:false}],
+  formations:{'359':'4-3-3'},
+  players:[{teamId:'359',name:'David Raya',position:'G',starter:true,jersey:'22',formationPlace:1},
+   {teamId:'359',name:'Leandro Trossard',position:'SUB',starter:false,jersey:'19',subbedIn:true}]};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ expect(screen.getByText('Goals')).toBeTruthy();
+ expect(screen.getByText('Bukayo Saka')).toBeTruthy();
+ fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));
+ expect(screen.getByText('4-3-3')).toBeTruthy();
+ expect(screen.getByText('#22')).toBeTruthy();
+ expect(screen.getByText('Substitutes')).toBeTruthy();
+ expect(screen.getByText('#19')).toBeTruthy();
+ expect(screen.getByText(/Trossard/)).toBeTruthy();
+ state.data=old;
+});
+
+it('labels timeline periods and event types',()=>{
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ fireEvent.click(screen.getByRole('tab',{name:'Timeline'}));
+ expect(screen.getByText('First half')).toBeTruthy();
+ expect(screen.getByText('GOAL')).toBeTruthy();
 });
 
 it('exposes selected panels and supports arrow, Home and End keyboard navigation',()=>{

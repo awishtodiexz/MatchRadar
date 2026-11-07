@@ -2,20 +2,20 @@
 
 <!-- snapshot:start -->
 ## Snapshot
-- Updated: 2026-11-06 21:25 (+02:00)
+- Updated: 2026-11-07 18:07 (+02:00)
 - Branch: main
-- Recent: 33fb413 release: MatchRadar 1.1.0 | e273772 feat: unify club following and organize Teams settings | ea7f873 feat: add UEFA Champions League support
+- Recent: 312fc23 chore: add version checks, release tooling and refresh diagnostics | 33fb413 release: MatchRadar 1.1.0 | e273772 feat: unify club following and organize Teams settings
 <!-- snapshot:end -->
 
 ## Objective
 
-1.1.0 is released; post-release improvements (single-sourced version checks, guarded local-release script, Teams captions, refresh request diagnostics and short measurements) are implemented locally and ready for a decision on 1.1.1.
+MatchRadar 1.2.0 match-detail redesign is implemented and built locally as an unsigned installer: richer Overview/scorers, commentary-backed Timeline, team-tabbed Lineups, relocated live status, compact alerts, plus the earlier version/release-tooling work. It is not published or pushed.
 
 ## Next steps
 
-1. Install `MatchRadar_1.1.0_x64-setup.exe` and run the packaged Windows acceptance: selector persistence, Teams groups at 320/390px, following a non-PL club, UCL Match Centre/Results, alerts and tray delivery while viewing the other competition, DPI/monitor/sleep-resume checks.
-2. Verify UCL live/halftime summary shapes when a live UCL fixture is available.
-3. Decide whether the post-release version-check/release-script/Teams/diagnostic changes warrant a 1.1.1 build, and review signing, licensing and public-distribution decisions.
+1. Install `MatchRadar_1.2.0_x64-setup.exe` and run packaged Windows acceptance: Overview/Timeline/Lineups at 320/390px, live status pill, compact alerts, selector persistence, Teams groups, following a non-PL club, UCL Results, alerts/tray while viewing the other competition, DPI/monitor/sleep-resume checks.
+2. Verify UCL live/halftime summary shapes when a live UCL fixture is available (Premier League live/halftime was observed on 7 November).
+3. Decide whether to push `main` and publish 1.2.0, and review signing, licensing and public-distribution decisions.
 
 ## Blockers
 
@@ -31,15 +31,16 @@
 - ESPN event IDs are globally allocated; the stored competition keeps attribution and cache isolation explicit without rewriting legacy match IDs.
 - ESPN team IDs are identical for clubs in both competitions (verified against the real PL/UCL team feeds), so favorites remain one ID list and need no mapping. Match bells stay independent.
 - Teams groups Followed clubs, Premier League clubs (static catalog plus any PL fixture participant), and a collapsed Other clubs list for discovered non-PL sides; search spans all groups.
-- v1.1.0 is packaged locally (unsigned, SHA-256 `ABCA3D48AB8379977ABB52C563D2BBFE852D28ED6FD12A35D192DCAEED8AF641`) and attached to https://github.com/awishtodiexz/MatchRadar/releases/tag/v1.1.0; no Actions artifact is used for the release asset.
+- v1.1.0 remains the published release (unsigned, SHA-256 `ABCA3D48AB8379977ABB52C563D2BBFE852D28ED6FD12A35D192DCAEED8AF641`); v1.2.0 is built locally with SHA-256 `28BE82B06B5FECFD3B74E4972B8132F6794ABA5CD29FCD2731A41999F3BF10CA` and not published.
+- Match details merge commentary only with a clock, require provider period or derive it from half text/clock, and extract scorers/formation/jersey/subs with safe defaults for older caches.
 - The UI reads its version from `package.json`; `npm run check:version` enforces Cargo/Tauri agreement in `verify:fast`, local builds and CI. `scripts/release-local.ps1` builds, hashes and optionally publishes the local asset.
 - Manual refresh measured 5 scoreboard requests; a 60s debug-build sample held at ~101 MB working / ~9 MB private with stable threads. These are short debug measurements, not packaged-release numbers.
 
 ## Commands
 
-- `npm run verify:fast` — lint, 88 frontend tests, production build.
+- `npm run verify:fast` — lint, 90 frontend tests, production build.
 - `npm run verify:ui` — 28 Playwright journeys at 320/390px in both themes.
-- `cargo test --locked --manifest-path src-tauri/Cargo.toml` — 107 Rust tests (use the Visual Studio developer environment with `TEMP` under `src-tauri/target`, as `build-local.ps1` does).
+- `cargo test --locked --manifest-path src-tauri/Cargo.toml` — 108 Rust tests (use the Visual Studio developer environment with `TEMP` under `src-tauri/target`, as `build-local.ps1` does).
 - `.\scripts\build-local.ps1` — local NSIS installer.
 - `.\scripts\handoff.ps1 -Check` — verify handoff freshness.
 - `.\scripts\handoff.ps1 -Check -Strict` — also fail on uncommitted work (use at session start).

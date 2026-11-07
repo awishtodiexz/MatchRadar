@@ -36,7 +36,11 @@ describe('widget controls', () => {
   bridge.invoke.mockImplementation((command: string)=>Promise.resolve(command==='get_snapshot'?snapshot:undefined));
   render(<App/>);
   expect(await screen.findByText('Partial update · some data may be stale')).toBeTruthy();
-  expect(screen.getByText('Saved · 67′').classList.contains('live-text')).toBe(false);
+  const card = document.querySelector('[data-match-id="demo-1"]');
+  const clock = card?.querySelector('.live-clock');
+  expect(clock?.textContent).toContain('67′');
+  expect(clock?.classList.contains('saved')).toBe(true);
+  expect(card?.querySelector('.result-meta')?.textContent).toContain('saved');
   expect(screen.getByRole('heading',{name:/SAVED LIVE SCORES/})).toBeTruthy();
   expect(screen.getByRole('heading',{name:/SAVED LIVE SCORES/}).classList.contains('live-group')).toBe(false);
   expect(screen.getByText('SAVED LIVE',{exact:true})).toBeTruthy();

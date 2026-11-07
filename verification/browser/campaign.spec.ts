@@ -95,7 +95,7 @@ for (const width of [320,390]) for (const theme of ['dark','light']) for (const 
           const longName=page.getByText('Jordan Alexander West-Northumberland',{exact:true});
           await longName.scrollIntoViewIfNeeded();
           await expect(longName).toBeInViewport();
-          expect(await page.locator('.detail-body').evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
+          expect(await page.locator('.detail-body').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
         }
       }
       await page.getByRole('button',{name:'Settings',exact:true}).click();

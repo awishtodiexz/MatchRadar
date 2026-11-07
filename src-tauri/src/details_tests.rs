@@ -289,6 +289,94 @@ async fn bounded_cache_and_invalid_persisted_entries() {
 }
 
 #[test]
+fn commentary_enriches_live_timelines_and_scorers_carry_lineup_context() {
+    let v = serde_json::json!({
+        "header": {
+            "id": "1",
+            "competitions": [{
+                "status": {"type": {"state": "in"}},
+                "competitors": [
+                    {"team": {"id": "359", "displayName": "Arsenal"}},
+                    {"team": {"id": "357", "displayName": "Leeds United"}}
+                ]
+            }]
+        },
+        "keyEvents": [{
+            "id": "k1",
+            "type": {"type": "goal"},
+            "text": "Goal! Arsenal 1, Leeds United 0. Bukayo Saka (Arsenal) left footed shot.",
+            "period": {"number": 1},
+            "clock": {"value": 600.0, "displayValue": "10'"},
+            "scoringPlay": true,
+            "team": {"id": "359"}
+        }],
+        "commentary": [
+            {
+                "sequence": 2,
+                "time": {"value": 720.0, "displayValue": "12'"},
+                "play": {
+                    "id": "p2",
+                    "type": {"type": "offside"},
+                    "text": "Offside, Leeds United. Georginio Rutter is caught offside.",
+                    "period": {"number": 1},
+                    "clock": {"value": 720.0, "displayValue": "12'"},
+                    "team": {"displayName": "Leeds United"}
+                }
+            },
+            {
+                "sequence": 3,
+                "time": {"value": 1200.0, "displayValue": "20'"},
+                "play": {
+                    "id": "p3",
+                    "type": {"type": "goal"},
+                    "text": "Goal! Arsenal 1, Leeds United 1. Georginio Rutter (Leeds United) right footed shot.",
+                    "participants": [{"athlete": {"displayName": "Georginio Rutter"}}],
+                    "period": {"number": 1},
+                    "clock": {"value": 1200.0, "displayValue": "20'"},
+                    "team": {"displayName": "Leeds United"}
+                }
+            }
+        ],
+        "rosters": [{
+            "team": {"id": "359"},
+            "formation": "4-2-3-1",
+            "roster": [
+                {"jersey": "7", "starter": true, "formationPlace": 5, "position": {"abbreviation": "RW"}, "athlete": {"displayName": "Bukayo Saka"}},
+                {"jersey": 19, "starter": false, "subbedIn": true, "position": {"abbreviation": "SUB"}, "athlete": {"displayName": "Leandro Trossard"}}
+            ]
+        }],
+        "boxscore": {"teams": []}
+    });
+    let d = normalize(&v, "1", Competition::PremierLeague).unwrap();
+    assert_eq!(
+        d.events.len(),
+        3,
+        "key event plus two unique commentary entries"
+    );
+    assert!(d.events.iter().any(|e| e.kind == "offside"));
+    assert_eq!(d.scorers.len(), 2);
+    assert_eq!(d.scorers[0].name, "Bukayo Saka");
+    assert_eq!(d.scorers[1].minute, "20'");
+    assert_eq!(d.scorers[1].team_id, "357");
+    assert_eq!(d.formations.get("359").map(String::as_str), Some("4-2-3-1"));
+    let starter = d.players.iter().find(|p| p.name == "Bukayo Saka").unwrap();
+    assert_eq!(starter.jersey.as_deref(), Some("7"));
+    assert_eq!(starter.formation_place, Some(5));
+    let sub = d
+        .players
+        .iter()
+        .find(|p| p.name == "Leandro Trossard")
+        .unwrap();
+    assert!(sub.subbed_in && !sub.starter);
+    let restored: Details = serde_json::from_value(serde_json::to_value(&d).unwrap()).unwrap();
+    assert_eq!(restored.scorers.len(), 2);
+    assert_eq!(
+        restored.formations.get("359").map(String::as_str),
+        Some("4-2-3-1")
+    );
+}
+
+#[test]
 fn champions_league_details_use_the_ucl_endpoint_and_a_separate_cache_key() {
     let v: Value =
         serde_json::from_str(include_str!("../../tests/fixtures/summary-completed.json")).unwrap();

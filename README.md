@@ -39,8 +39,9 @@ ESPN's CDN. They are not packaged Windows captures.*
   small PL/UCL tag per card, and the live count follows the selection. UCL looks
   30 days ahead so sparse fixtures still appear. Follow a club once — ESPN uses
   the same ID in both competitions, so its UCL matches and alerts come along.
-- **Match Centre:** on-demand timeline, team statistics, and lineups for either
-  competition when ESPN supplies them. Scores remain sourced from the scoreboard.
+- **Match Centre:** on-demand Overview with scorers and key stats, a commentary-rich
+  timeline by half, team-tabbed lineups with formations and shirt numbers, plus
+  team statistics for either competition. Scores remain sourced from the scoreboard.
 - **Views that fit matchday:** All, Live, Following, Upcoming, and Results.
   Results covers completed matches from the previous 14 days with a separate
   per-competition cache.

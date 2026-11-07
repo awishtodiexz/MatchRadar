@@ -1,4 +1,4 @@
-﻿import { test, expect } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 
 import { installBridge } from './bridge';
 
@@ -28,7 +28,9 @@ test('bell is independent and Match Centre tabs support keyboard navigation', as
     await page.getByRole('tab', { name: tab, exact: true }).click();
     await expect(page.getByRole('tabpanel', { name: tab })).toBeVisible();
   }
-  await expect(page.getByText('Goalkeepers', { exact: true })).toHaveCount(2);
+  await expect(page.getByText('Goalkeepers', { exact: true })).toHaveCount(1);
+  await page.getByRole('tab', { name: /Chelsea/ }).click();
+  await expect(page.getByText('Goalkeepers', { exact: true })).toHaveCount(1);
   await page.getByRole('tab', { name: 'Lineups', exact: true }).press('Home');
   await expect(page.getByRole('tab', { name: 'Overview', exact: true })).toBeFocused();
 });

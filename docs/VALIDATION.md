@@ -15,6 +15,14 @@ For the latest feature-branch evidence and acceptance checklist, see the [archiv
 
 > Sections below are dated checkpoints. Statements about unavailable MSVC, demo mode, or unbuilt installers describe those dates, not current status.
 
+## Match detail redesign — 7 November 2026
+
+Real ESPN summaries drove the redesign: the live Arsenal–Hull City summary had only six keyEvents (including delay markers) but 42 commentary entries; the completed Leeds–Tottenham summary had 40 keyEvents and 118 commentary entries. Broader summaries also expose scorer participants, formations, shirt numbers, formation places and substitution flags. MatchRadar now merges unique commentary with keyEvents, requires a clock before placing a commentary event, derives halves from the provider period/text/clock, and extracts scorers with own-goal/penalty flags.
+
+Verified in the running debug build at 390px and 320px: the Overview shows scorers with minutes/teams, possession/shots/on-target/corners, latest events and venue; Timeline groups first/second half with labeled shots, corners, fouls, cards and goals; Lineups switch by team and show formation, shirt numbers and substitutes; the live minute moved to a status pill (LIVE/HALF-TIME/FULL-TIME) and cards use a clock pill above the score; Match alerts is a compact row. No horizontal overflow was observed, and scorer data matched the provider.
+
+Automated checks: 108 Rust tests, 90 frontend tests, 28 Playwright journeys, lint, production build, Rust formatting and the version check pass. `scripts/build-local.ps1` produced `MatchRadar_1.2.0_x64-setup.exe` (3,414,514 bytes, SHA-256 `28BE82B06B5FECFD3B74E4972B8132F6794ABA5CD29FCD2731A41999F3BF10CA`) locally; it has not been installed or published. This is not packaged Windows acceptance.
+
 ### Refresh measurements — 6 November 2026
 
 Three manual refreshes from the running debug build (real ESPN data, both competitions) each issued **5 scoreboard HTTP requests**: one Premier League fixture month, one PL score day, two Champions League fixture months (its 30-day window crossed November/December) and one UCL score day. Manual refreshes deliberately force both competitions; ordinary polling keeps fixture queries to six-hour intervals per competition.

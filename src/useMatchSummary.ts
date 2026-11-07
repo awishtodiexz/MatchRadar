@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
+export interface MatchScorer { teamId:string; teamName:string; name:string; minute:string; ownGoal:boolean; penalty:boolean }
 export interface MatchSummary {
   matchId:string; updatedAt:string; stale:boolean; error:string|null;
   venue:string|null;
   events:Array<{id:string;minute:string;period:number;seconds:number;kind:string;text:string;teamId:string|null}>;
   statistics:Array<{teamId:string;name:string;label:string;value:string}>;
-  players:Array<{teamId:string;name:string;position:string;starter:boolean}>;
+  players:Array<{teamId:string;name:string;position:string;starter:boolean;jersey?:string|null;formationPlace?:number|null;subbedIn?:boolean;subbedOut?:boolean}>;
+  scorers?:MatchScorer[];
+  formations?:Record<string,string>;
 }
 type SummaryState={id:string;data:MatchSummary|null;loading:boolean;error:string|null};
 export function useMatchSummary(id:string, active:boolean) {

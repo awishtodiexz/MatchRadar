@@ -17,16 +17,16 @@ for (const [width,theme,compact] of [[320,'light',true],[390,'dark',false]] as c
     if(compact)await page.getByText('Compact view',{exact:true}).click();
     await page.getByRole('button',{name:'Back to matches'}).click();
     for(const [name,status] of [
-      ['Arsenal versus Chelsea','67'],['Liverpool versus Newcastle United','Half-time'],
-      ['Manchester City versus Manchester United','Scheduled'],['Brighton & Hove Albion versus Everton','Full-time']
+      ['Arsenal versus Chelsea','LIVE'],['Liverpool versus Newcastle United','HALF-TIME'],
+      ['Manchester City versus Manchester United','SCHEDULED'],['Brighton & Hove Albion versus Everton','FULL-TIME']
     ]) {
       const card=page.getByRole('button',{name:`Match details: ${name}`});
       await card.scrollIntoViewIfNeeded();await card.click();
       await expect(page.getByRole('heading',{name:'Match details'})).toBeFocused();
-      await expect(page.locator('.detail-score')).toContainText(status);
+      await expect(page.locator('.match-status-pill')).toContainText(status);
       await expect(page.locator('.detail-body')).toBeVisible();
       expect(await page.locator('.detail-body').evaluate(e=>e.scrollWidth<=e.clientWidth)).toBe(true);
-      if(status==='Full-time') {
+      if(status==='FULL-TIME') {
         await expect(page.getByText('This match has ended.',{exact:true})).toBeVisible();
         await expect(page.getByRole('button',{name:'Notify me about this match'})).toHaveCount(0);
       }

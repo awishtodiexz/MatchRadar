@@ -30,11 +30,13 @@ export function MatchCard({match, settings, onOpen, showCompetition=false}: {mat
         {settings.favorites.includes(team.id) && <Star aria-label={`Following ${team.name}`} role="img" className="fav" size={11} fill="currentColor"/>}
       </div>)}</div>
       <div className={'result '+(match.status==='scheduled'?'scheduled':'')}>
+        {isLive(match)&&<span className={'live-clock '+(match.scoreStale?'saved':'')}><i className="dot"/>{match.status==='halftime'?'HT':match.detail||'LIVE'}</span>}
         {match.status==='scheduled' ? <strong className="kickoff">{timeLabel(match.kickoff)}</strong>
           : <div className="scores"><strong>{match.homeScore ?? '–'}</strong><strong>{match.awayScore ?? '–'}</strong></div>}
         <span className="result-meta">
           {showCompetition&&<span className="competition-tag" title={match.competition} aria-label={`${match.competition} match`}>{match.league==='championsLeague'?'UCL':'PL'}</span>}
-          <span className={isLive(match)&&!match.scoreStale?'live-text':''}>{match.status==='live'&&!match.scoreStale&&<i className="dot"/>}{match.scoreStale?'Saved · ':''}{match.detail || match.status}</span>
+          {!isLive(match)&&<span>{match.scoreStale?'Saved · ':''}{match.detail || match.status}</span>}
+          {isLive(match)&&match.scoreStale&&<span>saved</span>}
         </span>
       </div><ChevronRight size={13} className="row-arrow" aria-hidden="true"/>
     </button>
@@ -52,12 +54,15 @@ export function MatchAlertPanel({match, settings}: {match:Match; settings:Settin
   const alerts = alertPresentation(settings, match);
   const change = (enabled:boolean) => {if(alerts.ended)heading.current?.focus();void save({matchAlerts:{...settings.matchAlerts,[match.id]:{enabled,expiresAt:new Date(Date.parse(match.kickoff)+30*86400000).toISOString()}}});};
   const reset = () => { const next = {...settings.matchAlerts}; delete next[match.id]; heading.current?.focus(); void save({matchAlerts:next}); };
-  return <section className="match-alert-panel" aria-labelledby="match-alert-heading">
-    <div className="section-line"><h3 id="match-alert-heading" ref={heading} tabIndex={-1}>Match alerts</h3><span className="state-label" data-alert-state={alerts.state}>{alerts.label}</span></div>
-    <p>{alerts.ended?(alerts.state==='on'?'This match has ended. You can mute or reset its alerts.':alerts.state==='muted'?'This match has ended. You can reset its muted setting.':'This match has ended.'):alerts.description}</p>
-    {(!alerts.ended||alerts.state!=='team')&&<div className="inline-actions">
-      {(!alerts.ended||alerts.enabled)&&<button className="outline-button" onClick={()=>change(!alerts.enabled)}>{alerts.enabled?<BellOff size={15}/>:<BellRing size={15}/>} {alerts.enabled?'Mute this match':'Notify me about this match'}</button>}
-      {alerts.state!=='team'&&<button className="text-button" onClick={reset}>Use team settings</button>}
-    </div>}
+  return <section className="match-alert-panel" aria-labelledby="match-alert-heading" title={alerts.description}>
+    <div className="alert-row">
+      <h3 id="match-alert-heading" ref={heading} tabIndex={-1}>Match alerts</h3>
+      <span className="state-label" data-alert-state={alerts.state}>{alerts.label}</span>
+      <div className="alert-actions">
+        {(!alerts.ended||alerts.enabled)&&<button className="outline-button compact" onClick={()=>change(!alerts.enabled)}>{alerts.enabled?<BellOff size={15}/>:<BellRing size={15}/>} {alerts.enabled?'Mute this match':'Notify me about this match'}</button>}
+        {alerts.state!=='team'&&<button className="text-button" onClick={reset}>Use team settings</button>}
+      </div>
+    </div>
+    {alerts.ended&&<p className="field-note">{alerts.state==='on'?'This match has ended. Mute it or use team settings.':alerts.state==='muted'?'This match has ended. Reset it to use team settings.':'This match has ended.'}</p>}
   </section>;
 }

@@ -1,23 +1,69 @@
+import { useId, useState } from 'react';
 import type { Match } from '../types';
 import type { MatchSummary } from '../useMatchSummary';
 
-const groups=['Goalkeepers','Defenders','Midfielders','Forwards','Other positions'] as const;
-function positionGroup(position:string):typeof groups[number] {
-  const code=position.trim().toUpperCase();
-  if(['G','GK','GOALKEEPER'].includes(code))return 'Goalkeepers';
-  if(['D','DF','DEF','CB','LB','RB','LWB','RWB'].includes(code))return 'Defenders';
-  if(['M','MF','MID','CM','DM','AM','LM','RM'].includes(code))return 'Midfielders';
-  if(['F','FW','ST','CF','LW','RW'].includes(code))return 'Forwards';
+const groups = ['Goalkeepers','Defenders','Midfielders','Forwards','Other positions'] as const;
+type Group = typeof groups[number];
+
+export function positionGroup(position:string):Group {
+  const code = position.trim().toUpperCase().replace(/\s+/g,'');
+  if(['G','GK','GOALKEEPER'].includes(code)) return 'Goalkeepers';
+  if(/^(D|DF|DEF|CB|CD|LB|RB|LWB|RWB|SW)/.test(code)) return 'Defenders';
+  if(/^(M|MF|MID|CM|DM|AM|LM|RM|CDM|CAM)/.test(code)) return 'Midfielders';
+  if(/^(F|FW|ST|CF|SS|LW|RW)/.test(code)) return 'Forwards';
   return 'Other positions';
 }
-export function MatchLineups({match,players}:{match:Match;players:MatchSummary['players']}) {
-  return <div className="lineups">{[match.home,match.away].map(team=>{
-    const selected=players.filter(p=>p.teamId===team.id);
-    return <section key={team.id}><h3>{team.name}</h3>
+const byPlace = (a:MatchSummary['players'][number], b:MatchSummary['players'][number]) =>
+  (a.formationPlace ?? 99) - (b.formationPlace ?? 99) || a.name.localeCompare(b.name);
+
+function PlayerList({players}: {players:MatchSummary['players']}) {
+  return <>{groups.map(group=>{
+    const list = players.filter(player=>positionGroup(player.position)===group).sort(byPlace);
+    return list.length ? <div className="lineup-group" key={group}>
+      <h5>{group}</h5>
+      <ul className="lineup-list">{list.map((player,index)=><li key={`${player.name}-${index}`}>
+        {player.jersey && <span className="jersey">#{player.jersey}</span>}
+        <span>{player.name}</span>
+        <small>{player.position}{player.subbedOut?' · off':''}{player.subbedIn?' · on':''}</small>
+      </li>)}</ul>
+    </div> : null;
+  })}</>;
+}
+
+export function MatchLineups({match,players,formations={}}: {match:Match;players:MatchSummary['players'];formations?:Record<string,string>}) {
+  const sectionId = useId();
+  const teams = [match.home, match.away];
+  const [teamId,setTeamId] = useState<string|null>(null);
+  const totals = Object.fromEntries(teams.map(team=>[team.id,players.filter(player=>player.teamId===team.id).length]));
+  const activeId = teamId ?? (totals[match.home.id] ? match.home.id : totals[match.away.id] ? match.away.id : match.home.id);
+  const active = teams.find(team=>team.id===activeId) ?? match.home;
+  const selected = players.filter(player=>player.teamId===active.id);
+  const starters = selected.filter(player=>player.starter);
+  const substitutes = selected.filter(player=>!player.starter);
+  const formation = formations[active.id];
+  return <div className="lineups">
+    <div className="lineup-tabs" role="tablist" aria-label="Lineups by team">
+      {teams.map(team=><button key={team.id} role="tab" id={sectionId+'-tab-'+team.id} aria-selected={active.id===team.id}
+        aria-controls={sectionId+'-panel'} tabIndex={active.id===team.id?0:-1} className="lineup-tab"
+        title={team.name} onClick={()=>setTeamId(team.id)}
+        onKeyDown={event=>{
+          if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
+          event.preventDefault();
+          const next = teams[(teams.findIndex(team=>team.id===active.id)+(event.key==='ArrowRight'?1:teams.length-1))%teams.length];
+          setTeamId(next.id);
+          document.getElementById(sectionId+'-tab-'+next.id)?.focus();
+        }}>
+        <span>{team.name}</span><small>{totals[team.id]||'—'}</small>
+      </button>)}
+    </div>
+    <div role="tabpanel" id={sectionId+'-panel'} aria-labelledby={sectionId+'-tab-'+active.id} tabIndex={0}>
+      <div className="lineup-heading"><h3>{active.name}</h3>{formation&&<span className="formation">{formation}</span>}</div>
       {!selected.length&&<p className="field-note">Lineup unavailable</p>}
-      {selected.some(p=>p.starter)&&<h4>Starting XI</h4>}
-      {groups.map(group=>{const list=selected.filter(p=>p.starter&&positionGroup(p.position)===group);return list.length?<div key={group}><h5>{group}</h5><ul className="lineup-list">{list.map((p,i)=><li key={`${p.name}-${i}`}><span>{p.name}</span><small>{p.position}</small></li>)}</ul></div>:null;})}
-      {selected.some(p=>!p.starter)&&<><h4>Substitutes and other players</h4><ul className="lineup-list">{selected.filter(p=>!p.starter).map((p,i)=><li key={`${p.name}-${i}`}><span>{p.name}</span><small>{p.position}</small></li>)}</ul></>}
-    </section>;
-  })}</div>;
+      {starters.length>0&&<><h4>Starting XI</h4><PlayerList players={starters}/></>}
+      {starters.length===0&&selected.length>0&&<><h4>Squad</h4><PlayerList players={selected}/></>}
+      {substitutes.length>0&&<><h4>Substitutes</h4><ul className="lineup-list">{substitutes.sort(byPlace).map((player,index)=><li key={`${player.name}-${index}`}>
+        {player.jersey&&<span className="jersey">#{player.jersey}</span>}<span>{player.name}</span><small>{player.position}{player.subbedIn?' · on':''}</small>
+      </li>)}</ul></>}
+    </div>
+  </div>;
 }
