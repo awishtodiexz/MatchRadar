@@ -23,7 +23,7 @@ Verified in the running debug build at 390px and 320px: the Overview shows score
 
 Card sizing was measured with the browser debug protocol: at 390px every sampled row was 346×72, and at 320px every row was 284×72, identical across All/Live/Following/Upcoming/Results; `scrollbar-gutter: stable` and the fixed score/clock column removed the width jump. The five fixture tabs fit one row at 320px, all tab strips use the underlined active state, and the centered score status dot aligns with its text. Stoppage time is compacted to `90+2'`; the clock pill measured 44px with 42px client content and no overflow, so the green background contains the whole label. Lineups show a paired Substitutions list (`↑ on` / `for off`) with the provider minute. No horizontal overflow was observed, and scorer/substitution data matched the provider.
 
-Automated checks: 108 Rust tests, 91 frontend tests, 28 Playwright journeys, lint, production build, Rust formatting and the version check pass. `scripts/build-local.ps1` produced `MatchRadar_1.2.0_x64-setup.exe` (3,423,009 bytes, SHA-256 `B76A24FED6CE06A34678D0D0EB685AA1787946D031348CC944CE28FA34035B98`) locally; it has not been installed or published. This is not packaged Windows acceptance.
+Automated checks: 108 Rust tests, 91 frontend tests, 28 Playwright journeys, lint, production build, Rust formatting and the version check pass. `scripts/build-local.ps1` produced `MatchRadar_1.0.0_x64-setup.exe` (3,424,182 bytes, SHA-256 `D2ED2A1F3BD18B3506771791378A9C8DFD046F256AF3734881446677E67FFAEE`) locally; it has not been installed or published. This is not packaged Windows acceptance.
 
 ### Refresh measurements — 6 November 2026
 
@@ -31,9 +31,9 @@ Three manual refreshes from the running debug build (real ESPN data, both compet
 
 After those refreshes, the debug process was sampled every five seconds for 60 seconds: working set **101.1–101.2 MB**, private memory **9.0–9.1 MB**, thread count settling from 33 to 29. This is a debug build including WebView2, not the packaged release; it is a short stability check, not a long soak or installer measurement. Release packages should be re-measured after installation.
 
-## Release 1.1.0 local installer — 6 November 2026
+## Earlier local installer — 6 November 2026
 
-`v1.1.0` was packaged locally with `.\scripts\build-local.ps1`, not from a GitHub Actions artifact. The script passed locked dependency installation, lint, **88 frontend tests**, the production frontend build, Rust formatting and **107 Rust tests**, then compiled the release binary and produced `MatchRadar_1.1.0_x64-setup.exe` (3,381,075 bytes, SHA-256 `ABCA3D48AB8379977ABB52C563D2BBFE852D28ED6FD12A35D192DCAEED8AF641`). The installer is unsigned and was not executed or installed in the coding sandbox; packaged runtime behavior still needs the [Windows checklist](#packaged-windows-acceptance-checklist).
+An earlier local build was packaged with `.\scripts\build-local.ps1`, not from a GitHub Actions artifact. The script passed locked dependency installation, lint, **88 frontend tests**, the production frontend build, Rust formatting and **107 Rust tests**, then compiled the release binary and produced an unsigned installer (3,381,075 bytes, SHA-256 `ABCA3D48AB8379977ABB52C563D2BBFE852D28ED6FD12A35D192DCAEED8AF641`). It was not executed or installed in the coding sandbox; packaged runtime behavior still needs the [Windows checklist](#packaged-windows-acceptance-checklist).
 
 ## Off-screen window recovery — 6 November 2026
 

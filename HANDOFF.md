@@ -2,20 +2,20 @@
 
 <!-- snapshot:start -->
 ## Snapshot
-- Updated: 2026-11-07 19:01 (+02:00)
+- Updated: 2026-11-07 19:05 (+02:00)
 - Branch: main
-- Recent: 54df191 fix: finish Flashscore alignment and substitution clarity | ce9ba9a feat: align match layouts with Flashscore patterns | 864d49d fix: refine 1.2 match details from review
+- Recent: faa7371 fix: fit stoppage-time labels inside the live clock | 54df191 fix: finish Flashscore alignment and substitution clarity | ce9ba9a feat: align match layouts with Flashscore patterns
 <!-- snapshot:end -->
 
 ## Objective
 
-MatchRadar 1.2.0 is built locally (3,423,009 bytes, SHA-256 B76A24FE...): Flashscore tabs, centered score/clock, fitted stoppage-time pills, uniform cards and paired substitutions. It is not published or pushed.
+MatchRadar is held at version 1.0.0 because no public release has been made. The current local installer is MatchRadar_1.0.0_x64-setup.exe with all 1.2-era detail/layout features; it is not published or pushed.
 
 ## Next steps
 
-1. Install `MatchRadar_1.2.0_x64-setup.exe` and run packaged Windows acceptance: Overview/Timeline/Lineups at 320/390px, live status pill, compact alerts, selector persistence, Teams groups, following a non-PL club, UCL Results, alerts/tray while viewing the other competition, DPI/monitor/sleep-resume checks.
+1. Install `MatchRadar_1.0.0_x64-setup.exe` and run packaged Windows acceptance: Overview/Timeline/Lineups at 320/390px, live status pill, compact alerts, selector persistence, Teams groups, following a non-PL club, UCL Results, alerts/tray while viewing the other competition, DPI/monitor/sleep-resume checks.
 2. Verify UCL live/halftime summary shapes when a live UCL fixture is available (Premier League live/halftime was observed on 7 November).
-3. Decide whether to push `main` and publish 1.2.0, and review signing, licensing and public-distribution decisions.
+3. Decide whether to push `main` and make the first public release as 1.0.0, and review signing, licensing and public-distribution decisions.
 
 ## Blockers
 
@@ -31,9 +31,9 @@ MatchRadar 1.2.0 is built locally (3,423,009 bytes, SHA-256 B76A24FE...): Flashs
 - ESPN event IDs are globally allocated; the stored competition keeps attribution and cache isolation explicit without rewriting legacy match IDs.
 - ESPN team IDs are identical for clubs in both competitions (verified against the real PL/UCL team feeds), so favorites remain one ID list and need no mapping. Match bells stay independent.
 - Teams groups Followed clubs, Premier League clubs (static catalog plus any PL fixture participant), and a collapsed Other clubs list for discovered non-PL sides; search spans all groups.
-- v1.1.0 remains the published release (unsigned, SHA-256 `ABCA3D48AB8379977ABB52C563D2BBFE852D28ED6FD12A35D192DCAEED8AF641`); v1.2.0 is built locally with SHA-256 `B76A24FED6CE06A34678D0D0EB685AA1787946D031348CC944CE28FA34035B98` and not published.
+- No public release exists. All local builds are version 1.0.0; the newest local installer is `MatchRadar_1.0.0_x64-setup.exe` (3,424,182 bytes, SHA-256 `D2ED2A1F3BD18B3506771791378A9C8DFD046F256AF3734881446677E67FFAEE`).
 - Match details merge commentary only with a clock, require provider period or derive it from half text/clock, extract scorers/formation/jersey/subs, and show substitution minutes from provider substitution events with safe defaults for older caches.
-- Match alerts live behind a header bell popover; Overview no longer duplicates Timeline with a Latest feed. Detail layout follows Flashscore (centered score/clock, underlined tabs everywhere, stat bars); list rows are a uniform 72px with stable scrollbar gutters and one-line club names. Lineups pair each substitution with the replaced player and minute. Version 1.2.0 is local-only.
+- Match alerts live behind a header bell popover; Overview no longer duplicates Timeline with a Latest feed. Detail layout follows Flashscore (centered score/clock, underlined tabs everywhere, stat bars); list rows are a uniform 72px with stable scrollbar gutters and one-line club names. Lineups pair each substitution with the replaced player and minute. Version 1.0.0 is local-only.
 - The UI reads its version from `package.json`; `npm run check:version` enforces Cargo/Tauri agreement in `verify:fast`, local builds and CI. `scripts/release-local.ps1` builds, hashes and optionally publishes the local asset.
 - Manual refresh measured 5 scoreboard requests; a 60s debug-build sample held at ~101 MB working / ~9 MB private with stable threads. These are short debug measurements, not packaged-release numbers.
 
