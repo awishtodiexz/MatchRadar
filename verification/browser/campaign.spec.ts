@@ -22,6 +22,7 @@ test('explores filters, bells, search and details', async ({ page }) => {
   await page.getByRole('button',{name:/Mute match alerts.*Arsenal versus Chelsea/}).click();
   await expect(page.getByRole('button',{name:/Enable all alerts \(match muted\).*Arsenal versus Chelsea/})).toBeVisible();
   await page.getByRole('button',{name:'Match details: Arsenal versus Chelsea'}).click();
+  await page.getByRole('button',{name:/^Match alerts: /}).click();
   await page.getByRole('button',{name:'Use team settings'}).click();
   for (const name of ['Overview','Timeline','Stats','Lineups']) {
     await page.getByRole('tab',{name,exact:true}).click();

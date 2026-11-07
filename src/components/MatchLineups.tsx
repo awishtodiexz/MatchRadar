@@ -16,21 +16,25 @@ export function positionGroup(position:string):Group {
 const byPlace = (a:MatchSummary['players'][number], b:MatchSummary['players'][number]) =>
   (a.formationPlace ?? 99) - (b.formationPlace ?? 99) || a.name.localeCompare(b.name);
 
-function PlayerList({players}: {players:MatchSummary['players']}) {
+function PlayerList({players, substitutions}: {players:MatchSummary['players']; substitutions:NonNullable<MatchSummary['substitutions']>}) {
   return <>{groups.map(group=>{
     const list = players.filter(player=>positionGroup(player.position)===group).sort(byPlace);
     return list.length ? <div className="lineup-group" key={group}>
       <h5>{group}</h5>
-      <ul className="lineup-list">{list.map((player,index)=><li key={`${player.name}-${index}`}>
-        {player.jersey && <span className="jersey">#{player.jersey}</span>}
-        <span>{player.name}</span>
-        <small>{player.position}{player.subbedOut?' · off':''}{player.subbedIn?' · on':''}</small>
-      </li>)}</ul>
+      <ul className="lineup-list">{list.map((player,index)=>{
+        const on = substitutions.find(sub=>sub.playerIn===player.name);
+        const off = substitutions.find(sub=>sub.playerOut===player.name);
+        return <li key={`${player.name}-${index}`}>
+          {player.jersey && <span className="jersey">#{player.jersey}</span>}
+          <span>{player.name}</span>
+          <small>{player.position}{off?` · off ${off.minute}`:player.subbedOut?' · off':''}{on?` · on ${on.minute}`:player.subbedIn?' · on':''}</small>
+        </li>;
+      })}</ul>
     </div> : null;
   })}</>;
 }
 
-export function MatchLineups({match,players,formations={}}: {match:Match;players:MatchSummary['players'];formations?:Record<string,string>}) {
+export function MatchLineups({match,players,substitutions=[],formations={}}: {match:Match;players:MatchSummary['players'];substitutions?:MatchSummary['substitutions'];formations?:Record<string,string>}) {
   const sectionId = useId();
   const teams = [match.home, match.away];
   const [teamId,setTeamId] = useState<string|null>(null);
@@ -59,11 +63,14 @@ export function MatchLineups({match,players,formations={}}: {match:Match;players
     <div role="tabpanel" id={sectionId+'-panel'} aria-labelledby={sectionId+'-tab-'+active.id} tabIndex={0}>
       <div className="lineup-heading"><h3>{active.name}</h3>{formation&&<span className="formation">{formation}</span>}</div>
       {!selected.length&&<p className="field-note">Lineup unavailable</p>}
-      {starters.length>0&&<><h4>Starting XI</h4><PlayerList players={starters}/></>}
-      {starters.length===0&&selected.length>0&&<><h4>Squad</h4><PlayerList players={selected}/></>}
-      {substitutes.length>0&&<><h4>Substitutes</h4><ul className="lineup-list">{substitutes.sort(byPlace).map((player,index)=><li key={`${player.name}-${index}`}>
-        {player.jersey&&<span className="jersey">#{player.jersey}</span>}<span>{player.name}</span><small>{player.position}{player.subbedIn?' · on':''}</small>
-      </li>)}</ul></>}
+      {starters.length>0&&<><h4>Starting XI <small className="kickoff-note">at kickoff</small></h4><PlayerList players={starters} substitutions={substitutions}/></>}
+      {starters.length===0&&selected.length>0&&<><h4>Squad</h4><PlayerList players={selected} substitutions={substitutions}/></>}
+      {substitutes.length>0&&<><h4>Substitutes</h4><ul className="lineup-list">{substitutes.sort(byPlace).map((player,index)=>{
+        const on=substitutions.find(sub=>sub.playerIn===player.name);
+        return <li key={`${player.name}-${index}`}>
+          {player.jersey&&<span className="jersey">#{player.jersey}</span>}<span>{player.name}</span><small>{player.position}{on?` · on ${on.minute}`:player.subbedIn?' · on':''}</small>
+        </li>;
+      })}</ul></>}
     </div>
   </div>;
 }

@@ -27,8 +27,10 @@ for (const [width,theme,compact] of [[320,'light',true],[390,'dark',false]] as c
       await expect(page.locator('.detail-body')).toBeVisible();
       expect(await page.locator('.detail-body').evaluate(e=>e.scrollWidth<=e.clientWidth)).toBe(true);
       if(status==='FULL-TIME') {
+        await page.getByRole('button',{name:/^Match alerts: /}).click();
         await expect(page.getByText('This match has ended.',{exact:true})).toBeVisible();
         await expect(page.getByRole('button',{name:'Notify me about this match'})).toHaveCount(0);
+        await page.getByRole('button',{name:/^Match alerts: /}).click();
       }
       await page.screenshot({path:info.outputPath(`${status.replace(/[^a-z0-9]/gi,'')}.png`),animations:'disabled'});
       await page.keyboard.press('Escape');await expect(card).toBeFocused();
@@ -43,11 +45,13 @@ test('keyboard bell and details stay synchronized with team preferences',async({
   const enabled=page.getByRole('button',{name:/Mute match alerts \(all alerts on\): Arsenal versus Chelsea/});
   await expect(enabled).toHaveAttribute('aria-pressed','true');
   await page.getByRole('button',{name:'Match details: Arsenal versus Chelsea'}).click();
+  await page.getByRole('button',{name:/^Match alerts: /}).click();
   await expect(page.getByText('All alerts on',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Mute this match'}).click();
   await expect(page.getByText('Muted',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Use team settings'}).click();
   await expect(page.getByText('Team settings',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:/^Match alerts: /}).click();
   await page.keyboard.press('Escape');await expect(bell).toHaveAttribute('aria-pressed','false');
   await page.getByRole('button',{name:'Settings',exact:true}).click();
   await page.getByRole('tab',{name:'Alerts'}).click();
@@ -90,8 +94,10 @@ for(const details of ['pending','error'] as const) {
     await expect(page.getByRole('heading',{name:'Match details'})).toBeFocused();
     if(details==='pending') await expect(page.getByLabel('Loading match details')).toBeVisible();
     else {await expect(page.getByText(/Match details unavailable/)).toBeVisible();await expect(page.getByRole('button',{name:'Retry details'})).toBeVisible();await expect(page.getByText('Match information is unavailable right now.')).toHaveCount(0);}
+    await page.getByRole('button',{name:/^Match alerts: /}).click();
     await expect(page.getByRole('button',{name:'Notify me about this match'})).toBeVisible();
     await page.screenshot({path:info.outputPath(`${details}.png`),animations:'disabled'});
+    await page.getByRole('button',{name:/^Match alerts: /}).click();
     await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'Match details: Arsenal versus Chelsea'})).toBeFocused();
   });
 }

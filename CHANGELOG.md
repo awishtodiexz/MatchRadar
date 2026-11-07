@@ -9,16 +9,16 @@ and versions use semantic versioning.
 
 ### Added
 
-- Match Centre Overview now shows goal scorers with minutes and teams, compact key stats (possession, shots, on target, corners), latest events, and the venue instead of only a venue and event count.
+- Match Centre Overview now shows goal scorers with minutes and teams, compact key stats (possession, shots, on target, corners), and the venue instead of only a venue and event count; the duplicate Latest feed was removed.
 - Timeline merges ESPN's full commentary with key events, groups by half/period, drops untimed boilerplate, and labels goals, cards, substitutions, shots, corners and fouls with team badges.
-- Lineups use home/away tabs and show formation, shirt numbers, position groups, substitutes, and on/off markers.
+- Lineups use home/away tabs and show formation, shirt numbers, position groups, substitutes, and on/off markers with the provider's substitution minute; the Starting XI is labelled as the kickoff lineup.
 - `scripts/release-local.ps1`: builds the installer, prints its SHA-256 and, with `-Publish`, creates a GitHub release from the local asset after requiring a clean tree and unused tag.
 - Request-count diagnostics for manual refreshes and a documented [local release process](docs/RELEASING.md).
 
 ### Changed
 
-- The live minute moved out of the score line: cards show a compact clock pill above the score, and Match details shows a LIVE/HALF-TIME/FULL-TIME status pill beside the competition.
-- Match alerts are a compact row with state and actions instead of a descriptive panel, reducing space in Overview and Timeline.
+- The live minute moved out of the score line: cards show a compact clock pill beside the scores, and Match details shows a LIVE/HALF-TIME/FULL-TIME status pill beside the competition.
+- Match alerts moved into a bell control in the Match details header with a small popover; the large alert panel was removed from Overview, Timeline and Lineups.
 - Version is read from `package.json` in the UI; `npm run check:version` enforces agreement with `Cargo.toml` and `tauri.conf.json` in local builds and CI.
 - Teams labels clarify that Following-only spans every competition and Other clubs are outside the Premier League.
 

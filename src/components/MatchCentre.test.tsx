@@ -63,8 +63,10 @@ it('shows scorers, formation, jersey numbers and substitutes without inventing d
  const old=state.data;
  state.data={...old,
   scorers:[{teamId:'359',teamName:'Arsenal',name:'Bukayo Saka',minute:"23'",ownGoal:false,penalty:false}],
+  substitutions:[{teamId:'359',playerIn:'Leandro Trossard',playerOut:'Bukayo Saka',minute:"60'"}],
   formations:{'359':'4-3-3'},
   players:[{teamId:'359',name:'David Raya',position:'G',starter:true,jersey:'22',formationPlace:1},
+   {teamId:'359',name:'Bukayo Saka',position:'RW',starter:true,jersey:'7',formationPlace:5},
    {teamId:'359',name:'Leandro Trossard',position:'SUB',starter:false,jersey:'19',subbedIn:true}]};
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);
  expect(screen.getByText('Goals')).toBeTruthy();
@@ -75,6 +77,8 @@ it('shows scorers, formation, jersey numbers and substitutes without inventing d
  expect(screen.getByText('Substitutes')).toBeTruthy();
  expect(screen.getByText('#19')).toBeTruthy();
  expect(screen.getByText(/Trossard/)).toBeTruthy();
+ expect(screen.getByText(/off 60'/)).toBeTruthy();
+ expect(screen.getByText(/on 60'/)).toBeTruthy();
  state.data=old;
 });
 

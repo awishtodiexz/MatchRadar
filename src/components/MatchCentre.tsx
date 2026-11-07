@@ -44,14 +44,12 @@ export function MatchCentre({match}:{match:Match}) {
   const teamName=(id:string|null)=>teamFor(id)?.name??'Match';
   const scorers=data?.scorers??[];
   const events=data?.events??[];
-  const recent=[...events].sort((a,b)=>a.period-b.period||a.seconds-b.seconds).slice(-3).reverse();
   const stats=keyStats.flatMap(([name,label])=>{
     const home=data?.statistics.find(stat=>stat.name===name&&stat.teamId===match.home.id);
     const away=data?.statistics.find(stat=>stat.name===name&&stat.teamId===match.away.id);
     return home||away?[{name,label,home:home?.value??'—',away:away?.value??'—'}]:[];
   });
   const periodGroups=[...new Set(events.map(event=>event.period))].sort((a,b)=>a-b).map(period=>({period,events:events.filter(event=>event.period===period)}));
-  const goTo=(name:string)=>setSelected(name);
   return <section className="match-centre" aria-label="Match centre" aria-busy={loading}>
     <div className="centre-tabs" role="tablist" aria-label="Match centre sections">{tabs.map((name,index)=><button key={name} role="tab" id={sectionId+'-'+name} aria-controls={sectionId+'-panel'} aria-selected={tab===name} tabIndex={tab===name?0:-1} onClick={()=>setSelected(name)} onKeyDown={event=>{
       const next=event.key==='ArrowRight'?(index+1)%tabs.length:event.key==='ArrowLeft'?(index+tabs.length-1)%tabs.length:event.key==='Home'?0:event.key==='End'?tabs.length-1:undefined;
@@ -73,8 +71,6 @@ export function MatchCentre({match}:{match:Match}) {
         </li>)}</ul>:<p>No goals yet.</p>}
       </>}
       {!!stats.length&&<><h3>Key stats</h3><div className="overview-stats">{stats.map(row=><div className="overview-stat" key={row.name}><strong>{row.home}</strong><span>{row.label}</span><strong>{row.away}</strong></div>)}</div></>}
-      {!!data?.events.length&&<><div className="section-line"><h3>Latest</h3><button className="text-button" onClick={()=>goTo('Timeline')}>Full timeline</button></div>
-        <ol className="event-list compact-events">{recent.map(event=><li key={event.id}><time>{minuteLabel(event)}</time><div><small>{teamFor(event.teamId)?teamName(event.teamId)+' · ':''}{kindLabel(event.kind)}</small><p>{event.text}</p></div></li>)}</ol></>}
       {match.status==='scheduled'?!error&&<p>Match information will appear when available.</p>:(!error||!!data?.events.length)&&<p>{data?.events.length?`${data.events.length} ${data.events.length===1?'event':'events'} available in Timeline.`:'No event timeline is available for this match.'}</p>}
     </>}
     {tab==='Timeline'&&<div className="timeline">{periodGroups.map(group=><section key={group.period} aria-labelledby={sectionId+'-period-'+group.period}>
@@ -88,7 +84,7 @@ export function MatchCentre({match}:{match:Match}) {
       </li>)}</ol>
     </section>)}</div>}
     {tab==='Stats'&&data&&<MatchStats match={match} statistics={data.statistics}/>}
-    {tab==='Lineups'&&data&&<MatchLineups match={match} players={data.players} formations={data.formations}/>}
+    {tab==='Lineups'&&data&&<MatchLineups match={match} players={data.players} substitutions={data.substitutions} formations={data.formations}/>}
     </div>
   </section>;
 }

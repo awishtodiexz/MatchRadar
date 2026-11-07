@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { crestCandidates } from '../teams';
 import { useApp } from '../store';
@@ -39,9 +40,10 @@ export function Toggle({label, description, value, onChange, disabled=false}: {
   </label>;
 }
 
-export function ViewHeading({title, eyebrow, back}: {title:string; eyebrow:string; back:()=>void}) {
+export function ViewHeading({title, eyebrow, back, actions}: {title:string; eyebrow:string; back:()=>void; actions?:ReactNode}) {
   return <div className="subhead">
     <button className="icon-button" onClick={back} aria-label="Back to matches" title="Back to matches (Esc)"><ArrowLeft size={18}/></button>
     <div><span className="eyebrow">{eyebrow}</span><h2 data-view-heading tabIndex={-1}>{title}</h2></div>
+    {actions&&<div className="subhead-actions">{actions}</div>}
   </div>;
 }

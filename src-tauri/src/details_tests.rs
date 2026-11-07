@@ -309,6 +309,17 @@ fn commentary_enriches_live_timelines_and_scorers_carry_lineup_context() {
             "clock": {"value": 600.0, "displayValue": "10'"},
             "scoringPlay": true,
             "team": {"id": "359"}
+        }, {
+            "id": "k2",
+            "type": {"type": "substitution"},
+            "text": "Substitution, Arsenal. Leandro Trossard replaces Bukayo Saka.",
+            "period": {"number": 2},
+            "clock": {"value": 3600.0, "displayValue": "60'"},
+            "team": {"id": "359"},
+            "participants": [
+                {"athlete": {"displayName": "Leandro Trossard"}},
+                {"athlete": {"displayName": "Bukayo Saka"}}
+            ]
         }],
         "commentary": [
             {
@@ -350,11 +361,15 @@ fn commentary_enriches_live_timelines_and_scorers_carry_lineup_context() {
     let d = normalize(&v, "1", Competition::PremierLeague).unwrap();
     assert_eq!(
         d.events.len(),
-        3,
-        "key event plus two unique commentary entries"
+        4,
+        "two key events plus two unique commentary entries"
     );
     assert!(d.events.iter().any(|e| e.kind == "offside"));
     assert_eq!(d.scorers.len(), 2);
+    assert_eq!(d.substitutions.len(), 1);
+    assert_eq!(d.substitutions[0].player_in, "Leandro Trossard");
+    assert_eq!(d.substitutions[0].player_out, "Bukayo Saka");
+    assert_eq!(d.substitutions[0].minute, "60'");
     assert_eq!(d.scorers[0].name, "Bukayo Saka");
     assert_eq!(d.scorers[1].minute, "20'");
     assert_eq!(d.scorers[1].team_id, "357");

@@ -53,6 +53,14 @@ pub struct Scorer {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct Substitution {
+    team_id: String,
+    player_in: String,
+    player_out: String,
+    minute: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Details {
     pub match_id: String,
     /// Missing in saved Premier League caches, which default to that competition.
@@ -65,6 +73,8 @@ pub struct Details {
     pub players: Vec<Player>,
     #[serde(default)]
     pub scorers: Vec<Scorer>,
+    #[serde(default)]
+    pub substitutions: Vec<Substitution>,
     #[serde(default)]
     pub formations: HashMap<String, String>,
     pub updated_at: String,
@@ -120,6 +130,58 @@ fn commentary_period(body: &str, display: &str, seconds: f64) -> Option<u64> {
         106..=120 => 4,
         _ => 4,
     })
+}
+
+fn substitution_from_text(body: &str) -> Option<(String, String)> {
+    let (before, after) = body.split_once(" replaces ")?;
+    let player_in = before.rsplit(". ").next()?.trim();
+    let player_out = after
+        .split_once(" because")
+        .map_or(after, |(name, _)| name)
+        .trim()
+        .trim_end_matches('.')
+        .trim();
+    (!player_in.is_empty() && !player_out.is_empty())
+        .then(|| (player_in.to_string(), player_out.to_string()))
+}
+
+fn add_substitution(
+    rows: &mut Vec<(f64, Substitution)>,
+    seen: &mut HashSet<String>,
+    participants: &Value,
+    team_id: String,
+    minute: String,
+    body: &str,
+    seconds: f64,
+) {
+    let names = array(participants);
+    let player_in = names
+        .first()
+        .map(|entry| text(&entry["athlete"], "displayName"))
+        .filter(|name| !name.is_empty());
+    let player_out = names
+        .get(1)
+        .map(|entry| text(&entry["athlete"], "displayName"))
+        .filter(|name| !name.is_empty());
+    let (player_in, player_out) = match (player_in, player_out) {
+        (Some(player_in), Some(player_out)) => (player_in, player_out),
+        _ => match substitution_from_text(body) {
+            Some(pair) => pair,
+            None => return,
+        },
+    };
+    if !seen.insert(format!("{team_id}:{minute}:{player_in}")) {
+        return;
+    }
+    rows.push((
+        seconds,
+        Substitution {
+            team_id,
+            player_in,
+            player_out,
+            minute,
+        },
+    ));
 }
 
 fn scorer_from_text(body: &str) -> Option<(String, String)> {
@@ -190,6 +252,8 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
     let mut seen_text = HashSet::new();
     let mut scorer_rows = Vec::new();
     let mut seen_scorers = HashSet::new();
+    let mut substitution_rows = Vec::new();
+    let mut seen_substitutions = HashSet::new();
     for e in array(&v["keyEvents"]).iter().take(1000) {
         let eid = text(e, "id");
         let kind = text(&e["type"], "type");
@@ -233,6 +297,17 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
                     &body,
                 );
             }
+        }
+        if kind == "substitution" {
+            add_substitution(
+                &mut substitution_rows,
+                &mut seen_substitutions,
+                &e["participants"],
+                team_id.clone().unwrap_or_default(),
+                text(&e["clock"], "displayValue"),
+                &body,
+                seconds,
+            );
         }
         seen_text.insert(body.clone());
         events.insert(
@@ -325,6 +400,17 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
                 );
             }
         }
+        if kind == "substitution" {
+            add_substitution(
+                &mut substitution_rows,
+                &mut seen_substitutions,
+                &play["participants"],
+                team_id.clone().unwrap_or_default(),
+                minute.clone(),
+                &body,
+                seconds,
+            );
+        }
         events.insert(
             eid.clone(),
             Event {
@@ -351,6 +437,15 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
             .then(a.1.team_id.cmp(&b.1.team_id))
     });
     let scorers = scorer_rows.into_iter().map(|(_, scorer)| scorer).collect();
+    substitution_rows.sort_by(|a, b| {
+        a.0.total_cmp(&b.0)
+            .then(a.1.minute.cmp(&b.1.minute))
+            .then(a.1.player_in.cmp(&b.1.player_in))
+    });
+    let substitutions = substitution_rows
+        .into_iter()
+        .map(|(_, substitution)| substitution)
+        .collect();
     let mut statistics = Vec::new();
     // Pregame summaries expose season totals under boxscore: never label those match stats.
     if v["header"]["competitions"][0]["status"]["type"]["state"]
@@ -435,6 +530,7 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
         statistics,
         players,
         scorers,
+        substitutions,
         formations,
         updated_at: Utc::now().to_rfc3339(),
         error: None,
@@ -489,6 +585,13 @@ fn valid_cached(d: &Details) -> bool {
                 && bounded(&scorer.team_name, 200)
                 && bounded(&scorer.name, 200)
                 && bounded(&scorer.minute, 50)
+        })
+        && d.substitutions.len() <= 40
+        && d.substitutions.iter().all(|substitution| {
+            bounded(&substitution.team_id, 128)
+                && bounded(&substitution.player_in, 200)
+                && bounded(&substitution.player_out, 200)
+                && bounded(&substitution.minute, 50)
         })
         && d.formations.len() <= 2
         && d.formations

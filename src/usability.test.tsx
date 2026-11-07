@@ -16,6 +16,7 @@ async function load(snapshot:Snapshot) {
   useApp.setState({snapshot,loading:false,error:null});
   await useApp.getState().load();
 }
+const openMatchAlerts = () => fireEvent.click(screen.getByRole('button',{name:/^Match alerts: /}));
 beforeEach(async()=>{await load(structuredClone(mockSnapshot));});
 afterEach(cleanup);
 
@@ -49,6 +50,7 @@ describe('focused usability refinements',()=>{
     expect(fireEvent.contextMenu(screen.getByRole('button',{name:inheritName}).querySelector('svg')!)).toBe(false);
     fireEvent.click(card);
     expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Match details'}))).toBe(false);
+    openMatchAlerts();
     expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Match alerts'}))).toBe(false);
     fireEvent.click(screen.getByRole('button',{name:'Settings'}));
     expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Your clubs'}))).toBe(false);
@@ -107,6 +109,7 @@ describe('focused usability refinements',()=>{
     await waitFor(()=>expect(useApp.getState().snapshot?.settings.matchAlerts['demo-1'].enabled).toBe(true));
     expect(screen.getByRole('button',{name:'Mute match alerts (all alerts on): Arsenal versus Chelsea'}).getAttribute('data-alert-state')).toBe('on');
     fireEvent.click(screen.getByRole('button',{name:detailName}));
+    openMatchAlerts();
     expect(screen.getByText('All alerts on',{exact:true})).toBeTruthy();
     const reset=screen.getByRole('button',{name:'Use team settings'});reset.focus();fireEvent.click(reset);
     await waitFor(()=>expect(useApp.getState().snapshot?.settings.matchAlerts).toEqual({'demo-2':other}));
@@ -131,6 +134,7 @@ describe('focused usability refinements',()=>{
   it('does not offer ended-match alert actions when no override exists',()=>{
     render(<App/>);
     fireEvent.click(screen.getByRole('button',{name:'Match details: Brighton & Hove Albion versus Everton'}));
+    openMatchAlerts();
     expect(screen.getByText('This match has ended.')).toBeTruthy();
     expect(screen.queryByText(/mute or reset existing alerts/)).toBeNull();
     expect(screen.queryByRole('button',{name:'Use team settings'})).toBeNull();
@@ -141,6 +145,7 @@ describe('focused usability refinements',()=>{
     const base=structuredClone(mockSnapshot);
     await load({...base,settings:{...base.settings,matchAlerts:{'demo-5':{enabled:true,expiresAt:'2099-01-01T00:00:00Z'}}}});
     render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Match details: Brighton & Hove Albion versus Everton'}));
+    openMatchAlerts();
     expect(screen.getByText('This match has ended. Mute it or use team settings.')).toBeTruthy();
     const mute=screen.getByRole('button',{name:'Mute this match'});mute.focus();fireEvent.click(mute);
     await waitFor(()=>expect(screen.getByText('This match has ended. Reset it to use team settings.')).toBeTruthy());

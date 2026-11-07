@@ -8,6 +8,7 @@ export interface MatchSummary {
   statistics:Array<{teamId:string;name:string;label:string;value:string}>;
   players:Array<{teamId:string;name:string;position:string;starter:boolean;jersey?:string|null;formationPlace?:number|null;subbedIn?:boolean;subbedOut?:boolean}>;
   scorers?:MatchScorer[];
+  substitutions?:Array<{teamId:string;playerIn:string;playerOut:string;minute:string}>;
   formations?:Record<string,string>;
 }
 type SummaryState={id:string;data:MatchSummary|null;loading:boolean;error:string|null};
