@@ -1,46 +1,8 @@
 # Changelog
 
-Notable changes to MatchRadar. The current local build is **1.1.0**; the 1.0.0
-section below records the base feature set.
-
-## [1.1.0] — 2026-11-08
-
-### Added
-
-- Official Premier League and Champions League badges in the competition picker,
-  its menu and the Match details header, theme-aware with inline glyph fallbacks.
-- Tray-first window: no taskbar button, minus and close hide to the tray, a tray
-  icon toggle, the `Ctrl+Shift+M` global shortcut, and optional start-hidden at
-  sign-in.
-- A sleep/resume watchdog that refreshes scores immediately after the machine
-  wakes instead of waiting for the next idle poll.
-
-### Changed
-
-- Half-time headings are brighter with a lime accent divider; the score/status
-  stack is centred on the crests and scroll regions use a symmetric gutter.
-- The details freshness line shows on Overview only.
-- Results refresh quietly while the view is open and only fetch the selected
-  competition(s).
-- Networking uses gzip compression, HTTP/2 and system proxy support with one
-  shared client; crests and badges use 96px combiner images instead of 500px
-  assets.
-- The widget receives a trimmed snapshot instead of the full saved state, routine
-  persistence is throttled to five minutes, date formatters are cached and match
-  summaries refresh at most every two minutes per match.
-- Stability: corrupt-state startup recovery, per-league and per-match backoff,
-  Retry-After clamped to one hour, bounded sent-notification IDs, a rotating
-  provider log, poison-safe locks and debounced opacity saving.
-- Reminder windows are respected when scheduling polls and manual refresh is no
-  longer dropped while a poll is in flight.
-- CI now runs the Playwright and axe journeys.
-
-### Fixed
-
-- Tray double-clicks no longer toggle twice, and a conflicting hotkey surfaces a
-  message.
-- Substitutions without a provider team ID are assigned from the player list.
-- Fixture and result windows tolerate local-time date boundaries.
+Notable changes to MatchRadar. All local builds remain version **1.0.0** until
+the first public release; the sections below describe the complete local feature
+set.
 
 ## [1.0.0] — 2026-11-07
 
