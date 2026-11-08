@@ -4,6 +4,11 @@ Notable changes to MatchRadar. All local builds remain version **1.0.0** until
 the first public release; the sections below describe the complete local feature
 set.
 
+## Local build — 2026-11-08
+
+- Removed the duplicate visible team/statistic header from Match Centre Stats while retaining accessible column names.
+- Local releases use commit-specific tags, target the exact main commit and record the installer SHA-256, allowing fresh private builds without moving existing tags.
+
 ## [1.0.0] — 2026-11-07
 
 ### Added

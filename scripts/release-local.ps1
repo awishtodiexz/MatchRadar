@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [switch]$SkipBuild,
-    [switch]$Publish
+    [switch]$Publish,
+    [string]$Tag
 )
 
 $ErrorActionPreference = 'Stop'
@@ -12,7 +13,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Version check failed.' }
 
     $version = (Get-Content 'package.json' -Raw | ConvertFrom-Json).version
-    $tag = "v$version"
+    $head = (git rev-parse HEAD).Trim()
+    if (-not $Tag) { $Tag = "v$version-build.$($head.Substring(0, 7))" }
+    git check-ref-format "refs/tags/$Tag"
+    if ($LASTEXITCODE -ne 0) { throw "Invalid release tag: $Tag" }
 
     if (-not $SkipBuild) {
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'build-local.ps1')
@@ -33,24 +37,29 @@ try {
     Write-Host "SHA-256:   $hash"
 
     if (-not $Publish) {
-        Write-Host "`nReady to publish $tag. Review the SHA-256 and release notes, then run with -Publish."
+        Write-Host "`nReady to publish $Tag. Review the SHA-256 and release notes, then run with -Publish."
         Write-Host "This does not push commits or create tags unless -Publish is used."
         return
     }
 
     if (git status --porcelain) { throw 'Commit or stash changes before publishing.' }
-    $head = (git rev-parse HEAD).Trim()
+    if ((git branch --show-current).Trim() -ne 'main') { throw 'Publish from the local main branch.' }
+    git fetch origin main
+    if ($LASTEXITCODE -ne 0) { throw 'Could not verify origin/main.' }
     $remote = (git rev-parse origin/main).Trim()
     if ($head -ne $remote) { throw 'Push main before publishing so the tag and installer match.' }
     $commitTime = [DateTimeOffset]::FromUnixTimeSeconds([int64](git log -1 --format=%ct)).LocalDateTime
     if ($installer.LastWriteTime -lt $commitTime) { throw 'Installer predates HEAD; rebuild before publishing.' }
-    if (git tag --list $tag) { throw "Tag $tag already exists." }
+    if (git tag --list $Tag) { throw "Tag $Tag already exists." }
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'GitHub CLI (gh) is required to publish.' }
 
-    gh release create $tag "$($installer.FullName)#MatchRadar $version installer" `
-        --target main --title "MatchRadar $version" --generate-notes --latest
+    $notes = "Locally built unsigned Windows x64 installer from main commit $head.`n`nSee CHANGELOG.md for changes in this build.`n`nApp version: $version`nSHA-256: $hash`n`nQuit MatchRadar from the tray before installing. There is no auto-updater; install this build over the previous version. Packaged Windows runtime acceptance remains pending."
+    $notesPath = Join-Path $installer.DirectoryName "release-notes.txt"
+    [IO.File]::WriteAllText($notesPath, $notes, [Text.UTF8Encoding]::new($false))
+    gh release create $Tag "$($installer.FullName)#MatchRadar $version installer" `
+        --target $head --title "MatchRadar $version (build $($head.Substring(0, 7)))" --notes-file $notesPath --latest
     if ($LASTEXITCODE -ne 0) { throw "gh release create failed (exit $LASTEXITCODE)." }
-    Write-Host "Published $tag with the locally built installer."
+    Write-Host "Published $Tag with the locally built installer."
 }
 finally {
     Pop-Location

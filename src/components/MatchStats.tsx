@@ -65,7 +65,7 @@ export function MatchStats({match,statistics}:{match:Match;statistics:MatchSumma
   if(!sections.length) return <p className="field-note">Statistics are not available for this match.</p>;
 
   return <div className="stat-comparison" role="table" aria-label="Team statistics">
-    <div className="stat-heading" role="row"><strong role="columnheader">{match.home.name}</strong><span role="columnheader">Statistic</span><strong role="columnheader">{match.away.name}</strong></div>
+    <div className="sr-only" role="row"><strong role="columnheader">{match.home.name}</strong><span role="columnheader">Statistic</span><strong role="columnheader">{match.away.name}</strong></div>
     {sections.map(section=><div className="stat-section" role="rowgroup" key={section.title}>
       <div className="stat-section-title" role="row"><span role="columnheader" aria-colspan={3}>{section.title}</span></div>
       {section.rows.map(pair=>{

@@ -262,9 +262,7 @@ footer { min-height: 52px; display: flex; align-items: center; justify-content: 
 .event-list li {display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
 .event-list time {flex:none;width:38px;font-variant-numeric:tabular-nums;color:var(--accent);}
 .event-list p {color:var(--text);overflow-wrap:anywhere;}
-.stat-heading,.stat-row {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr) minmax(0,1fr);gap:8px;align-items:center;text-align:center;}
-.stat-heading {padding:8px 0;color:var(--muted);font-size:11px;border-bottom:1px solid var(--border);}
-.stat-heading strong {color:var(--text);overflow-wrap:anywhere;}
+.stat-row {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr) minmax(0,1fr);gap:8px;align-items:center;text-align:center;}
 .stat-row {min-height:34px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;}
 .stat-row span:first-child,.stat-row span:last-child {color:var(--text);font-weight:700;font-variant-numeric:tabular-nums;}
 .stat-row .stat-leading {color:var(--accent);}
@@ -478,10 +476,8 @@ h4.timeline-period::before { content: ""; flex: none; width: 3px; height: 13px; 
 .stat-bar .bar-home i { display: block; height: 3px; border-radius: 2px 0 0 2px; }
 .stat-bar .bar-away i { display: block; height: 3px; border-radius: 0 2px 2px 0; }
 
-.stat-heading strong { display: flex; align-items: center; justify-content: center; }
 
 /* Lime means the leading side; the other side is neutral gray. */
-.stat-heading strong { color: var(--text); }
 .stat-row .stat-leading { color: var(--accent); font-weight: 800; }
 .stat-bar .bar-home i, .stat-bar .bar-away i { background: var(--muted); opacity: .55; }
 .stat-bar .bar-home.winning i, .stat-bar .bar-away.winning i { background: var(--accent); opacity: .95; }

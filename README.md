@@ -66,7 +66,7 @@ ESPN's CDN. They are not packaged Windows captures.*
 
 MatchRadar targets 64-bit Windows 10/11 with the Microsoft Edge WebView2 runtime.
 
-1. Build the local installer with `.\scripts\build-local.ps1` and use
+1. Download the latest locally built installer from [GitHub Releases](https://github.com/awishtodiexz/MatchRadar/releases/latest), or build it with `.\scripts\build-local.ps1` and use
    `MatchRadar_1.0.0_x64-setup.exe`, or download a private local-build artifact
    from a successful [Windows validation run](https://github.com/awishtodiexz/MatchRadar/actions/workflows/windows.yml).
 2. Quit any running MatchRadar instance from its tray menu.
@@ -216,7 +216,7 @@ must agree (`npm run check:version`).
    path, size and SHA-256 and stops before publishing.
 4. Publish only with explicit approval:
    `.\scripts\release-local.ps1 -SkipBuild -Publish`. It requires a clean tree,
-   `HEAD == origin/main`, an unused tag and `gh` authentication.
+   `HEAD == origin/main`, an unused tag and `gh` authentication. Private local builds use a commit-specific `v1.0.0-build.<commit>` tag while keeping app version `1.0.0`; `-Tag` overrides the tag. The release targets the exact commit and records the local installer SHA-256.
 5. Download the release asset once to confirm its SHA-256.
 
 The release script never force-pushes, merges, or builds through Actions.
