@@ -11,6 +11,8 @@ use std::{
     },
 };
 use tokio::sync::Mutex as AsyncMutex;
+#[path = "details_statistics.rs"]
+mod statistics;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Event {
@@ -21,6 +23,12 @@ pub struct Event {
     kind: String,
     text: String,
     team_id: Option<String>,
+    #[serde(default)]
+    participants: Vec<String>,
+    #[serde(default)]
+    short_text: Option<String>,
+    #[serde(default)]
+    reason: Option<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -45,6 +53,12 @@ pub struct Player {
     subbed_in: bool,
     #[serde(default)]
     subbed_out: bool,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Coach {
+    team_id: String,
+    name: String,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -96,6 +110,14 @@ pub struct Details {
     #[serde(default)]
     pub venue: Option<String>,
     #[serde(default)]
+    pub venue_city: Option<String>,
+    #[serde(default)]
+    pub referee: Option<String>,
+    #[serde(default)]
+    pub capacity: Option<u32>,
+    #[serde(default)]
+    pub statistics_note: Option<String>,
+    #[serde(default)]
     pub attendance: Option<u32>,
     #[serde(default)]
     pub form: HashMap<String, Vec<FormGame>>,
@@ -110,6 +132,8 @@ pub struct Details {
     pub substitutions: Vec<Substitution>,
     #[serde(default)]
     pub formations: HashMap<String, String>,
+    #[serde(default)]
+    pub coaches: Vec<Coach>,
     pub updated_at: String,
     pub error: Option<String>,
     pub stale: bool,
@@ -117,8 +141,150 @@ pub struct Details {
 fn text(v: &Value, key: &str) -> String {
     v[key].as_str().unwrap_or("").chars().take(500).collect()
 }
+fn clean_text(v: &Value, limit: usize) -> Option<String> {
+    v.as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && !s.chars().any(char::is_control))
+        .map(|s| s.chars().take(limit).collect())
+}
+fn referee(v: &Value) -> Option<String> {
+    clean_text(&v["gameInfo"]["referee"]["displayName"], 120)
+        .or_else(|| clean_text(&v["gameInfo"]["referee"]["fullName"], 120))
+        .or_else(|| {
+            [
+                &v["gameInfo"]["officials"],
+                &v["header"]["competitions"][0]["officials"],
+            ]
+            .into_iter()
+            .find_map(|list| {
+                array(list).iter().find_map(|official| {
+                    let role = official["position"]["name"]
+                        .as_str()
+                        .or_else(|| official["type"]["name"].as_str())
+                        .or_else(|| official["type"].as_str())
+                        .unwrap_or("")
+                        .to_ascii_lowercase();
+                    if !matches!(role.as_str(), "referee" | "head referee" | "main referee")
+                        && !(role.is_empty() && array(list).len() == 1)
+                    {
+                        return None;
+                    }
+                    clean_text(&official["fullName"], 120)
+                        .or_else(|| clean_text(&official["displayName"], 120))
+                })
+            })
+        })
+}
+fn commentary_kind(body: &str) -> &'static str {
+    let text = body.to_ascii_lowercase();
+    if text.starts_with("lineups") {
+        "pre-match"
+    } else if text.starts_with("match ends") {
+        "full-time"
+    } else if text.contains("half ends") {
+        "half-time"
+    } else if text.contains("half begins") {
+        "kickoff"
+    } else if text.starts_with("goal!") {
+        "goal"
+    } else if text.contains("second yellow") {
+        "second-yellow-card"
+    } else if text.contains("red card") {
+        "red-card"
+    } else if text.contains("yellow card") {
+        "yellow-card"
+    } else if text.starts_with("substitution") {
+        "substitution"
+    } else if text.contains("var decision") {
+        "var-decision"
+    } else if text.starts_with("delay over") {
+        "end-delay"
+    } else if text.starts_with("delay") {
+        "start-delay"
+    } else if text.starts_with("corner") {
+        "corner"
+    } else if text.starts_with("offside") {
+        "offside"
+    } else if text.starts_with("attempt saved") {
+        "shot-on-target"
+    } else if text.starts_with("attempt blocked") {
+        "shot-blocked"
+    } else if text.starts_with("attempt missed") {
+        "shot-off-target"
+    } else if text.starts_with("foul") {
+        "foul"
+    } else {
+        "commentary"
+    }
+}
+fn scoring_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "goal" | "own-goal" | "penalty-scored" | "penalty---scored"
+    ) || (kind.starts_with("goal---")
+        && !["disallowed", "cancelled", "overturned"]
+            .iter()
+            .any(|word| kind.contains(word)))
+}
 fn array(v: &Value) -> &[Value] {
     v.as_array().map(Vec::as_slice).unwrap_or(&[])
+}
+fn event_participants(play: &Value, body: &str) -> Vec<String> {
+    let names: Vec<_> = array(&play["participants"])
+        .iter()
+        .take(2)
+        .map(|person| text(&person["athlete"], "displayName"))
+        .filter(|name| !name.is_empty())
+        .collect();
+    if !names.is_empty() {
+        return names;
+    }
+    if let Some((player_in, player_out)) = substitution_from_text(body) {
+        return vec![player_in, player_out];
+    }
+    if body.to_ascii_lowercase().contains("yellow card")
+        || body.to_ascii_lowercase().contains("red card")
+    {
+        let lower = body.to_ascii_lowercase();
+        let start = lower.find("card to ").map_or(0, |index| index + 8);
+        if let Some((name, _)) = body[start..].split_once(" (") {
+            let name = name.trim();
+            if !name.is_empty() {
+                return vec![name.chars().take(120).collect()];
+            }
+        }
+    }
+    if let Some((name, _)) = scorer_from_text(body) {
+        return vec![name];
+    }
+    Vec::new()
+}
+fn incident_reason(kind: &str, body: &str) -> Option<String> {
+    let lower = body.to_ascii_lowercase();
+    let start = if kind.contains("card") || kind.starts_with("second-yellow") {
+        lower.rfind(" for ").map(|index| index + 5)
+    } else if kind == "substitution" {
+        lower.rfind(" because of ").map(|index| index + 12)
+    } else {
+        None
+    }?;
+    let reason = body[start..].split('.').next()?.trim();
+    let reason = reason
+        .strip_prefix("a ")
+        .or_else(|| reason.strip_prefix("an "))
+        .unwrap_or(reason);
+    if reason.is_empty() || reason.chars().any(char::is_control) {
+        return None;
+    }
+    let mut letters = reason.chars();
+    Some(
+        letters
+            .next()?
+            .to_uppercase()
+            .chain(letters)
+            .take(120)
+            .collect(),
+    )
 }
 fn event_team(team: &Value, by_name: &HashMap<String, String>) -> Option<String> {
     team["id"]
@@ -291,7 +457,12 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
     for e in array(&v["keyEvents"]).iter().take(1000) {
         let eid = text(e, "id");
         let kind = text(&e["type"], "type");
-        let body = text(e, "text");
+        let body = e["text"]
+            .as_str()
+            .unwrap_or("")
+            .chars()
+            .take(2000)
+            .collect::<String>();
         let Some(seconds) = e["clock"]["value"]
             .as_f64()
             .filter(|n| n.is_finite() && *n >= 0.0)
@@ -308,7 +479,9 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
             continue;
         }
         let team_id = event_team(&e["team"], &team_by_name);
-        if kind.contains("goal") || e["scoringPlay"].as_bool() == Some(true) {
+        if scoring_kind(&kind)
+            || (e["scoringPlay"].as_bool() == Some(true) && !kind.contains("disallowed"))
+        {
             let participant = e["participants"][0]["athlete"]["displayName"]
                 .as_str()
                 .map(str::to_owned);
@@ -351,7 +524,12 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
                 minute: text(&e["clock"], "displayValue"),
                 seconds,
                 period,
+                reason: incident_reason(&kind, &body),
                 kind,
+                participants: event_participants(e, &body),
+                short_text: e["shortText"]
+                    .as_str()
+                    .map(|s| s.chars().take(160).collect()),
                 text: body,
                 team_id,
             },
@@ -361,42 +539,72 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
     // running match detail. Add unique commentary entries for a useful timeline.
     for entry in array(&v["commentary"]).iter().take(1000) {
         let play = &entry["play"];
-        let kind = if text(&play["type"], "type").is_empty() {
+        let mut kind = if text(&play["type"], "type").is_empty() {
             text(&entry["type"], "type")
         } else {
             text(&play["type"], "type")
         };
-        let body = if text(play, "text").is_empty() {
-            text(entry, "text")
-        } else {
-            text(play, "text")
-        };
-        if body.is_empty() || matches!(kind.as_str(), "start-delay" | "end-delay") {
+        let body = play["text"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .or_else(|| entry["text"].as_str())
+            .unwrap_or("")
+            .chars()
+            .take(2000)
+            .collect::<String>();
+        if body.is_empty() {
             continue;
         }
-        let Some(seconds) = play["clock"]["value"]
+        if kind.is_empty() {
+            kind = commentary_kind(&body).into();
+        }
+        let mut seconds = play["clock"]["value"]
             .as_f64()
             .or_else(|| entry["time"]["value"].as_f64())
             .filter(|n| n.is_finite() && *n >= 0.0)
-        else {
-            continue;
-        };
-        let minute = if text(&play["clock"], "displayValue").is_empty() {
+            .unwrap_or(0.0);
+        let mut minute = if text(&play["clock"], "displayValue").is_empty() {
             text(&entry["time"], "displayValue")
         } else {
             text(&play["clock"], "displayValue")
         };
-        // Commentary without a clock is pre/post-match boilerplate and cannot be
-        // placed on the timeline safely.
         if minute.is_empty() || minute == "—" {
-            continue;
+            match kind.as_str() {
+                "pre-match" => minute = "Before".into(),
+                "kickoff" if body.to_ascii_lowercase().contains("first half") => {
+                    minute = "0'".into()
+                }
+                "kickoff" if body.to_ascii_lowercase().contains("second half") => {
+                    minute = "46'".into();
+                    seconds = 2700.0;
+                }
+                "full-time" => {
+                    minute = "FT".into();
+                    seconds = events
+                        .values()
+                        .map(|event: &Event| event.seconds)
+                        .fold(5400.0, f64::max)
+                        + 1.0;
+                }
+                _ => continue,
+            }
         }
-        let Some(period) = play["period"]["number"]
-            .as_u64()
-            .or_else(|| entry["time"]["period"].as_u64())
-            .filter(|n| *n > 0 && *n <= 10)
-            .or_else(|| commentary_period(&body, &minute, seconds))
-        else {
+        let Some(period) = (if kind == "pre-match" {
+            Some(0)
+        } else if kind == "full-time" {
+            Some(
+                v["header"]["competitions"][0]["status"]["period"]
+                    .as_u64()
+                    .filter(|p| (1..=5).contains(p))
+                    .unwrap_or(2),
+            )
+        } else {
+            play["period"]["number"]
+                .as_u64()
+                .or_else(|| entry["time"]["period"].as_u64())
+                .filter(|n| *n > 0 && *n <= 10)
+                .or_else(|| commentary_period(&body, &minute, seconds))
+        }) else {
             continue;
         };
         let raw_id = text(play, "id");
@@ -404,12 +612,30 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
             .as_u64()
             .map(|n| n.to_string())
             .unwrap_or_default();
-        let eid = format!("c-{}", if raw_id.is_empty() { fallback } else { raw_id });
-        if eid == "c-" || !seen_text.insert(body.clone()) {
+        let eid = if events.contains_key(&raw_id) {
+            raw_id
+        } else {
+            format!("c-{}", if raw_id.is_empty() { fallback } else { raw_id })
+        };
+        if eid == "c-" || (!events.contains_key(&eid) && !seen_text.insert(body.clone())) {
             continue;
         }
-        let team_id = event_team(&play["team"], &team_by_name);
-        if kind.contains("goal") || body.starts_with("Goal!") {
+        let team_id = event_team(&play["team"], &team_by_name).or_else(|| {
+            let candidates: HashSet<_> = team_by_name
+                .iter()
+                .filter(|(name, _)| {
+                    body.contains(&format!("({name})"))
+                        || body.starts_with(&format!("Substitution, {name}."))
+                })
+                .map(|(_, id)| id.clone())
+                .collect();
+            if candidates.len() == 1 {
+                candidates.into_iter().next()
+            } else {
+                None
+            }
+        });
+        if scoring_kind(&kind) || (kind == "commentary" && body.starts_with("Goal!")) {
             let participant = play["participants"][0]["athlete"]["displayName"]
                 .as_str()
                 .map(str::to_owned);
@@ -445,6 +671,22 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
                 seconds,
             );
         }
+        if let Some(existing) = events.get_mut(&eid) {
+            if body.chars().count() > existing.text.chars().count() {
+                existing.text = body.clone();
+            }
+            if existing.reason.is_none() {
+                existing.reason = incident_reason(&kind, &body);
+            }
+            if existing.participants.is_empty() {
+                existing.participants = event_participants(play, &body);
+            }
+            if existing.team_id.is_none() {
+                existing.team_id = team_id;
+            }
+            seen_text.insert(body);
+            continue;
+        }
         events.insert(
             eid.clone(),
             Event {
@@ -452,7 +694,12 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
                 minute,
                 seconds,
                 period,
+                reason: incident_reason(&kind, &body),
                 kind,
+                participants: event_participants(play, &body),
+                short_text: play["shortText"]
+                    .as_str()
+                    .map(|s| s.chars().take(160).collect()),
                 text: body,
                 team_id,
             },
@@ -500,6 +747,32 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
         }
     }
     let mut players = Vec::new();
+    let mut coaches = Vec::new();
+    for side in array(&v["rosters"])
+        .iter()
+        .chain(array(&v["header"]["competitions"][0]["competitors"]).iter())
+    {
+        let team_id = text(&side["team"], "id");
+        for coach in array(&side["coaches"]).iter().take(4) {
+            let name = text(coach, "displayName");
+            let name = if name.is_empty() {
+                text(coach, "name")
+            } else {
+                name
+            };
+            if !team_id.is_empty()
+                && !name.is_empty()
+                && !coaches
+                    .iter()
+                    .any(|c: &Coach| c.team_id == team_id && c.name == name)
+            {
+                coaches.push(Coach {
+                    team_id: team_id.clone(),
+                    name: name.chars().take(120).collect(),
+                });
+            }
+        }
+    }
     let mut formations = HashMap::new();
     for t in array(&v["rosters"]).iter().take(2) {
         let team_id = text(&t["team"], "id");
@@ -653,6 +926,13 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
             .map(str::trim)
             .filter(|name| !name.is_empty() && !name.chars().any(char::is_control))
             .map(|name| name.chars().take(200).collect()),
+        venue_city: clean_text(&v["gameInfo"]["venue"]["address"]["city"], 100),
+        referee: referee(v),
+        capacity: v["gameInfo"]["venue"]["capacity"]
+            .as_u64()
+            .filter(|n| *n > 0 && *n <= 1_000_000)
+            .map(|n| n as u32),
+        statistics_note: None,
         attendance,
         form,
         leaders,
@@ -662,6 +942,7 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
         scorers,
         substitutions,
         formations,
+        coaches,
         updated_at: Utc::now().to_rfc3339(),
         error: None,
         stale: false,
@@ -694,9 +975,13 @@ fn valid_cached(d: &Details) -> bool {
         && d.match_id.len() <= 128
         && d.match_id.bytes().all(|b| b.is_ascii_digit())
         && d.events.len() <= 1000
-        && d.statistics.len() <= 80
+        && d.statistics.len() <= 256
         && d.players.len() <= 80
         && d.venue.as_ref().is_none_or(|venue| bounded(venue, 200))
+        && d.venue_city.as_ref().is_none_or(|s| bounded(s, 100))
+        && d.referee.as_ref().is_none_or(|s| bounded(s, 120))
+        && d.capacity.is_none_or(|n| n > 0 && n <= 1_000_000)
+        && d.statistics_note.as_ref().is_none_or(|s| bounded(s, 200))
         && d.attendance.is_none_or(|value| value <= 1_000_000)
         && d.form.len() <= 2
         && d.form.iter().all(|(team_id, games)| {
@@ -724,13 +1009,14 @@ fn valid_cached(d: &Details) -> bool {
         && d.events.iter().all(|e| {
             !e.id.is_empty()
                 && bounded(&e.id, 500)
-                && bounded(&e.text, 500)
+                && bounded(&e.text, 2000)
+                && e.reason.as_ref().is_none_or(|s| bounded(s, 120))
                 && bounded(&e.kind, 500)
                 && bounded(&e.minute, 500)
                 && e.team_id.as_ref().is_none_or(|s| bounded(s, 128))
                 && e.seconds.is_finite()
                 && e.seconds >= 0.0
-                && (1..=10).contains(&e.period)
+                && (0..=10).contains(&e.period)
         })
         && d.statistics.iter().all(|s| {
             bounded(&s.team_id, 128)
@@ -834,7 +1120,7 @@ impl Cache {
         Fut: std::future::Future<Output = Result<Details, Failure>>,
     {
         let key = cache_key(league, id);
-        let ttl = if active { 120 } else { 900 };
+        let ttl = if active { 60 } else { 900 };
         let fresh = |d: &Details| {
             DateTime::parse_from_rfc3339(&d.updated_at)
                 .map(|t| now.timestamp() - t.timestamp())
@@ -867,6 +1153,24 @@ impl Cache {
         }
         match fetch().await {
             Ok(mut d) if d.match_id == id && d.league == league => {
+                if d.statistics_note.is_some() {
+                    let mut retained = false;
+                    if let Some(saved) = &old {
+                        for stat in &saved.statistics {
+                            if d.statistics.len() < 256
+                                && !d.statistics.iter().any(|current| {
+                                    current.team_id == stat.team_id && current.name == stat.name
+                                })
+                            {
+                                d.statistics.push(stat.clone());
+                                retained = true;
+                            }
+                        }
+                    }
+                    if retained {
+                        d.statistics_note=Some("Extended statistics could not refresh; saved values are retained alongside current match totals.".into());
+                    }
+                }
                 d.updated_at = now.to_rfc3339();
                 d.stale = false;
                 d.error = None;
@@ -992,7 +1296,22 @@ async fn fetch(
         }
         bytes.extend_from_slice(&chunk);
     }
-    parse_response(id, league, status, retry, &bytes)
+    let mut details = parse_response(id, league, status, retry, &bytes)?;
+    let value: Value =
+        serde_json::from_slice(&bytes).map_err(|e| Failure::temporary(e.to_string()))?;
+    let competition = &value["header"]["competitions"][0];
+    if competition["status"]["type"]["state"]
+        .as_str()
+        .is_some_and(|s| matches!(s, "in" | "post"))
+    {
+        let teams: Vec<String> = array(&competition["competitors"])
+            .iter()
+            .take(2)
+            .filter_map(|side| side["team"]["id"].as_str().map(str::to_owned))
+            .collect();
+        statistics::enrich(client, &mut details, &teams).await;
+    }
+    Ok(details)
 }
 
 #[cfg(test)]

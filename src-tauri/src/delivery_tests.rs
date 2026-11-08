@@ -67,6 +67,121 @@ fn temporary() -> Result<(), SubmissionError> {
 }
 
 #[test]
+fn enabling_match_alerts_at_two_three_delivers_two_four_once_after_restart() {
+    let mut s = subscribed("live");
+    s.settings.match_alerts.clear();
+    s.settings.favorites = vec![s.matches[0].home.id.clone()];
+    s.settings.goals = true;
+    s.matches[0].home_score = Some(2);
+    s.matches[0].away_score = Some(3);
+    enqueue(&mut s, &["match-1".into()], now());
+    assert!(s.pending_notifications.is_empty());
+    let seen_at = s.alert_baselines["match-1"].seen_at.clone();
+    let mut settings = s.settings.clone();
+    settings.match_alerts.insert(
+        "match-1".into(),
+        MatchAlert {
+            enabled: true,
+            expires_at: String::new(),
+        },
+    );
+    crate::model::apply_settings_at(&mut s, settings, now() + Duration::seconds(10));
+    assert!(!s.alert_baselines["match-1"].priming);
+    assert_eq!(s.alert_baselines["match-1"].seen_at, seen_at);
+    let mut restarted = reload(&s);
+    crate::refresh::mark_cached(&mut restarted);
+    assert!(restarted.pending_notifications.is_empty());
+    restarted.matches[0].score_stale = false;
+    restarted.matches[0].away_score = Some(4);
+    enqueue(
+        &mut restarted,
+        &["match-1".into()],
+        now() + Duration::minutes(1),
+    );
+    let mut sink = Sink::default();
+    run(&mut restarted, now() + Duration::minutes(1), &mut sink);
+    enqueue(
+        &mut restarted,
+        &["match-1".into()],
+        now() + Duration::minutes(2),
+    );
+    run(&mut restarted, now() + Duration::minutes(2), &mut sink);
+    assert_eq!(sink.calls, ["match-1:score:2:4"]);
+    assert_eq!(restarted.sent_notifications, sink.calls);
+}
+
+#[test]
+fn a_new_goal_in_the_first_confirmed_fulltime_poll_is_delivered_once() {
+    for (status, league, home_goal) in [
+        ("live", crate::model::Competition::PremierLeague, true),
+        ("halftime", crate::model::Competition::PremierLeague, false),
+        ("live", crate::model::Competition::ChampionsLeague, false),
+    ] {
+        let mut s = subscribed(status);
+        s.matches[0].league = league;
+        s.matches[0].kickoff = (now() - Duration::minutes(110)).to_rfc3339();
+        enqueue(&mut s, &["match-1".into()], now());
+        s.matches[0].status = "fulltime".into();
+        if home_goal {
+            s.matches[0].home_score = Some(1);
+        } else {
+            s.matches[0].away_score = Some(1);
+        }
+        enqueue(&mut s, &["match-1".into()], now() + Duration::minutes(1));
+        assert_eq!(
+            s.pending_notifications.len(),
+            1,
+            "last-minute goal must survive the full-time transition"
+        );
+        let mut sink = Sink::default();
+        run(&mut s, now() + Duration::minutes(1), &mut sink);
+        let mut restarted = reload(&s);
+        enqueue(
+            &mut restarted,
+            &["match-1".into()],
+            now() + Duration::minutes(2),
+        );
+        run(&mut restarted, now() + Duration::minutes(2), &mut sink);
+        assert_eq!(sink.calls.len(), 1);
+        assert_eq!(restarted.sent_notifications, sink.calls);
+        // A later edit to an already finished score is a correction, not a new goal.
+        restarted.matches[0].home_score = Some(2);
+        enqueue(
+            &mut restarted,
+            &["match-1".into()],
+            now() + Duration::minutes(3),
+        );
+        assert!(restarted.pending_notifications.is_empty());
+    }
+}
+
+#[test]
+fn fulltime_goal_requires_a_recent_live_baseline_and_daily_confirmation() {
+    let mut s = subscribed("live");
+    enqueue(&mut s, &["match-1".into()], now());
+    s.matches[0].status = "fulltime".into();
+    s.matches[0].home_score = Some(1);
+    enqueue(&mut s, &[], now() + Duration::minutes(1));
+    assert!(
+        s.pending_notifications.is_empty(),
+        "monthly data cannot invent a goal"
+    );
+    assert_eq!(s.alert_baselines["match-1"].home, Some(0));
+    enqueue(&mut s, &["match-1".into()], now() + Duration::minutes(6));
+    assert!(
+        s.pending_notifications.is_empty(),
+        "an old live baseline cannot replay historical goals"
+    );
+    let mut first = subscribed("fulltime");
+    first.matches[0].home_score = Some(1);
+    enqueue(&mut first, &["match-1".into()], now());
+    assert!(
+        first.pending_notifications.is_empty(),
+        "first observation is not a goal transition"
+    );
+}
+
+#[test]
 fn fail_once_retains_durable_event_despite_advanced_baseline_then_acknowledges_success() {
     let mut s = goal();
     let durable = RefCell::new(Snapshot::default());

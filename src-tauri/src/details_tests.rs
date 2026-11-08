@@ -1,4 +1,229 @@
-﻿use super::*;
+use super::*;
+#[test]
+fn incidents_keep_card_reasons_names_and_substitution_context() {
+    assert_eq!(
+        event_participants(
+            &serde_json::json!({}),
+            "Goal! Home 1, Away 0. Riccardo Player (Home) scores."
+        ),
+        vec!["Riccardo Player"]
+    );
+    assert_eq!(
+        incident_reason(
+            "yellow-card",
+            "Player (Club) is shown the yellow card for a bad foul."
+        )
+        .as_deref(),
+        Some("Bad foul")
+    );
+    assert_eq!(
+        incident_reason(
+            "red-card",
+            "Player (Club) is shown the red card for violent conduct."
+        )
+        .as_deref(),
+        Some("Violent conduct")
+    );
+    assert_eq!(
+        incident_reason(
+            "second-yellow-card",
+            "Second yellow card to Player (Club) for dissent."
+        )
+        .as_deref(),
+        Some("Dissent")
+    );
+    assert_eq!(
+        incident_reason(
+            "substitution",
+            "Substitution, Club. Incoming replaces Outgoing because of an injury."
+        )
+        .as_deref(),
+        Some("Injury")
+    );
+    assert!(incident_reason("yellow-card", "Player (Club) is shown the yellow card.").is_none());
+    assert_eq!(
+        event_participants(
+            &serde_json::json!({}),
+            "Second yellow card to Player Name (Club) for dissent."
+        ),
+        vec!["Player Name"]
+    );
+    let mut legacy = serde_json::to_value(example()).unwrap();
+    for event in legacy["events"].as_array_mut().unwrap() {
+        event.as_object_mut().unwrap().remove("reason");
+    }
+    assert!(valid_cached(
+        &serde_json::from_value::<Details>(legacy).unwrap()
+    ));
+}
+#[test]
+fn captured_full_match_has_richer_statistics_without_season_placeholders() {
+    let v: Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/summary-brighton-full.json"
+    ))
+    .unwrap();
+    let mut details = normalize(&v["summary"], "401879244", Competition::PremierLeague).unwrap();
+    assert!(statistics::merge(
+        &mut details,
+        "331",
+        &v["teamStatistics"][0]
+    ));
+    assert!(statistics::merge(
+        &mut details,
+        "337",
+        &v["teamStatistics"][1]
+    ));
+    assert!(details.statistics.len() > 100);
+    let value = |team: &str, name: &str| {
+        details
+            .statistics
+            .iter()
+            .find(|s| s.team_id == team && s.name == name)
+            .unwrap()
+            .value
+            .as_str()
+    };
+    assert_eq!(value("331", "expectedGoals"), "2.20");
+    assert_eq!(value("337", "expectedGoals"), "0.73");
+    assert_eq!(value("331", "passPct"), "90.6%");
+    assert_eq!(value("337", "passPct"), "66%");
+    assert!(!details
+        .statistics
+        .iter()
+        .any(|s| s.name == "appearances" || s.name == "wins"));
+    assert!(details.events.iter().any(|e| e.kind == "pre-match"));
+    assert!(details.events.iter().any(|e| e.kind == "full-time"));
+    assert!(details.events.iter().any(|e| e.kind == "start-delay"));
+    assert!(details.events.iter().all(|e| !e.kind.is_empty()));
+    assert_eq!(details.attendance, Some(31629));
+    assert_eq!(details.venue_city.as_deref(), Some("Falmer"));
+    assert!(details.referee.is_none());
+    assert!(details.capacity.is_none());
+    assert!(valid_cached(&details));
+}
+#[test]
+fn supplemental_totals_require_matching_identity_and_preserve_summary_counts() {
+    let v: Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/summary-brighton-full.json"
+    ))
+    .unwrap();
+    let mut details = normalize(&v["summary"], "401879244", Competition::PremierLeague).unwrap();
+    let mut totals = v["teamStatistics"][0].clone();
+    assert!(!statistics::merge(&mut details, "337", &totals));
+    totals["competition"]["$ref"] = serde_json::json!(
+        "https://sports.core.api.espn.com/v2/sports/soccer/leagues/eng.1/events/2/competitions/2"
+    );
+    assert!(!statistics::merge(&mut details, "331", &totals));
+    totals = v["teamStatistics"][0].clone();
+    totals["splits"]["type"] = serde_json::json!("firstHalf");
+    assert!(!statistics::merge(&mut details, "331", &totals));
+    totals = v["teamStatistics"][0].clone();
+    for category in totals["splits"]["categories"].as_array_mut().unwrap() {
+        for stat in category["stats"].as_array_mut().unwrap() {
+            if stat["name"] == "totalShots" {
+                stat["value"] = serde_json::json!(19);
+                stat["displayValue"] = serde_json::json!("19");
+            }
+        }
+    }
+    assert!(statistics::merge(&mut details, "331", &totals));
+    assert_eq!(
+        details
+            .statistics
+            .iter()
+            .find(|s| s.name == "totalShots" && s.team_id == "331")
+            .unwrap()
+            .value,
+        "20"
+    );
+}
+#[test]
+fn referee_and_capacity_are_optional_validated_and_legacy_compatible() {
+    let mut v: Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/summary-upcoming.json")).unwrap();
+    v["gameInfo"] = serde_json::json!({"venue":{"fullName":"Test Stadium","capacity":31876,"address":{"city":"Test City"}},"officials":[{"fullName":"Assistant Name","position":{"name":"Assistant Referee"}},{"fullName":"Referee Name","position":{"name":"Referee"}}]});
+    let details = normalize(&v, "401879250", Competition::PremierLeague).unwrap();
+    assert_eq!(details.referee.as_deref(), Some("Referee Name"));
+    assert_eq!(details.capacity, Some(31876));
+    let mut legacy = serde_json::to_value(&details).unwrap();
+    for key in ["referee", "capacity", "venueCity", "statisticsNote"] {
+        legacy.as_object_mut().unwrap().remove(key);
+    }
+    assert!(valid_cached(
+        &serde_json::from_value::<Details>(legacy).unwrap()
+    ));
+    v["gameInfo"]["venue"]["capacity"] = serde_json::json!(2000000);
+    v["gameInfo"]["officials"][1]["fullName"] = serde_json::json!("bad\nname");
+    let invalid = normalize(&v, "401879250", Competition::PremierLeague).unwrap();
+    assert!(invalid.capacity.is_none());
+    assert!(invalid.referee.is_none());
+}
+#[test]
+fn commentary_merges_provider_ids_preserves_long_text_and_does_not_make_goal_kick_scorers() {
+    let mut v: Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/summary-completed.json")).unwrap();
+    let long = format!("Goal! {}", "Full provider description. ".repeat(35));
+    v["keyEvents"] = serde_json::json!([{"id":"goal","type":{"type":"goal"},"clock":{"value":60,"displayValue":"1'"},"period":{"number":1},"team":{"id":"359"},"text":"Short goal text"}]);
+    v["commentary"] = serde_json::json!([
+        {"sequence":1,"time":{"value":60,"displayValue":"1'"},"play":{"id":"goal","type":{"type":"goal"},"clock":{"value":60,"displayValue":"1'"},"period":{"number":1},"team":{"id":"359"},"text":long,"participants":[{"athlete":{"displayName":"Scorer"}}]}},
+        {"sequence":2,"time":{"value":120,"displayValue":"2'"},"play":{"id":"kick","type":{"type":"goal-kick"},"clock":{"value":120,"displayValue":"2'"},"period":{"number":1},"team":{"id":"359"},"text":"Goal kick","participants":[{"athlete":{"displayName":"Keeper"}}]}}
+    ]);
+    v["commentary"].as_array_mut().unwrap().push(serde_json::json!({"sequence":3,"time":{"value":180,"displayValue":"3'"},"text":"Foul involving Player (Arsenal) and Opponent (Leeds United)."}));
+    let details = normalize(&v, "401879268", Competition::PremierLeague).unwrap();
+    assert_eq!(details.events.len(), 3);
+    assert_eq!(details.events[0].text, long);
+    assert_eq!(details.events[0].participants, vec!["Scorer"]);
+    assert!(!details.scorers.iter().any(|s| s.name == "Keeper"));
+    assert!(
+        details.events.last().unwrap().team_id.is_none(),
+        "ambiguous commentary must remain neutral"
+    );
+}
+#[test]
+fn live_summary_keeps_compact_participants_and_accepts_old_photo_caches() {
+    let mut v: Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/summary-live-compact.json"
+    ))
+    .unwrap();
+    let d = normalize(&v, "401879244", Competition::PremierLeague).unwrap();
+    assert!(d
+        .events
+        .iter()
+        .any(|e| e.kind == "substitution" && e.participants.len() == 2));
+    assert!(d
+        .events
+        .iter()
+        .any(|e| e.kind == "yellow-card" && !e.participants.is_empty()));
+    assert!(d.coaches.is_empty());
+    assert!(serde_json::to_value(&d).unwrap()["players"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|player| player.get("headshot").is_none()));
+    v["rosters"][0]["coaches"] = serde_json::json!([{"displayName":"Test coach"}]);
+    let d = normalize(&v, "401879244", Competition::PremierLeague).unwrap();
+    assert_eq!(d.coaches[0].name, "Test coach");
+    let mut saved = serde_json::to_value(d).unwrap();
+    saved.as_object_mut().unwrap().remove("coaches");
+    for event in saved["events"].as_array_mut().unwrap() {
+        event.as_object_mut().unwrap().remove("participants");
+        event.as_object_mut().unwrap().remove("shortText");
+    }
+    for player in saved["players"].as_array_mut().unwrap() {
+        player["headshot"] = serde_json::json!("https://a.espncdn.com/old-photo.png");
+    }
+    let legacy: Details = serde_json::from_value(saved).unwrap();
+    assert!(legacy.coaches.is_empty());
+    assert!(legacy
+        .events
+        .iter()
+        .all(|event| event.participants.is_empty()));
+    assert!(serde_json::to_value(legacy).unwrap()["players"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|player| player.get("headshot").is_none()));
+}
 #[test]
 fn captured_summary_has_events_stats_and_rosters() {
     let v: Value =
@@ -97,6 +322,58 @@ fn example() -> Details {
     normalize(&v, "401879268", Competition::PremierLeague).unwrap()
 }
 #[tokio::test]
+async fn optional_statistics_failure_keeps_saved_extras_and_current_summary_counts() {
+    let now = clock();
+    let cache = Cache::default();
+    let id = "401879268";
+    let mut saved = example();
+    saved.statistics.push(Statistic {
+        team_id: "359".into(),
+        name: "expectedGoals".into(),
+        label: "Expected goals".into(),
+        value: "1.23".into(),
+    });
+    cache
+        .get_with(Competition::PremierLeague, id, true, now, || async {
+            Ok(saved)
+        })
+        .await
+        .unwrap();
+    let mut current = example();
+    current.statistics_note = Some("Additional statistics unavailable".into());
+    current
+        .statistics
+        .iter_mut()
+        .find(|s| s.name == "totalShots" && s.team_id == "359")
+        .unwrap()
+        .value = "99".into();
+    let result = cache
+        .get_with(
+            Competition::PremierLeague,
+            id,
+            true,
+            now + chrono::Duration::seconds(121),
+            || async { Ok(current) },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        result
+            .statistics
+            .iter()
+            .find(|s| s.name == "totalShots" && s.team_id == "359")
+            .unwrap()
+            .value,
+        "99"
+    );
+    assert!(result
+        .statistics
+        .iter()
+        .any(|s| s.name == "expectedGoals" && s.value == "1.23"));
+    assert!(result.statistics_note.unwrap().contains("saved values"));
+    assert!(!result.stale);
+}
+#[tokio::test]
 async fn cache_hit_failure_cooldown_and_recovery() {
     let now = clock();
     let cache = Cache::default();
@@ -118,6 +395,20 @@ async fn cache_hit_failure_cooldown_and_recovery() {
         .await
         .unwrap();
     assert!(!hit.stale);
+    let refreshed = cache
+        .get_with(
+            Competition::PremierLeague,
+            id,
+            true,
+            now + chrono::Duration::seconds(60),
+            || async { Ok(example()) },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        refreshed.updated_at,
+        (now + chrono::Duration::seconds(60)).to_rfc3339()
+    );
     let saved = cache
         .get_with(
             Competition::PremierLeague,
@@ -129,7 +420,7 @@ async fn cache_hit_failure_cooldown_and_recovery() {
         .await
         .unwrap();
     assert!(saved.stale);
-    assert_eq!(saved.updated_at, now.to_rfc3339());
+    assert_eq!(saved.updated_at, refreshed.updated_at);
     // While the per-match cooldown runs, the cached summary is returned untouched.
     let blocked = cache
         .get_with(

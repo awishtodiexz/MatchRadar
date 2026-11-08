@@ -43,7 +43,7 @@ test('home has no serious accessibility violations in either theme', async ({ pa
 
 test('the match centre tabs have no serious accessibility violations', async ({ page }) => {
   await page.getByRole('button', { name: 'Match details: Arsenal versus Chelsea' }).click();
-  for (const tab of ['Overview', 'Timeline', 'Stats', 'Lineups']) {
+  for (const tab of ['Overview', 'Commentary', 'Stats', 'Lineups']) {
     await page.getByRole('tab', { name: tab, exact: true }).click();
     await expect(page.getByRole('tabpanel', { name: tab })).toBeVisible();
     expect(await violations(page)).toEqual([]);

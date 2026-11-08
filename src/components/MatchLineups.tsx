@@ -21,36 +21,35 @@ type PitchData = { lines:MatchSummary['players'][]; keeper:MatchSummary['players
 function buildPitch(players:MatchSummary['players'],formation?:string):PitchData|null {
   const xi = players.filter(player=>player.starter).sort(byPlace);
   const shape = (formation ?? '').split('-').map(Number);
-  if(xi.length !== 11 || xi.some(player=>!player.formationPlace) || !formation || shape.length < 2 || shape.some(n=>!Number.isInteger(n)||n<1) || shape.reduce((sum,n)=>sum+n,0) !== 10) return null;
+  if(xi.length !== 11 || xi.some(player=>!Number.isInteger(player.formationPlace)||!player.formationPlace||player.formationPlace<1||player.formationPlace>11) || new Set(xi.map(player=>player.formationPlace)).size!==11 || !formation || shape.length < 2 || shape.some(n=>!Number.isInteger(n)||n<1) || shape.reduce((sum,n)=>sum+n,0) !== 10) return null;
   const keeper = xi.find(player=>positionGroup(player.position)==='Goalkeepers');
   if(!keeper) return null;
-  const outfield = xi.filter(player=>player!==keeper);
+  // ESPN's formationPlace is a slot identifier, not back-to-front order.
+  // Use the supplied position to group lines before applying the formation.
+  const band = (position:string) => {
+    const code = position.toUpperCase();
+    if(positionGroup(code)==='Defenders') return 1;
+    if(/^(DM|CDM)/.test(code)) return 2;
+    if(/^(AM|CAM|LW|RW)/.test(code)) return 4;
+    return positionGroup(code)==='Forwards'?5:3;
+  };
+  const lateral = (position:string) => /-L$|^(LB|LWB|LM|LW|AML)$/.test(position)?0:/-R$|^(RB|RWB|RM|RW|AMR)$/.test(position)?2:1;
+  const outfield = xi.filter(player=>player!==keeper).sort((a,b)=>band(a.position)-band(b.position)||byPlace(a,b));
   let cursor = 0;
-  const lines = shape.map(count=>{const line=outfield.slice(cursor,cursor+count);cursor+=count;return line;});
+  const lines = shape.map(count=>{const line=outfield.slice(cursor,cursor+count);cursor+=count;return line.sort((a,b)=>lateral(a.position)-lateral(b.position)||byPlace(a,b));});
   return cursor===10 ? {lines,keeper,formation} : null;
 }
 
-function LineupPitch({match,home,away}:{match:Match;home:PitchData;away:PitchData}) {
-  const renderColumn = (line:MatchSummary['players'],side:'home'|'away',keeper:MatchSummary['players'][number]) =>
-    <div className="pitch-column" key={line.map(player=>player.name).join('-')+side}>
-      {line.map(player=><span key={player.name+side} className={'pitch-shirt '+side+(player===keeper?' is-keeper':'')}
-        title={`${side==='home'?match.home.name:match.away.name} · #${player.jersey||'–'} ${player.name}`}>
-        {player.jersey||'–'}
-      </span>)}
-    </div>;
-  const homeColumns:MatchSummary['players'][] = [[home.keeper],...home.lines];
-  const awayColumns:MatchSummary['players'][] = [...away.lines].reverse().concat([[away.keeper]]);
-  return <>
-    <div className="formation-strip" aria-label={`Formations: ${match.home.name} ${home.formation}, ${match.away.name} ${away.formation}`}>
-      <strong>{match.home.short} {home.formation}</strong><span>FORMATION</span><strong>{away.formation} {match.away.short}</strong>
-    </div>
-    <div className="lineup-pitch split" aria-hidden="true">
-      <span className="pitch-halfway"/><span className="pitch-circle"/>
-      <span className="pitch-box pitch-box-left"/><span className="pitch-box pitch-box-right"/>
-      <div className="pitch-side home">{homeColumns.map(line=>renderColumn(line,'home',home.keeper))}</div>
-      <div className="pitch-side away">{awayColumns.map(line=>renderColumn(line,'away',away.keeper))}</div>
-    </div>
-  </>;
+function LineupPitch({team,pitch}:{team:Match['home'];pitch:PitchData}) {
+  const lines = [...pitch.lines].reverse().concat([[pitch.keeper]]);
+  return <div className="lineup-pitch" aria-hidden="true">
+    <span className="pitch-halfway"/><span className="pitch-circle"/>
+    <span className="pitch-box pitch-box-top"/><span className="pitch-box pitch-box-bottom"/>
+    {lines.map((line,index)=><div className="pitch-row" key={index}>{line.map(player=><span className="pitch-player" key={player.formationPlace} title={`${team.name} · #${player.jersey||'–'} ${player.name}`}>
+      <span className={'pitch-shirt '+(player===pitch.keeper?'is-keeper':'')}>{player.jersey||'–'}</span>
+      <span className="pitch-name">{player.name.split(' ').slice(-1).join(' ')}</span>
+    </span>)}</div>)}
+  </div>;
 }
 
 function PlayerList({players, substitutions}: {players:MatchSummary['players']; substitutions:NonNullable<MatchSummary['substitutions']>}) {
@@ -71,7 +70,7 @@ function PlayerList({players, substitutions}: {players:MatchSummary['players']; 
   })}</>;
 }
 
-export function MatchLineups({match,players,substitutions=[],formations={}}: {match:Match;players:MatchSummary['players'];substitutions?:MatchSummary['substitutions'];formations?:Record<string,string>}) {
+export function MatchLineups({match,players,substitutions=[],formations={},coaches=[]}: {match:Match;players:MatchSummary['players'];substitutions?:MatchSummary['substitutions'];formations?:Record<string,string>;coaches?:MatchSummary['coaches']}) {
   const sectionId = useId();
   const teams = [match.home, match.away];
   const [teamId,setTeamId] = useState<string|null>(null);
@@ -82,14 +81,12 @@ export function MatchLineups({match,players,substitutions=[],formations={}}: {ma
   const starters = selected.filter(player=>player.starter);
   const substitutes = selected.filter(player=>!player.starter);
   const formation = formations[active.id];
-  const homePitch = buildPitch(players.filter(player=>player.teamId===match.home.id),formations[match.home.id]);
-  const awayPitch = buildPitch(players.filter(player=>player.teamId===match.away.id),formations[match.away.id]);
+  const pitch = buildPitch(selected,formation);
   const playerTeam = (name:string) => players.find(player=>player.name===name)?.teamId;
   // ESPN sometimes omits the team on a substitution; infer it from the players
   // instead of showing the same substitution under both teams.
   const teamSubs = substitutions.filter(sub => (sub.teamId || playerTeam(sub.playerIn) || playerTeam(sub.playerOut)) === active.id);
   return <div className="lineups">
-    {homePitch&&awayPitch&&<LineupPitch match={match} home={homePitch} away={awayPitch}/>}
     <div className="lineup-tabs" role="tablist" aria-label="Lineups by team">
       {teams.map(team=><button key={team.id} role="tab" id={sectionId+'-tab-'+team.id} aria-selected={active.id===team.id}
         aria-controls={sectionId+'-panel'} tabIndex={active.id===team.id?0:-1} className="lineup-tab"
@@ -106,11 +103,13 @@ export function MatchLineups({match,players,substitutions=[],formations={}}: {ma
     </div>
     <div role="tabpanel" id={sectionId+'-panel'} aria-labelledby={sectionId+'-tab-'+active.id} tabIndex={0}>
       <div className="lineup-heading"><h3>{active.name}</h3>{formation&&<span className="formation">{formation}</span>}</div>
+      <div className="coach-row"><span>Coach</span><strong>{coaches.filter(coach=>coach.teamId===active.id).map(coach=>coach.name).join(', ')||'Not provided by ESPN'}</strong></div>
+      {pitch&&<LineupPitch team={active} pitch={pitch}/>}
       {!selected.length&&<p className="field-note">Lineup unavailable</p>}
-      {starters.length>0&&<><h4>Starting XI <small className="kickoff-note">at kickoff</small></h4><PlayerList players={starters} substitutions={substitutions}/></>}
-      {starters.length===0&&selected.length>0&&<><h4>Squad</h4><PlayerList players={selected} substitutions={substitutions}/></>}
+      {starters.length>0&&<><h4>Starting XI <small className="kickoff-note">at kickoff</small></h4><PlayerList players={starters} substitutions={teamSubs}/></>}
+      {starters.length===0&&selected.length>0&&<><h4>Squad</h4><PlayerList players={selected} substitutions={teamSubs}/></>}
       {substitutes.length>0&&<><h4>Substitutes</h4><ul className="lineup-list">{substitutes.sort(byPlace).map((player,index)=>{
-        const on=substitutions.find(sub=>sub.playerIn===player.name);
+        const on=teamSubs.find(sub=>sub.playerIn===player.name);
         return <li key={`${player.name}-${index}`}>
           {player.jersey&&<span className="jersey">#{player.jersey}</span>}<span>{player.name}</span><small>{player.position}{on&&<span className="sub-marker on" title={`Substituted on at ${on.minute}`}> ↑ {on.minute}</span>}{!on&&player.subbedIn?' · on':''}</small>
         </li>;

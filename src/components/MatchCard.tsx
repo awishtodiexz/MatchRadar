@@ -35,21 +35,20 @@ export function MatchCard({match, settings, onOpen, showCompetition=false}: {mat
     : `${match.homeScore ?? '–'} to ${match.awayScore ?? '–'}, ${isLive(match) ? (match.status==='halftime' ? 'half-time' : clockText(match.detail||'live')) : (match.detail || match.status)}${match.scoreStale?' (saved)':''}`;
   return <article className="match-row match-card" data-match-id={match.id}>
     <button id={matchButtonId(match.id)} className="match-open" onClick={onOpen} aria-label={`Match details: ${name}`} title={`View ${name}. ${cardDetail}`}>
+      <div className={'fixture-time '+(isLive(match)&&!match.scoreStale?'is-live':'')} aria-hidden="true">
+        <span>{match.status==='scheduled'?timeLabel(match.kickoff):isLive(match)?match.status==='halftime'?'HT':clockText(match.detail||'LIVE'):match.status==='fulltime'?'FT':match.detail||match.status}</span>
+        {match.scoreStale&&<small>Saved</small>}
+        {showCompetition&&<small className="competition-tag">{match.league==='championsLeague'?'UCL':'PL'}</small>}
+      </div>
       <div className="teams" aria-hidden="true">{[match.home,match.away].map(team=><div className="team-line" key={team.id}>
         <Badge team={team}/><span className="team-name" title={team.name}>{team.name}</span>
         {settings.favorites.includes(team.id) && <Star aria-label={`Following ${team.name}`} role="img" className="fav" size={11} fill="currentColor"/>}
       </div>)}</div>
-      <div className={'match-state '+(isLive(match)?'is-live':'')} aria-hidden="true">
+      <div className={'match-state '+(isLive(match)&&!match.scoreStale?'is-live':'')} aria-hidden="true">
         <div className={'result '+(match.status==='scheduled'?'scheduled':'')}>
-          {match.status==='scheduled' ? <strong className="kickoff">{timeLabel(match.kickoff)}</strong>
+          {match.status==='scheduled' ? <span className="scheduled-score">–</span>
             : <div className="scores"><strong>{match.homeScore ?? '–'}</strong><strong>{match.awayScore ?? '–'}</strong></div>}
-          <span className="result-meta">
-            {showCompetition&&<span className="competition-tag" title={match.competition} aria-label={`${match.competition} match`}>{match.league==='championsLeague'?'UCL':'PL'}</span>}
-            {!isLive(match)&&<span>{match.scoreStale?'Saved · ':''}{match.detail || match.status}</span>}
-            {isLive(match)&&match.scoreStale&&<span>saved</span>}
-          </span>
         </div>
-        {isLive(match)&&<span className={'live-clock '+(match.scoreStale?'saved':'')} title={match.scoreStale?'Saved live score':match.detail||'Live'}><i className="dot"/>{match.status==='halftime'?'HT':clockText(match.detail||'LIVE')}</span>}
       </div><ChevronRight size={13} className="row-arrow" aria-hidden="true"/>
     </button>
     <button className="icon-button match-bell" data-alert-state={alerts.state} aria-label={alerts.ended?`Match ended: ${name}`:`${action}: ${name}`} aria-pressed={alerts.enabled}

@@ -9,6 +9,7 @@ import { groupFixtures, isLive } from './fixtures';
 import { competitionLeagues, competitionName, competitionSlug, competitionStatus, resultsStatus, updateStatus } from './freshness';
 import { useApp } from './store';
 import { useLocalDay } from './useLocalDay';
+import { useNotificationNavigation } from './useNotificationNavigation';
 import { useRecentResults } from './useRecentResults';
 import { matchesView } from './matchViews';
 import { liveEmptyState } from './emptyState';
@@ -26,6 +27,7 @@ export default function App() {
   const [themeHint] = useState<'dark'|'light'>(()=>{try{return localStorage.getItem('matchradar.theme')==='light'?'light':'dark';}catch{return 'dark';}});
   const [matchView,setMatchView] = useState<MatchView>('All');
   const [selected,setSelected] = useState<Match|null>(null);
+  const [notificationRequest,setNotificationRequest] = useState(0);
   const [refreshing,setRefreshing] = useState(false);
   const root = useRef<HTMLElement>(null);
   const restoreFocus = useRef('settings-control');
@@ -59,6 +61,20 @@ export default function App() {
     restoreFocus.current='settings-control';setView('settings');
   };
   const openMatch = (match:Match) => {rememberHome();restoreFocus.current=matchButtonId(match.id);setSelected(match);setView('detail');};
+  useNotificationNavigation(native,target=>{
+    homeScroll.current=root.current?.querySelector('.match-list')?.scrollTop??homeScroll.current;
+    if(target.match) {
+      setNotificationRequest(target.requestId);
+      restoreFocus.current=matchButtonId(target.match.id);
+      setSelected(target.match);
+      setView('detail');
+      void load();
+    } else {
+      setSelected(null);
+      setView('home');
+      if(target.matchId) useApp.setState({error:'This notification’s match is no longer in the local fixture cache. Refresh matches to check availability.'});
+    }
+  });
   useEffect(()=>{
     setSelected(current=>{
       if(!current)return current;
@@ -119,16 +135,16 @@ export default function App() {
   };
   return <main ref={root} onKeyDown={keyDown} onContextMenu={contextMenu} className={'shell theme-'+(settings?.theme??themeHint)+' '+((settings?.opacity??96)<85?'transparent-panel ':'')+(settings?.compact?'compact-view ':'')+(settings?.reducedMotion?'reduced':'')} style={{'--panel-opacity':Math.min(100,Math.max(70,settings?.opacity??96))/100} as CSSProperties}>
     <header className="header" data-tauri-drag-region>
-      <div className="brand" data-tauri-drag-region><span className="brand-icon"><img src={logo} alt=""/></span><div data-tauri-drag-region><h1>match<span>radar</span><i>®</i></h1><p>YOUR MATCHDAY COMPANION</p></div></div>
+      <div className="brand" data-tauri-drag-region><span className="brand-icon"><img src={logo} alt=""/></span><div data-tauri-drag-region><h1>match<span>radar</span><i>®</i></h1></div></div>
       <div className="header-actions">
         <button className="icon-button" title={native?'Hide to system tray':'Hide is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().hide().catch(()=>useApp.setState({error:'Could not hide the widget.'}))} aria-label="Minimize widget"><Minus size={17}/></button>
         <button className="icon-button close" title={native?'Hide to system tray':'Hide is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().hide().catch(()=>useApp.setState({error:'Could not hide the widget.'}))} aria-label="Hide widget"><X size={16}/></button>
       </div>
     </header>
     {view==='settings'&&settings?<SettingsPanel settings={settings} matches={allMatches??[]} save={save} back={back} refresh={()=>void doRefresh()} refreshing={busy}/>
-      :view==='detail'&&selected&&settings?<MatchDetails match={allMatches?.find(m=>m.id===selected.id)??selected} settings={settings} back={back}/>
+      :view==='detail'&&selected&&settings?<MatchDetails key={`${selected.id}:${notificationRequest}`} match={allMatches?.find(m=>m.id===selected.id)??selected} settings={settings} back={back}/>
       :<>
-        <div className={'hero '+(allMatches?.length?'has-matches':'')}><div><span className="eyebrow"><span className="tiny-line"/>THE BEAUTIFUL GAME, AT A GLANCE</span><h2>Matchday<span>.</span></h2><p>{new Intl.DateTimeFormat(undefined,{weekday:'long',day:'numeric',month:'long'}).format(day)}</p></div><div className="hero-orbit" aria-hidden="true"><span className="orbit-one"/><span className="orbit-two"/><span className="orbit-dot"/><Radio size={22}/></div></div>
+        <div className="hero"><div><h2>Matchday</h2><p>Fixtures, scores and the clubs you follow</p></div><time>{dateLabel(new Date().toISOString())}</time></div>
         <div className="summary"><CompetitionPicker value={competitionView} onChange={value=>void save({competitionView:value})} disabled={!settings}/><span className={'live-pill '+(!live?'quiet':'')} aria-label={`${competitionTitle}: ${live?`${live} live matches`:savedLive?'saved scores, awaiting live update':liveUnknown?'live status unavailable':'no confirmed live matches'}`} title="Competition status, including matches hidden by your filter. Live scores refresh about every 60 seconds."><i className="dot"/>{live?`${live} LIVE`:savedLive?'SAVED LIVE':liveUnknown?'LIVE UNAVAILABLE':'NO LIVE MATCHES'}</span></div>
         <div className="match-list">
           <nav className="centre-tabs" aria-label="Fixture views">{(['All','Live','Following','Upcoming','Results'] as const).map(name=><button key={name} aria-pressed={matchView===name} onClick={()=>setMatchView(name)}>{name}</button>)}</nav>

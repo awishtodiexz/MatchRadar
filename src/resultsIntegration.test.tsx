@@ -39,7 +39,7 @@ it('shows a completed provider summary through Results, including events, statis
  const card=await screen.findByRole('button',{name:'Match details: Arsenal versus Leeds United'});
  expect(bridge.invoke.mock.calls.some(c=>c[0]==='get_match_details')).toBe(false);
  fireEvent.click(card);await screen.findByText('Emirates Stadium');
- fireEvent.click(screen.getByRole('tab',{name:'Timeline'}));
+ fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));
  expect(screen.getByText(/Ao Tanaka.*yellow card/)).toBeTruthy();expect(screen.getByText(/James Justin.*right footed shot/)).toBeTruthy();expect(screen.getByText(/Timber replaces Ben White/)).toBeTruthy();expect(screen.getByText('A player is shown a red card.')).toBeTruthy();
  fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getByRole('row',{name:/Possession/}).textContent).toBe('58.2%Possession41.8%');
  fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));expect(screen.getByText('Starting XI')).toBeTruthy();

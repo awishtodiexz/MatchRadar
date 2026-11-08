@@ -24,12 +24,12 @@ and ships as a small NSIS installer for 64-bit Windows 10/11.
   <tr><th>Widget</th><th>Match Centre</th></tr>
   <tr>
     <td><img src="docs/screenshots/widget-dark.png" alt="MatchRadar widget in dark theme showing fixtures and live scores" width="390"></td>
-    <td><img src="docs/screenshots/match-centre-timeline.png" alt="Match Centre timeline for a completed Brighton &amp; Hove Albion fixture" width="320"></td>
+    <td><img src="docs/screenshots/match-centre-timeline.png" alt="Match Centre Overview using captured ESPN match data" width="320"></td>
   </tr>
 </table>
 
-*Browser renders from the current build using test fixtures and crests from
-ESPN's CDN. They are not packaged Windows captures.*
+*Browser renders using test fixtures (widget), captured ESPN match data
+(Overview), and offline crest fallbacks. They are not packaged Windows captures.*
 
 ## What it does
 
@@ -43,16 +43,29 @@ ESPN's CDN. They are not packaged Windows captures.*
   small PL/UCL tag per card, and the live count follows the selection. UCL looks
   30 days ahead so sparse fixtures still appear. Follow a club once — ESPN uses
   the same ID in both competitions, so its UCL matches and alerts come along.
-- **Match Centre:** on-demand Overview with scorers and key stats, a
-  commentary-rich timeline by half, team-tabbed lineups with formations and
-  shirt numbers, plus team statistics for either competition. Scores remain
+- **Match Centre:** a shared scoreboard and sticky Overview, Stats, Lineups and
+  Commentary navigation. Overview shows a compact incident timeline by half,
+  match information (referee, stadium, capacity and attendance,
+  with missing fields marked). Cards show their type and reported reason;
+  substitutions label incoming and outgoing players. Stats adds available match-specific xG, chances,
+  duels, recoveries and more, with category filters. Commentary retains fuller
+  provider text and stoppages, with event-type filters and newest/oldest ordering.
+  Some competitions or matches have fewer metrics; saved extended stats are
+  labelled if their refresh fails. Team-tabbed vertical formation pitches keep
+  shirt numbers and player names readable in the narrow widget. Lineups use
+  numbers consistently on the pitch and in player lists. The
+  Coach row shows supplied match coaches or explicitly reports missing data. Scores remain
   sourced from the scoreboard.
 - **Views that fit matchday:** All, Live, Following, Upcoming, and Results.
   Results covers completed matches from the previous 14 days with a separate
   per-competition cache.
 - **Alerts:** followed-team reminders, match-start and optional goal alerts for
   both competitions, per-match subscribe/mute, persistent deduplication, and a
-  durable retry queue. Alerts keep monitoring both leagues regardless of the
+  durable retry queue. Clicking a new on-screen alert restores the widget and
+  opens the relevant match Overview, including matches hidden by filters.
+  Enabling a match bell during live play keeps subsequent goal alerts active
+  without replaying earlier goals.
+  Alerts keep monitoring both leagues regardless of the
   competition you are viewing.
 - **Built for interruptions:** independent fixture and score refreshes, offline
   cache, stale-data labels, retry/backoff handling, automatic recovery when a
@@ -121,6 +134,7 @@ store, and polling does not depend on a mounted component.
   scoreboards (14-day PL window, 30-day UCL window); scores use daily queries at
   the adaptive live cadence. Date-range requests are not supported.
 - **Refresh:** each competition refreshes and reports status independently.
+  During live matches, scores and open match details refresh about once per minute.
   Successful fixtures, scores, results and summaries merge by stable provider
   ID. A failed or malformed source keeps the previous cache; one competition's
   failure never erases the other's data.
@@ -139,7 +153,7 @@ store, and polling does not depend on a mounted component.
 | Area | Start here |
 | --- | --- |
 | Widget shell and navigation | `src/App.tsx` |
-| Match details and centre | `src/components/MatchCentre.tsx`, `src/components/MatchDetails.tsx` |
+| Match details and centre | `src/components/MatchCentre.tsx`, `src/components/MatchDetails.tsx`, `src/components/MatchEvents.tsx` |
 | UI state and native contracts | `src/store.ts`, `src/types.ts`, `src/presentation.ts` |
 | Local-day, summary and results hooks | `src/useLocalDay.ts`, `src/useMatchSummary.ts`, `src/useRecentResults.ts` |
 | Native entry point and lifecycle | `src-tauri/src/main.rs` |
@@ -159,6 +173,8 @@ cover native domain and reliability logic.
 - Dark is the default; light is optional. Both themes use the same semantic
   variables in `src/styles.css`: charcoal glass and lime for dark, pale surfaces
   and deeper green for light. Do not fork layouts per theme.
+- Use flat fixture rows, shared section bands and one underline-tab style.
+  Keep the compact score strip and match tabs visible while details scroll.
 - Inspect at 320px (minimum) and 390px. Keep one intended scroll region per view,
   stable tabular scores and one-line match rows with initials crest fallbacks.
 - Panel opacity applies to backgrounds, never text or controls. Content must stay
@@ -183,8 +199,8 @@ dispatches. A passing build does not prove runtime behavior.
   delivery still needs validation.
 - Provider outages can reduce coverage. Cached data can be stale, and the widget
   labels unconfirmed scores accordingly.
-- Development-build measurements on this machine: 98 frontend tests, 111 Rust
-  tests and 33 Playwright journeys; the widget's full state is ~170KB, scoreboard
+- Development-build measurements on this machine: 107 frontend tests, 116 Rust
+  tests and 44 Playwright journeys; the widget's full state is ~170KB, scoreboard
   responses are ~6KB compressed versus ~70KB identity, and crests use 96px
   combiner images instead of 500px assets. Packaged memory/CPU were not profiled.
 
@@ -200,9 +216,16 @@ the commit, OS version, display scale, theme, opacity and result for each check:
   shrinks the native window and restores the saved expanded size.
 - Both themes remain readable at minimum opacity, and all views stay inside
   320px/390px windows with only the intended pane scrolling at 100%/125%/150%.
+- Click a newly generated goal, start or reminder banner while the widget is
+  hidden or minimized: it should restore, focus and open the correct Overview.
+  Repeat from Settings and another match. Old banners lack the new destination.
 - Live updates, alerts, sleep/resume, monitor removal/recovery and crest fallback
   work with the packaged app.
 - UCL live/halftime summaries are checked when a real fixture is available.
+
+The current notification plugin reports Windows clicks while the banner is
+on screen; clicks after it moves into Notification Centre are not reported.
+See the [Tauri notification platform behavior](https://docs.rs/tauri-plugin-notification/2.8.0/tauri_plugin_notification/struct.NotificationBuilder.html#method.show).
 
 ## Releasing
 

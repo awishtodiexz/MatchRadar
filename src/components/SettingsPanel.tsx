@@ -133,7 +133,7 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
         {!anyVisible&&needle&&<div className="search-empty" role="status"><p>No clubs match “{query}”.</p><button className="text-button" onClick={()=>{search.current?.focus();setQuery('');}}>Clear search</button></div>}
       </>}
       {section==='Appearance'&&<>
-        <div className="section-intro"><h3>Set the mood</h3><p>The same matchday, in your style.</p></div>
+        <div className="section-intro"><h3>Appearance</h3><p>Theme, density and desktop visibility.</p></div>
         <label className="select-row">Theme<select aria-label="Theme" value={settings.theme} onChange={e=>update({theme:e.target.value==='light'?'light':'dark'})}><option value="dark">Dark</option><option value="light">Light</option></select></label>
         <Toggle label="Compact view" description="Start smaller and remember your expanded size. You can still resize the window." value={settings.compact} onChange={compact=>update({compact})}/>
         {!native&&<p className="field-note">Browser preview changes spacing only. The desktop app also resizes the window.</p>}

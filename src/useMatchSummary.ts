@@ -4,9 +4,14 @@ export interface MatchScorer { teamId:string; teamName:string; name:string; minu
 export interface MatchSummary {
   matchId:string; updatedAt:string; stale:boolean; error:string|null;
   venue:string|null;
-  events:Array<{id:string;minute:string;period:number;seconds:number;kind:string;text:string;teamId:string|null}>;
+  venueCity?:string|null;
+  referee?:string|null;
+  capacity?:number|null;
+  statisticsNote?:string|null;
+  events:Array<{id:string;minute:string;period:number;seconds:number;kind:string;text:string;teamId:string|null;participants?:string[];shortText?:string|null;reason?:string|null}>;
   statistics:Array<{teamId:string;name:string;label:string;value:string}>;
   players:Array<{teamId:string;name:string;position:string;starter:boolean;jersey?:string|null;formationPlace?:number|null;subbedIn?:boolean;subbedOut?:boolean}>;
+  coaches?:Array<{teamId:string;name:string}>;
   scorers?:MatchScorer[];
   substitutions?:Array<{teamId:string;playerIn:string;playerOut:string;minute:string}>;
   formations?:Record<string,string>;

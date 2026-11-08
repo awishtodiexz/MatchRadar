@@ -4,6 +4,63 @@ Notable changes to MatchRadar. All local builds remain version **1.0.0** until
 the first public release; the sections below describe the complete local feature
 set.
 
+## Match Overview and numbered lineups (unreleased)
+
+- Live match details now use a one-minute cache, matching live score polling.
+- Removed the repeated status headline from Overview. It now shows compact,
+  chronological goals, cards and substitutions grouped by half, with verified
+  running/period scores when incidents reconcile with the scoreboard.
+- Removed the statistics preview and repeated commentary link from Overview;
+  the four tabs keep their own purpose. Card incidents show type and reported
+  reason, and substitutions label players on/off.
+- Goal events use black-and-white football icons in Overview and Commentary.
+- Added referee, stadium/city, capacity and attendance rows; unavailable fields
+  are marked explicitly rather than guessed.
+- Added match-specific extended statistics (including xG, chances, shot locations,
+  duels and recoveries), precise percentages and a category selector. Optional
+  feed failures retain the base summary and label any saved extended metrics.
+- Commentary keeps longer descriptions, stoppages and pre/post-match context,
+  merges duplicate provider IDs, and supports event-type and ordering filters.
+- Form and team leaders are available in an expandable supporting section,
+  opened initially before kick-off.
+- Lineups use shirt numbers throughout. Removed player photos, external portrait
+  lookups, retries, counters, toggles and the extra image-host permission.
+
+## Missed goal alert fix (unreleased)
+
+- A newly confirmed goal is also reported when the same daily scoreboard update
+  marks full-time. Old results and later edits to finished scores remain excluded.
+- Enabling or re-enabling a match bell now keeps tracking from a recent confirmed
+  score instead of silently consuming the next goal as a new baseline.
+- Preserved suppression of historical goals, stale observations, score corrections
+  and duplicate deliveries, including across restarts.
+
+## Notification click fix (unreleased)
+
+- Alert banners carry their match ID and register click handling before delivery.
+  A click restores and focuses the widget, opening that match's Overview even
+  when the active competition or followed-club filters hide it.
+- Acknowledged pending destinations survive webview startup; overlapping clicks
+  retain the latest destination. Expired matches show an availability message.
+- Windows clicks are supported while the banner remains on screen; the current
+  plugin does not report clicks from Notification Centre.
+
+## Local UI overhaul (unreleased)
+
+- Unified the charcoal/lime and light themes with shared spacing, typography,
+  section bands, tabs, controls and flatter fixture rows.
+- Replaced the repeated match headings with one scoreboard, a compact score
+  strip on scroll and sticky Overview, Stats, Lineups and Commentary navigation.
+- Commentary orders the full provider feed newest first, with an optional
+  key-events filter.
+- Lineups show a selected-team vertical pitch with shirt numbers and names;
+  incomplete formation data falls back to the player list.
+- Overview and full statistics share percentage formatting.
+- Restyled Settings and loading, empty, saved-data and error states to match.
+- Added an explicit coach-availability row. Match feeds without coaches are labelled.
+- Fixed scored penalties being misidentified as red cards and used provider
+  position codes to arrange formation lines.
+
 ## Local build — 2026-11-08
 
 - Removed the duplicate visible team/statistic header from Match Centre Stats while retaining accessible column names.
@@ -100,7 +157,7 @@ set.
   smaller fixture and summary downloads), OS certificate roots, system proxy
   support, 96px crest/badge images instead of 500px assets, cached date
   formatters, and a widget-only IPC snapshot instead of the full 170KB state.
-- Match-summary requests refresh at most every two minutes per match, use one
+- Live match-summary requests refresh at most once per minute per match, use one
   in-flight request per match, and back off per match instead of blocking every
   summary for a minute after one failure.
 - Polling backs off per competition, honours the reminder window so short

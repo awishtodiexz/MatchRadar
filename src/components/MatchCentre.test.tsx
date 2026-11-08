@@ -6,33 +6,33 @@ import { mockSnapshot } from '../test-fixtures/fixtures';
 import type { MatchSummary } from '../useMatchSummary';
 const state=vi.hoisted(()=>({data:{matchId:'1',updatedAt:'2026-10-29T12:00:00Z',error:null,stale:false,venue:null as string|null,events:[{id:'e',minute:"45+2'",period:1,seconds:2820,kind:'goal',text:'Verified provider goal',teamId:'359'}],statistics:[{teamId:'359',name:'redCards',label:'Red cards',value:'0'}],players:[{teamId:'359',name:'A long player name',position:'G',starter:true}]} as MatchSummary,loading:false,error:null,retry:vi.fn()}));
 vi.mock('../useMatchSummary',()=>({useMatchSummary:()=>state}));
-afterEach(cleanup);
-it('offers available sections and displays explicit zero stats and player names',()=>{render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Timeline'}));expect(screen.getByText("45+2'")).toBeTruthy();expect(screen.getByText('Verified provider goal')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getByText('0')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));expect(screen.getByText('A long player name')).toBeTruthy();});
+const initial=structuredClone(state.data);
+afterEach(()=>{cleanup();state.data=structuredClone(initial);state.loading=false;state.error=null;});
+it('offers available sections and displays explicit zero stats and player names',()=>{render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));expect(screen.getByText("45+2'")).toBeTruthy();expect(screen.getByText('Verified provider goal')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getByText('0')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));expect(screen.getByText('A long player name')).toBeTruthy();});
 it('keeps the details freshness line on Overview instead of repeating it above every tab',()=>{
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);
  expect(screen.getByText(/Details checked/)).toBeTruthy();
  fireEvent.click(screen.getByRole('tab',{name:'Stats'}));
  expect(screen.queryByText(/Details checked/)).toBeNull();
 });
-it('uses a singular event count and sends the CTA to Timeline',()=>{
+it('uses the existing tabs to access Stats and Commentary without repeated Overview links',()=>{
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);
- const cta=screen.getByRole('button',{name:/Full timeline/});
- expect(cta.textContent).toContain('1 event');
- fireEvent.click(cta);
- expect(screen.getByRole('tab',{name:'Timeline'}).getAttribute('aria-selected')).toBe('true');
+ expect(screen.queryByRole('button',{name:/Match commentary|Full statistics/})).toBeNull();
+ fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getByRole('table',{name:'Team statistics'})).toBeTruthy();
+ fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));expect(screen.getByText('Verified provider goal')).toBeTruthy();
 });
-it('omits unavailable sections rather than displaying empty tabs',()=>{const old=state.data;state.data={...old,events:[],statistics:[],players:[]};render(<MatchCentre match={mockSnapshot.matches[0]}/>);expect(screen.queryByRole('tab',{name:'Timeline'})).toBeNull();expect(screen.getByText('No event timeline is available for this match.')).toBeTruthy();state.data=old;});
+it('omits unavailable sections rather than displaying empty tabs',()=>{const old=state.data;state.data={...old,events:[],statistics:[],players:[]};render(<MatchCentre match={mockSnapshot.matches[0]}/>);expect(screen.queryByRole('tab',{name:'Commentary'})).toBeNull();expect(screen.getByRole('region',{name:'Match information'})).toBeTruthy();state.data=old;});
 it('retains visible detail content without inserting a skeleton during a refresh',()=>{
  state.loading=true;render(<MatchCentre match={mockSnapshot.matches[0]}/>);
  expect(screen.queryByLabelText('Loading match details')).toBeNull();
- expect(screen.getByRole('tab',{name:'Timeline'})).toBeTruthy();
+ expect(screen.getByRole('tab',{name:'Commentary'})).toBeTruthy();
  expect(screen.getByRole('region',{name:'Match centre'}).getAttribute('aria-busy')).toBe('true');state.loading=false;
 });
 it('shows a supplied venue and clear pre-match copy without empty tabs',()=>{
  const old=state.data;state.data={...old,venue:'Villa Park',events:[],statistics:[],players:[]};
  render(<MatchCentre match={{...mockSnapshot.matches[0],status:'scheduled'}}/>);
- expect(screen.getByText('Villa Park')).toBeTruthy();expect(screen.getByText('Match information will appear when available.')).toBeTruthy();
- expect(screen.queryByRole('tab',{name:'Timeline'})).toBeNull();state.data=old;
+ expect(screen.getByText('Villa Park')).toBeTruthy();expect(screen.getByText('Lineups and match coverage will appear when available.')).toBeTruthy();
+ expect(screen.queryByRole('tab',{name:'Commentary'})).toBeNull();state.data=old;
 });
 
 it('compares each statistic once and distinguishes a missing value from zero',()=>{
@@ -52,7 +52,7 @@ it('highlights comparable ESPN statistics while keeping disciplinary counts neut
   {teamId:'363',name:'passPct',label:'Pass Completion %',value:'0.7'}
  ]};
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Stats'}));
- expect(screen.getByText('Passing')).toBeTruthy();
+ expect(screen.getByRole('columnheader',{name:'Passing'})).toBeTruthy();
  expect(screen.getByRole('row',{name:/Possession/}).querySelector('.stat-leading')?.textContent).toBe('58.2%');
  expect(screen.getByRole('row',{name:/Shots/}).querySelector('.stat-leading')?.textContent).toBe('13');
  expect(screen.getByRole('row',{name:/Fouls/}).querySelector('.stat-leading')).toBeNull();
@@ -75,6 +75,7 @@ it('explains when one team has no lineup rather than showing an empty starting X
 it('shows scorers, formation, jersey numbers and substitutes without inventing data',()=>{
  const old=state.data;
  state.data={...old,
+  events:[],
   scorers:[{teamId:'359',teamName:'Arsenal',name:'Bukayo Saka',minute:"23'",ownGoal:false,penalty:false}],
   substitutions:[{teamId:'359',playerIn:'Leandro Trossard',playerOut:'Bukayo Saka',minute:"60'"}],
   formations:{'359':'4-3-3'},
@@ -82,7 +83,7 @@ it('shows scorers, formation, jersey numbers and substitutes without inventing d
    {teamId:'359',name:'Bukayo Saka',position:'RW',starter:true,jersey:'7',formationPlace:5},
    {teamId:'359',name:'Leandro Trossard',position:'SUB',starter:false,jersey:'19',subbedIn:true}]};
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);
- expect(screen.getByText('Goals')).toBeTruthy();
+ expect(screen.getByLabelText('Goalscorers')).toBeTruthy();
  expect(screen.getByText('Bukayo Saka')).toBeTruthy();
  fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));
  expect(screen.getByText('4-3-3')).toBeTruthy();
@@ -117,7 +118,7 @@ it('filters the timeline to key events without losing the full list',()=>{
  const old=state.data;
  state.data={...old,events:[...old.events,{id:'foul-1',minute:"15'",period:1,seconds:900,kind:'foul',text:'Foul by a defender.',teamId:'359'}]};
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);
- fireEvent.click(screen.getByRole('tab',{name:'Timeline'}));
+ fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));
  expect(screen.getByText('Foul by a defender.')).toBeTruthy();
  fireEvent.click(screen.getByRole('button',{name:'Key events'}));
  expect(screen.queryByText('Foul by a defender.')).toBeNull();
@@ -128,7 +129,7 @@ it('filters the timeline to key events without losing the full list',()=>{
  state.data=old;
 });
 
-it('draws both formations when all twenty-two starter places are known',()=>{
+it('draws the selected team formation and changes the pitch with its tab',()=>{
  const old=state.data;
  const squad=(teamId:string)=>Array.from({length:11},(_,i)=>({
   teamId,name:`${teamId} Player ${i+1}`,position:i===0?'G':i<5?'CD':i<8?'CM':'CF',starter:true,jersey:String(i+1),formationPlace:i+1
@@ -139,21 +140,44 @@ it('draws both formations when all twenty-two starter places are known',()=>{
  const pitch=document.querySelector('.lineup-pitch');
  expect(pitch).toBeTruthy();
  expect(pitch?.getAttribute('aria-hidden')).toBe('true');
- expect(pitch?.querySelectorAll('.pitch-shirt')).toHaveLength(22);
+ expect(pitch?.querySelectorAll('.pitch-shirt')).toHaveLength(11);
+ expect(pitch?.textContent).toContain('1');
+ fireEvent.click(screen.getByRole('tab',{name:/Chelsea/}));
+ expect(document.querySelector('.pitch-player')?.getAttribute('title')).toContain('Chelsea');
+ expect(document.querySelectorAll('.pitch-shirt')).toHaveLength(11);
  expect(screen.getAllByText('4-3-3').length).toBeGreaterThan(0);
  state.data=old;
 });
 
 it('labels timeline periods and event types',()=>{
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);
- fireEvent.click(screen.getByRole('tab',{name:'Timeline'}));
+ fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));
  expect(screen.getByText('First half')).toBeTruthy();
- expect(screen.getByText('GOAL')).toBeTruthy();
+ expect(screen.getByText('Goal',{selector:'.event-kind'})).toBeTruthy();
 });
 
 it('exposes selected panels and supports arrow, Home and End keyboard navigation',()=>{
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);
- const overview=screen.getByRole('tab',{name:'Overview'});overview.focus();fireEvent.keyDown(overview,{key:'ArrowRight'});
- const timeline=screen.getByRole('tab',{name:'Timeline'});expect(document.activeElement).toBe(timeline);expect(timeline.getAttribute('aria-selected')).toBe('true');expect(screen.getByRole('tabpanel',{name:'Timeline'})).toBeTruthy();
- fireEvent.keyDown(timeline,{key:'End'});expect(document.activeElement).toBe(screen.getByRole('tab',{name:'Lineups'}));fireEvent.keyDown(document.activeElement!,{key:'Home'});expect(document.activeElement).toBe(overview);
+ const overview=screen.getByRole('tab',{name:'Overview'});overview.focus();fireEvent.keyDown(overview,{key:'End'});
+ const timeline=screen.getByRole('tab',{name:'Commentary'});expect(document.activeElement).toBe(timeline);expect(timeline.getAttribute('aria-selected')).toBe('true');expect(screen.getByRole('tabpanel',{name:'Commentary'})).toBeTruthy();
+ fireEvent.keyDown(timeline,{key:'ArrowLeft'});expect(document.activeElement).toBe(screen.getByRole('tab',{name:'Lineups'}));fireEvent.keyDown(document.activeElement!,{key:'Home'});expect(document.activeElement).toBe(overview);
+});
+
+it('includes all compact goals and substitutions in Overview but excludes routine goal kicks',()=>{
+ const old=state.data;
+ state.data={...old,statistics:[{teamId:'359',name:'totalShots',label:'Shots',value:'9'}],events:[
+  {id:'goal-kick',minute:'75',period:2,seconds:4500,kind:'goal-kick',text:'Routine goal kick',teamId:'359'},
+  ...Array.from({length:15},(_,i)=>({id:'sub-'+i,minute:'73',period:2,seconds:4380+i,kind:'substitution',text:'Routine substitution '+i,teamId:'359',participants:['Player on '+i,'Player off '+i]})),
+  ...Array.from({length:7},(_,i)=>({id:'goal-'+i,minute:String(50+i),period:2,seconds:3000+i,kind:'goal',text:'Goal '+i,teamId:'359',participants:['Scorer '+i]}))
+ ]};
+ const {container}=render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ expect(container.querySelectorAll('.match-events .event')).toHaveLength(22);
+ expect(container.querySelectorAll('.overview-scorers li')).toHaveLength(0);
+ expect(screen.getByText('Second half')).toBeTruthy();expect(screen.getByText('Player on 0')).toBeTruthy();
+ expect(screen.getByRole('region',{name:'Match information'})).toBeTruthy();
+ expect(screen.queryByText('Routine goal kick')).toBeNull();
+ expect(screen.queryByText('Shots')).toBeNull();
+ fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));
+ expect(screen.getByRole('tab',{name:'Commentary'}).getAttribute('aria-selected')).toBe('true');
+ expect(screen.getByText('Routine substitution 0')).toBeTruthy();state.data=old;
 });

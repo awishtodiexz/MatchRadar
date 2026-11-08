@@ -24,10 +24,11 @@ test('bell is independent and Match Centre tabs support keyboard navigation', as
   await page.getByRole('button', { name: /Enable all alerts.*Arsenal versus Chelsea/ }).click();
   await expect(page.getByRole('heading', { name: 'Match details', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Match details: Arsenal versus Chelsea' }).click();
-  for (const tab of ['Overview', 'Timeline', 'Stats', 'Lineups']) {
+  for (const tab of ['Overview', 'Stats', 'Lineups', 'Commentary']) {
     await page.getByRole('tab', { name: tab, exact: true }).click();
     await expect(page.getByRole('tabpanel', { name: tab })).toBeVisible();
   }
+  await page.getByRole('tab', { name: 'Lineups', exact: true }).click();
   await expect(page.getByText('Goalkeepers', { exact: true })).toHaveCount(1);
   await page.getByRole('tab', { name: /Chelsea/ }).click();
   await expect(page.getByText('Goalkeepers', { exact: true })).toHaveCount(1);
@@ -37,7 +38,7 @@ test('bell is independent and Match Centre tabs support keyboard navigation', as
 
 test('timeline period headings scroll with the list instead of covering events', async ({ page }) => {
   await page.getByRole('button', { name: 'Match details: Arsenal versus Chelsea' }).click();
-  await page.getByRole('tab', { name: 'Timeline', exact: true }).click();
+  await page.getByRole('tab', { name: 'Commentary', exact: true }).click();
   const period = page.locator('.timeline-period').first();
   await expect(period).toBeVisible();
   // Regression: sticky period labels covered the row scrolling underneath them.
@@ -70,7 +71,7 @@ test('theme changes and demo controls are absent from settings', async ({ page }
 test('upcoming match shows supplied venue and omits unavailable detail tabs', async ({ page }, info) => {
   await page.getByRole('button', { name: 'Upcoming', exact: true }).click();
   await page.getByRole('button', { name: 'Match details: Manchester City versus Manchester United' }).click();
-  await expect(page.getByText('Match information will appear when available.')).toBeVisible();
+  await expect(page.getByText('Lineups and match coverage will appear when available.')).toBeVisible();
   await expect(page.getByText('Test Stadium')).toBeVisible();
   await page.screenshot({path:info.outputPath('upcoming-details.png'),animations:'disabled'});
   await expect(page.getByRole('tab', { name: 'Stats', exact: true })).toHaveCount(0);
@@ -120,7 +121,7 @@ for (const [width, theme] of [[320, 'dark'], [390, 'light']] as const) {
     }
     await page.getByRole('button', { name: 'Back to matches', exact: true }).click();
     await page.getByRole('button', { name: 'Match details: Arsenal versus Chelsea' }).click();
-    for (const name of ['Timeline', 'Stats', 'Lineups']) {
+    for (const name of ['Commentary', 'Stats', 'Lineups']) {
       await page.getByRole('tab', { name, exact: true }).click();
       expect(await page.locator('.detail-body').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
     }

@@ -44,7 +44,7 @@ describe('focused usability refinements',()=>{
   });
   it('suppresses surface context menus on cards, icons, details and settings',()=>{
     render(<App/>);
-    expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Matchday .'}))).toBe(false);
+    expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Matchday'}))).toBe(false);
     const card=screen.getByRole('button',{name:detailName});
     expect(fireEvent.contextMenu(card)).toBe(false);
     expect(fireEvent.contextMenu(screen.getByRole('button',{name:inheritName}).querySelector('svg')!)).toBe(false);
@@ -187,14 +187,14 @@ describe('focused usability refinements',()=>{
   it('updates an open match from fresh snapshots and keeps it visible when temporarily absent',()=>{
     render(<App/>);fireEvent.click(screen.getByRole('button',{name:detailName}));
     act(()=>useApp.setState({snapshot:{...mockSnapshot,matches:mockSnapshot.matches.map(m=>m.id==='demo-1'?{...m,homeScore:3,detail:"72'"}:m)}}));
-    expect(document.querySelector('.detail-score')?.textContent).toContain('3 : 1');
+    expect(document.querySelector('.detail-score')?.textContent).toContain('3 – 1');
     expect(document.querySelector('.detail-status')?.textContent).toContain("72'");
     act(()=>useApp.setState({snapshot:{...mockSnapshot,matches:mockSnapshot.matches.filter(m=>m.id!=='demo-1')}}));
     expect(screen.getByRole('heading',{name:'Match details'})).toBeTruthy();
-    expect(document.querySelector('.detail-score')?.textContent).toContain('3 : 1');
+    expect(document.querySelector('.detail-score')?.textContent).toContain('3 – 1');
     expect(document.querySelector('.detail-score')?.textContent).toContain('Saved');
     act(()=>useApp.setState({snapshot:{...mockSnapshot,matches:mockSnapshot.matches.map(m=>m.id==='demo-1'?{...m,homeScore:4,detail:"80'"}:m)}}));
-    expect(document.querySelector('.detail-score')?.textContent).toContain('4 : 1');
+    expect(document.querySelector('.detail-score')?.textContent).toContain('4 – 1');
     expect(document.querySelector('.detail-score')?.textContent).not.toContain('Saved');
   });
 

@@ -26,8 +26,21 @@ pub fn prepare_preferences(snapshot: &mut Snapshot, settings: &mut Settings, now
         if snapshot.settings.match_alerts.get(id).map(|p| p.enabled)
             != settings.match_alerts.get(id).map(|p| p.enabled)
         {
-            // Re-prime without losing the ceiling used to suppress score corrections.
-            baseline.priming = true;
+            // A settings change must not consume the next goal when a recent,
+            // confirmed scoreboard already supplies the subscription's baseline.
+            // Keep its original observation time and correction ceiling.
+            let confirmed = date(&baseline.seen_at)
+                .is_some_and(|seen| now >= seen && now - seen <= Duration::minutes(5))
+                && snapshot.matches.iter().any(|m| {
+                    m.id == *id
+                        && !m.score_stale
+                        && m.home_score.is_some()
+                        && m.away_score.is_some()
+                        && m.home_score == baseline.home
+                        && m.away_score == baseline.away
+                        && m.status == baseline.status
+                });
+            baseline.priming = !confirmed;
         }
     }
 }
@@ -89,7 +102,8 @@ pub fn plan(snapshot: &mut Snapshot, now: DateTime<Utc>) -> Vec<(String, String)
                     format!("{name} kicks off soon"),
                 ));
             }
-            // A first observation, stale cache, or newly enabled subscription is a baseline.
+            // First/unconfirmed observations establish a baseline. A subscription
+            // armed from a recent confirmed score keeps watching the next change.
             if let Some(previous) = previous.filter(|_| fresh) {
                 if (subscribed || snapshot.settings.starts)
                     && m.status == "live"
@@ -100,7 +114,9 @@ pub fn plan(snapshot: &mut Snapshot, now: DateTime<Utc>) -> Vec<(String, String)
                 }
                 if (subscribed || snapshot.settings.goals)
                     && fresh_score
-                    && matches!(m.status.as_str(), "live" | "halftime")
+                    // A late goal can first appear in the same confirmed response
+                    // that marks full-time. Already-finished baselines stay excluded.
+                    && matches!(m.status.as_str(), "live" | "halftime" | "fulltime")
                     && matches!(previous.status.as_str(), "live" | "halftime")
                 {
                     if let (Some(home), Some(away), Some(_), Some(_)) =
@@ -208,14 +224,22 @@ mod tests {
         assert!(plan(&mut s, now() + Duration::minutes(12)).is_empty());
     }
     #[test]
-    fn new_subscription_and_restart_do_not_replay_historical_events_or_score_corrections() {
+    fn new_subscription_arms_from_confirmed_score_without_replaying_history_or_corrections() {
         let mut s = fixture();
         s.matches[0].status = "live".into();
         s.matches[0].home_score = Some(2);
         plan(&mut s, now());
         subscribe(&mut s, true);
+        assert!(
+            plan(&mut s, now()).is_empty(),
+            "enabling must not replay the current score"
+        );
         s.matches[0].home_score = Some(3);
-        assert!(plan(&mut s, now() + Duration::minutes(1)).is_empty());
+        assert_eq!(
+            plan(&mut s, now() + Duration::minutes(1)).len(),
+            1,
+            "the first new goal after enabling must alert"
+        );
         let mut reloaded: Snapshot =
             serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
         assert!(reloaded.settings.match_alerts["match-1"].enabled);
@@ -308,5 +332,40 @@ mod tests {
         assert_eq!(s.updated_at.as_deref(), Some(now().to_rfc3339().as_str()));
         s.matches[0].home_score = Some(1);
         assert_eq!(plan(&mut s, now() + Duration::minutes(1)).len(), 1);
+    }
+
+    #[test]
+    fn subscriptions_with_stale_or_unconfirmed_scores_still_prime_without_historical_alerts() {
+        for condition in ["stale", "mismatch", "old", "missing"] {
+            let mut s = fixture();
+            s.matches[0].status = "live".into();
+            s.matches[0].home_score = Some(2);
+            plan(&mut s, now());
+            match condition {
+                "stale" => s.matches[0].score_stale = true,
+                "mismatch" => s.matches[0].home_score = Some(3),
+                "old" => {
+                    s.alert_baselines.get_mut("match-1").unwrap().seen_at =
+                        (now() - Duration::minutes(6)).to_rfc3339()
+                }
+                "missing" => s.matches[0].away_score = None,
+                _ => unreachable!(),
+            }
+            subscribe(&mut s, true);
+            assert!(s.alert_baselines["match-1"].priming, "{condition}");
+            s.matches[0].score_stale = false;
+            s.matches[0].home_score = Some(4);
+            s.matches[0].away_score = Some(0);
+            assert!(
+                plan(&mut s, now() + Duration::minutes(1)).is_empty(),
+                "{condition}"
+            );
+            s.matches[0].home_score = Some(5);
+            assert_eq!(
+                plan(&mut s, now() + Duration::minutes(2)).len(),
+                1,
+                "{condition}"
+            );
+        }
     }
 }

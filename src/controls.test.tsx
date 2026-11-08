@@ -43,15 +43,15 @@ describe('widget controls', () => {
   render(<App/>);
   expect(await screen.findByText('Partial update · some data may be stale')).toBeTruthy();
   const card = document.querySelector('[data-match-id="demo-1"]');
-  const clock = card?.querySelector('.live-clock');
+  const clock = card?.querySelector('.fixture-time');
   expect(clock?.textContent).toContain('67′');
-  expect(clock?.classList.contains('saved')).toBe(true);
-  expect(card?.querySelector('.result-meta')?.textContent).toContain('saved');
+  expect(clock?.classList.contains('is-live')).toBe(false);
+  expect(card?.querySelector('.fixture-time')?.textContent).toContain('Saved');
   expect(screen.getByRole('heading',{name:/SAVED LIVE SCORES/})).toBeTruthy();
   expect(screen.getByRole('heading',{name:/SAVED LIVE SCORES/}).classList.contains('live-group')).toBe(false);
   expect(screen.getByText('SAVED LIVE',{exact:true})).toBeTruthy();
   expect(document.querySelector('footer')?.textContent).toContain('PARTIAL · SCORES SAVED');
-  expect(bridge.invoke.mock.calls.every(([command])=>command==='get_snapshot')).toBe(true);
+  expect(bridge.invoke.mock.calls.every(([command])=>command==='get_snapshot'||command==='get_notification_target')).toBe(true);
  });
  it('round-trips a match subscription through the native settings bridge', async () => {
   bridge.native = true;

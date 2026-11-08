@@ -24,7 +24,7 @@ test('explores filters, bells, search and details', async ({ page }) => {
   await page.getByRole('button',{name:'Match details: Arsenal versus Chelsea'}).click();
   await page.getByRole('button',{name:/^Match alerts: /}).click();
   await page.getByRole('button',{name:'Use team settings'}).click();
-  for (const name of ['Overview','Timeline','Stats','Lineups']) {
+  for (const name of ['Overview','Commentary','Stats','Lineups']) {
     await page.getByRole('tab',{name,exact:true}).click();
     await expect(page.getByRole('tabpanel',{name})).toBeVisible();
   }
@@ -47,7 +47,7 @@ test('explores filters, bells, search and details', async ({ page }) => {
   await page.getByRole('button',{name:'Back to matches'}).click();
   await page.getByRole('button',{name:'Upcoming',exact:true}).click();
   await page.getByRole('button',{name:'Match details: Manchester City versus Manchester United'}).click();
-  await expect(page.getByText('Match information will appear when available.')).toBeVisible();
+  await expect(page.getByText('Lineups and match coverage will appear when available.')).toBeVisible();
   await expect(page.getByRole('tab',{name:'Stats'})).toHaveCount(0);
 });
 
@@ -88,7 +88,7 @@ for (const width of [320,390]) for (const theme of ['dark','light']) for (const 
       await page.getByRole('button',{name:'Back to matches'}).click();
       await page.screenshot({path:info.outputPath(`${width}-${theme}-${compact}-${opacity}-home.png`),animations:'disabled'});
       await page.getByRole('button',{name:'Match details: Arsenal versus Chelsea'}).click();
-      for(const section of ['Timeline','Stats','Lineups']) {
+      for(const section of ['Commentary','Stats','Lineups']) {
         await page.getByRole('tab',{name:section,exact:true}).click();
         expect(await page.locator('.detail-body').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
         await page.screenshot({path:info.outputPath(`${width}-${theme}-${compact}-${opacity}-${section}.png`),animations:'disabled'});

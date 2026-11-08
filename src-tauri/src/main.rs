@@ -5,6 +5,7 @@ mod delivery;
 mod demo;
 mod details;
 mod model;
+mod notification_navigation;
 mod persistence;
 mod provider;
 mod refresh;
@@ -252,6 +253,22 @@ fn test_notification(app: tauri::AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn get_notification_target(
+    navigation: tauri::State<'_, notification_navigation::Navigation>,
+    state: tauri::State<'_, State>,
+) -> Option<notification_navigation::Target> {
+    navigation.get(&snapshot_lock(&state))
+}
+
+#[tauri::command]
+fn acknowledge_notification_target(
+    request_id: u64,
+    navigation: tauri::State<'_, notification_navigation::Navigation>,
+) {
+    navigation.acknowledge(request_id);
+}
+
 fn notification_log(state: &State, message: &str) {
     eprintln!("MatchRadar notifications: {message}");
     append_log(
@@ -269,6 +286,7 @@ fn submit_notification(
         .builder()
         .title("MatchRadar")
         .body(&event.body)
+        .extra("matchId", &event.match_id)
         .show()
         .map_err(|error| {
             let unavailable = matches!(&error,
@@ -757,6 +775,7 @@ fn main() {
             cache.seed(&detail_cache);
             app.manage(cache);
             app.manage(results::History::default());
+            app.manage(notification_navigation::Navigation::default());
             app.manage(State {
                 snapshot: Mutex::new(snapshot),
                 path,
@@ -770,6 +789,28 @@ fn main() {
             if let Err(error) = persist(&app.state::<State>()) {
                 eprintln!("MatchRadar persistence: {error}");
             }
+            let notification_app = app.handle().clone();
+            app.notification().on_action(move |action| {
+                if action.action_id() != "tap" {
+                    return;
+                }
+                let match_id = action
+                    .notification()
+                    .and_then(|notification| notification.extra().get("matchId"))
+                    .and_then(serde_json::Value::as_str);
+                notification_app
+                    .state::<notification_navigation::Navigation>()
+                    .activate(match_id);
+                let _ = notification_app.emit("notification-opened", ());
+                let handle = notification_app.clone();
+                if let Err(error) = notification_app.run_on_main_thread(move || {
+                    if let Some(window) = handle.get_webview_window("main") {
+                        show_main_window(&window);
+                    }
+                }) {
+                    eprintln!("MatchRadar notification window activation: {error}");
+                }
+            })?;
             // An entry written by an older build has no --hidden argument; rewrite
             // it once when start-hidden is enabled so the setting takes effect now.
             if start_hidden && app.autolaunch().is_enabled().unwrap_or(false) {
@@ -867,7 +908,9 @@ fn main() {
             results::get_recent_results,
             save_settings,
             refresh,
-            test_notification
+            test_notification,
+            get_notification_target,
+            acknowledge_notification_target
         ])
         .run(tauri::generate_context!())
         .expect("failed to run MatchRadar");
