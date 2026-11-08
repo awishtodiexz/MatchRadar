@@ -35,6 +35,15 @@ test('bell is independent and Match Centre tabs support keyboard navigation', as
   await expect(page.getByRole('tab', { name: 'Overview', exact: true })).toBeFocused();
 });
 
+test('timeline period headings scroll with the list instead of covering events', async ({ page }) => {
+  await page.getByRole('button', { name: 'Match details: Arsenal versus Chelsea' }).click();
+  await page.getByRole('tab', { name: 'Timeline', exact: true }).click();
+  const period = page.locator('.timeline-period').first();
+  await expect(period).toBeVisible();
+  // Regression: sticky period labels covered the row scrolling underneath them.
+  await expect(period).not.toHaveCSS('position', 'sticky');
+});
+
 test('returning home restores scroll and the match-card focus', async ({ page }) => {
   const card = page.getByRole('button', { name: 'Match details: Brighton & Hove Albion versus Everton' });
   await card.scrollIntoViewIfNeeded();

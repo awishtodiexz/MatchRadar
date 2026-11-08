@@ -544,8 +544,8 @@ footer { min-height: 52px; display: flex; align-items: center; justify-content: 
   .form-grid, .leaders-grid { grid-template-columns: 1fr; }
 }
 
-/* Keep period labels visible through long timelines. */
-.timeline-period { position: sticky; top: -1px; z-index: 2; margin: 10px 0 2px; padding: 8px 0 5px; background: var(--surface-solid); box-shadow: 0 1px 0 var(--border); }
+/* Period labels scroll with the timeline; sticky labels covered event rows. */
+.timeline-period { padding-bottom: 4px; border-bottom: 1px solid var(--border); }
 .event.goal { padding-left: 8px; margin-left: -8px; box-shadow: inset 2px 0 var(--accent); }
 /* Filled shirt markers read clearly in both themes. */
 .pitch-shirt { background: var(--accent); border-color: var(--accent); color: #10180d; }
