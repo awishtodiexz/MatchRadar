@@ -1,4 +1,0 @@
-#!/bin/sh
-# Block pushes when HANDOFF.md does not match the commit being pushed.
-root="$(git rev-parse --show-toplevel)"
-exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/handoff.ps1" -Check

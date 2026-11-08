@@ -16,3 +16,9 @@ coverage/
 verification/artifacts/
 playwright-report/
 test-results/
+
+# Markdown policy: only README.md and CHANGELOG.md are published.
+# AGENTS.md and HANDOFF.md are local-only and remain ignored.
+*.md
+!/README.md
+!/CHANGELOG.md

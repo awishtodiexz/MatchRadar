@@ -3,9 +3,8 @@
 
 .gitattributes text eol=lf
 
-# Shell scripts must stay LF or the Git hook fails with a bad interpreter.
+# Shell scripts must stay LF.
 *.sh text eol=lf
-.githooks/* text eol=lf
 
 # PowerShell and TypeScript are fine with LF, but keep them text.
 *.ps1 text eol=lf

@@ -34,7 +34,8 @@ set.
   full-timeline call to action; the duplicate Latest feed was removed.
 - Timeline merging ESPN commentary with key events, grouped by half, with team
   badges, icons and labels for goals, cards, substitutions, shots, corners and
-  fouls; key-event filtering and sticky period headings keep long timelines readable.
+  fouls; key-event filtering and clearly marked half-time section headings keep
+  long timelines readable.
 - Lineups with a horizontal two-team formation pitch, both formations, shirt
   number markers, home/away tabs, position groups, kickoff starters, substitutes,
   and paired substitutions with provider minutes. Player lists remain the
@@ -51,8 +52,7 @@ set.
 - Compact stoppage-time clock labels (`90+2'`) that fit inside the live pill.
 - Official MatchRadar mark used in the header, window/installer icon and
   favicon, with generated multi-size Windows ICO assets.
-- Request-count diagnostics for manual refreshes and a documented
-  [local release process](docs/RELEASING.md).
+- Request-count diagnostics for manual refreshes.
 
 ### Changed
 
@@ -66,6 +66,16 @@ set.
   surfaces while input and diagnostic text remain usable.
 - The live minute moved out of the score line: cards show a compact clock beside
   the scores, and Match details centers the score with a live status beneath it.
+- MatchRadar is tray-first: the window no longer adds a taskbar button, both the
+  minimize and close controls hide it to the tray, clicking the tray icon toggles
+  it, and Quit stays in the tray menu. Minimizing from Windows (Win+Down) also
+  hides it.
+- The score and status stack is centered on the crests instead of hanging below
+  them, scroll regions reserve a symmetric gutter so content sits on the window
+  centre, and the details freshness line shows on Overview only.
+- The competition picker, menu and Match details header show the official ESPN
+  league badges for the Premier League and Champions League, theme-aware and with
+  the inline glyph kept as an offline fallback.
 - Match alerts moved into a bell control in the Match details header with a small
   popover; the large alert panel was removed from Overview, Timeline and Lineups.
 - Version is read from `package.json` in the UI; `npm run check:version` enforces
@@ -74,9 +84,29 @@ set.
   clubs are outside the Premier League.
 - Windows CI skips documentation-only pushes and packages installers only for
   `v*` tags and manual dispatches.
-- Documentation is split into current reference and dated reports under
-  `docs/archive/`; AGENTS.md, README, and validation notes describe the
-  local-first workflow.
-
-See the [validation notes](docs/VALIDATION.md) for build evidence and outstanding
-native runtime checks.
+- Launch at sign-in can start hidden in the tray, and `Ctrl+Shift+M` shows or
+  hides the widget from anywhere.
+- A resumed machine is detected within about half a minute and refreshes scores
+  immediately instead of waiting for the next poll, so a woken laptop no longer
+  shows stale results until the 30-minute idle delay expires.
+- The Playwright suite runs an axe accessibility pass at 320 and 390px in both
+  themes alongside the existing layout journeys, and now runs in CI.
+- Network and storage work were tightened: gzip HTTP compression (about 12x
+  smaller fixture and summary downloads), OS certificate roots, system proxy
+  support, 96px crest/badge images instead of 500px assets, cached date
+  formatters, and a widget-only IPC snapshot instead of the full 170KB state.
+- Match-summary requests refresh at most every two minutes per match, use one
+  in-flight request per match, and back off per match instead of blocking every
+  summary for a minute after one failure.
+- Polling backs off per competition, honours the reminder window so short
+  reminders are not skipped, and persists routine score snapshots at most every
+  five minutes instead of fsyncing the full state every minute. Retry-After is
+  clamped to one hour.
+- An unreadable state file with no usable backup now starts with defaults after
+  preserving the damaged bytes, instead of preventing the app from launching.
+- Results refresh quietly while open, only fetch the selected competition(s),
+  and substitution rows without a team are assigned from the player list.
+- Tray double-clicks no longer toggle twice, a conflicting Ctrl+Shift+M surfaces
+  a message, and the diagnostic log rotates at 1 MB.
+- The long-form `docs/` tree, `AGENTS.md`, `HANDOFF.md`, handoff scripts and site
+  screenshots were removed; README and this changelog are the documentation.
