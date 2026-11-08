@@ -152,6 +152,9 @@ pub struct Team {
 pub struct Match {
     #[serde(default)]
     pub score_stale: bool,
+    /// Time this individual score was confirmed by a score/results response.
+    #[serde(default)]
+    pub score_updated_at: Option<String>,
     pub id: String,
     pub home: Team,
     pub away: Team,

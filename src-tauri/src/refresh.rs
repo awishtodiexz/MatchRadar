@@ -107,6 +107,12 @@ fn fixture_merge(mut base: Vec<Match>, fixtures: &mut FetchOutcome, complete: bo
                 m.status = previous.status.clone();
                 m.detail = previous.detail.clone();
             }
+            if m.status == previous.status
+                && m.home_score == previous.home_score
+                && m.away_score == previous.away_score
+            {
+                m.score_updated_at = previous.score_updated_at.clone();
+            }
         }
     }
     // Complete schedules reconcile absent upcoming fixtures. Partial month batches must
@@ -177,6 +183,9 @@ pub fn apply_league(
     }
     for m in &mut base {
         m.score_stale = active(m) && !score_ids.contains(&m.id);
+        if score_ids.contains(&m.id) {
+            m.score_updated_at = Some(now.to_rfc3339());
+        }
     }
     others.append(&mut base);
     snapshot.matches = provider::merge(others, Vec::new());
@@ -604,5 +613,36 @@ mod tests {
         );
         assert!(s.matches.iter().any(|m| m.id == "ucl-25"));
         assert!(!s.matches.iter().any(|m| m.id == "ucl-32"));
+    }
+    #[test]
+    fn only_confirmed_daily_scores_advance_individual_freshness() {
+        let mut s = Snapshot::default();
+        let m = fixture("123", "fulltime", 0, 1);
+        apply_league(
+            &mut s,
+            Competition::PremierLeague,
+            FetchOutcome::default(),
+            good(vec![m.clone()]),
+            now(),
+        );
+        assert_eq!(s.matches[0].score_updated_at, Some(now().to_rfc3339()));
+        apply_league(
+            &mut s,
+            Competition::PremierLeague,
+            good(vec![m.clone()]),
+            FetchOutcome::default(),
+            now() + Duration::minutes(1),
+        );
+        assert_eq!(s.matches[0].score_updated_at, Some(now().to_rfc3339()));
+        let mut corrected = m;
+        corrected.home_score = Some(2);
+        apply_league(
+            &mut s,
+            Competition::PremierLeague,
+            good(vec![corrected]),
+            FetchOutcome::default(),
+            now() + Duration::minutes(2),
+        );
+        assert_eq!(s.matches[0].score_updated_at, None);
     }
 }

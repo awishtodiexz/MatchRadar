@@ -4,6 +4,20 @@ Notable changes to MatchRadar. All local builds remain version **1.0.0** until
 the first public release; the sections below describe the complete local feature
 set.
 
+## Reliability review fixes (unreleased)
+
+- Serialized background saves with preference/notification writes, preventing older
+  snapshots from replacing acknowledged settings. Startup resets only proven
+  corrupt state after archiving both copies; read/recovery failures preserve saves.
+- Final matches bypass live/pregame summary caches and reconcile every minute
+  until the provider confirms final details.
+- Results and opened match scores prefer the most recent individual score
+  confirmation, including corrected history and partial provider responses.
+- Daily-score rate limits now pause subsequent competition requests on the shared
+  host, including HTTP 429 responses without Retry-After.
+- Fixed possession values at or below 1%, defensive midfielder grouping, and
+  missing off-times for substitutes who subsequently leave the pitch.
+
 ## Match Overview and numbered lineups (unreleased)
 
 - Live match details now use a one-minute cache, matching live score polling.

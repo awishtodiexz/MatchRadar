@@ -169,6 +169,7 @@ fn mock_at(now: DateTime<Utc>) -> Vec<Match> {
         .map(
             |(i, (hi, hn, hs, ai, an, as_, status, hours, home_score, away_score))| Match {
                 score_stale: false,
+                score_updated_at: None,
                 id: format!("demo-{i}"),
                 home: team(hi, hn, hs),
                 away: team(ai, an, as_),

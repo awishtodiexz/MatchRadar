@@ -55,8 +55,14 @@ fn write_snapshot(state: &State, snapshot: &Snapshot) -> Result<(), String> {
     persistence::save(&state.path, snapshot)
 }
 fn persist(state: &State) -> Result<(), String> {
-    let snapshot = snapshot_lock(state).clone();
-    write_snapshot(state, &snapshot)?;
+    persist_with(state, |snapshot| write_snapshot(state, snapshot))
+}
+fn persist_with(
+    state: &State,
+    save: impl FnOnce(&Snapshot) -> Result<(), String>,
+) -> Result<(), String> {
+    let snapshot = snapshot_lock(state);
+    save(&snapshot)?;
     *state
         .last_persist
         .lock()
@@ -95,18 +101,30 @@ async fn get_match_details(
     if id.is_empty() || !id.bytes().all(|b| b.is_ascii_digit()) {
         return Err("Invalid match ID".into());
     }
-    let (league, active) = {
+    let (league, phase) = {
         let state = app.state::<State>();
         let snapshot = snapshot_lock(&state);
         let m = snapshot
             .matches
             .iter()
             .chain(snapshot.recent_results.iter())
-            .find(|m| m.id == id)
+            .filter(|m| m.id == id)
+            .max_by_key(|m| {
+                m.score_updated_at
+                    .as_ref()
+                    .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
+            })
             .ok_or("Match not in fixture cache")?;
-        (m.league, matches!(m.status.as_str(), "live" | "halftime"))
+        (
+            m.league,
+            match m.status.as_str() {
+                "live" | "halftime" => details::Phase::Live,
+                "fulltime" => details::Phase::Final,
+                _ => details::Phase::Other,
+            },
+        )
     };
-    let mut data = cache.get(league, &id, active).await?;
+    let mut data = cache.get(league, &id, phase).await?;
     if !data.stale {
         let state = app.state::<State>();
         let mut snapshot = snapshot_lock(&state);
@@ -444,13 +462,12 @@ async fn poll(app: tauri::AppHandle) {
                         }
                         provider::scores(client, league, today, &relevant).await
                     };
-                    if limited {
-                        // A provider rate limit applies to the host, not just this league.
-                        host_rate_limit =
-                            fixtures.error.as_ref().and_then(|error| error.retry_after);
+                    let cooldown = provider::host_cooldown(&[&fixtures, &scores]);
+                    if cooldown.is_some() {
+                        host_rate_limit = cooldown;
                     }
-                    outcomes.push((index, league, fixtures, scores));
-                    if limited {
+                    outcomes.push((index, league, fixtures, scores, Utc::now()));
+                    if cooldown.is_some() {
                         break;
                     }
                 }
@@ -471,6 +488,7 @@ async fn poll(app: tauri::AppHandle) {
                             provider::FetchOutcome::default()
                         },
                         provider::FetchOutcome::failed(error.clone()),
+                        Utc::now(),
                     ));
                 }
             }
@@ -480,8 +498,8 @@ async fn poll(app: tauri::AppHandle) {
             let mut s = snapshot_lock(&state);
             let mut any_response = false;
             let mut score_ids = Vec::new();
-            for (index, league, fixtures, scores) in outcomes {
-                let applied = refresh::apply_league(&mut s, league, fixtures, scores, Utc::now());
+            for (index, league, fixtures, scores, confirmed_at) in outcomes {
+                let applied = refresh::apply_league(&mut s, league, fixtures, scores, confirmed_at);
                 any_response |= applied.any_response;
                 if applied.failed {
                     league_failures[index] = league_failures[index].saturating_add(1);
@@ -709,19 +727,12 @@ fn main() {
             let dir = app.path().app_data_dir()?;
             fs::create_dir_all(&dir)?;
             let path = dir.join("state.json");
-            let loaded = persistence::load(&path).unwrap_or_else(|error| {
-                eprintln!("MatchRadar persistence: {error}");
-                match persistence::start_over(&path) {
-                    Ok(loaded) => loaded,
-                    Err(again) => {
-                        eprintln!("MatchRadar persistence: {again}");
-                        persistence::Loaded {
-                            snapshot: Snapshot::default(),
-                            notice: Some(format!("{error}; {again}")),
-                        }
-                    }
-                }
-            });
+            let loaded = persistence::load(&path)
+                .or_else(|error| {
+                    eprintln!("MatchRadar persistence: {error}");
+                    persistence::start_over(&path)
+                })
+                .map_err(std::io::Error::other)?;
             if let Some(notice) = loaded.notice {
                 eprintln!("MatchRadar persistence: {notice}");
                 append_log(
@@ -942,5 +953,41 @@ mod persistence_tests {
         let error = persist(&state).unwrap_err();
         assert!(error.contains("Save MatchRadar state"));
         assert!(error.contains(path.to_string_lossy().as_ref()));
+    }
+    #[test]
+    fn periodic_save_serializes_with_acknowledged_settings_writes() {
+        let state = std::sync::Arc::new(State {
+            snapshot: Mutex::new(Snapshot::default()),
+            path: PathBuf::new(),
+            wake: tokio::sync::Notify::new(),
+            notification_wake: tokio::sync::Notify::new(),
+            force_fixtures: AtomicBool::new(false),
+            settings_lock: Mutex::new(()),
+            refresh_lock: tokio::sync::Mutex::new(()),
+            last_persist: Mutex::new(None),
+        });
+        let disk = std::sync::Arc::new(Mutex::new(0));
+        let (started, wait_started) = std::sync::mpsc::channel();
+        let competing_state = state.clone();
+        let competing_disk = disk.clone();
+        let mut writer = None;
+        persist_with(&state, |snapshot| {
+            assert!(
+                state.snapshot.try_lock().is_err(),
+                "save must retain the snapshot lock"
+            );
+            writer = Some(std::thread::spawn(move || {
+                started.send(()).unwrap();
+                let mut snapshot = snapshot_lock(&competing_state);
+                snapshot.settings.opacity = 80;
+                *competing_disk.lock().unwrap() = snapshot.settings.opacity;
+            }));
+            wait_started.recv().unwrap();
+            *disk.lock().unwrap() = snapshot.settings.opacity;
+            Ok(())
+        })
+        .unwrap();
+        writer.unwrap().join().unwrap();
+        assert_eq!(*disk.lock().unwrap(), 80);
     }
 }

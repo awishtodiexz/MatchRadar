@@ -7,11 +7,11 @@ const groups = ['Goalkeepers','Defenders','Midfielders','Forwards','Other positi
 type Group = typeof groups[number];
 
 export function positionGroup(position:string):Group {
-  const code = position.trim().toUpperCase().replace(/\s+/g,'');
+  const code = position.trim().toUpperCase().replace(/\s+/g,'').split('-')[0];
   if(['G','GK','GOALKEEPER'].includes(code)) return 'Goalkeepers';
-  if(/^(D|DF|DEF|CB|CD|LB|RB|LWB|RWB|SW)/.test(code)) return 'Defenders';
-  if(/^(M|MF|MID|CM|DM|AM|LM|RM|CDM|CAM)/.test(code)) return 'Midfielders';
-  if(/^(F|FW|ST|CF|SS|LW|RW)/.test(code)) return 'Forwards';
+  if(/^(D|DF|DEF|CB|CD|LB|RB|LWB|RWB|SW)$/.test(code)) return 'Defenders';
+  if(/^(M|MF|MID|CM|DM|AM|LM|RM|CDM|CAM|AML|AMR)$/.test(code)) return 'Midfielders';
+  if(/^(F|FW|ST|CF|SS|LW|RW)$/.test(code)) return 'Forwards';
   return 'Other positions';
 }
 const byPlace = (a:MatchSummary['players'][number], b:MatchSummary['players'][number]) =>
@@ -110,8 +110,9 @@ export function MatchLineups({match,players,substitutions=[],formations={},coach
       {starters.length===0&&selected.length>0&&<><h4>Squad</h4><PlayerList players={selected} substitutions={teamSubs}/></>}
       {substitutes.length>0&&<><h4>Substitutes</h4><ul className="lineup-list">{substitutes.sort(byPlace).map((player,index)=>{
         const on=teamSubs.find(sub=>sub.playerIn===player.name);
+        const off=teamSubs.find(sub=>sub.playerOut===player.name);
         return <li key={`${player.name}-${index}`}>
-          {player.jersey&&<span className="jersey">#{player.jersey}</span>}<span>{player.name}</span><small>{player.position}{on&&<span className="sub-marker on" title={`Substituted on at ${on.minute}`}> ↑ {on.minute}</span>}{!on&&player.subbedIn?' · on':''}</small>
+          {player.jersey&&<span className="jersey">#{player.jersey}</span>}<span>{player.name}</span><small>{player.position}{on&&<span className="sub-marker on" title={`Substituted on at ${on.minute}`}> ↑ {on.minute}</span>}{!on&&player.subbedIn?' · on':''}{off&&<span className="sub-marker off" title={`Substituted off at ${off.minute}`}> ↓ {off.minute}</span>}{!off&&player.subbedOut?' · off':''}</small>
         </li>;
       })}</ul></>}
       {!!teamSubs.length&&<><h4>Substitutions</h4><ul className="subs-list">{teamSubs.map(sub=><li key={`${sub.minute}-${sub.playerIn}-${sub.playerOut}`}>

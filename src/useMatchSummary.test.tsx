@@ -38,3 +38,22 @@ it('pauses detail polling while hidden and reconciles on visibility return',asyn
  visibility='hidden';act(()=>document.dispatchEvent(new Event('visibilitychange')));await act(async()=>vi.advanceTimersByTimeAsync(180000));expect(bridge.invoke).toHaveBeenCalledTimes(1);
  visibility='visible';await act(async()=>document.dispatchEvent(new Event('visibilitychange')));expect(bridge.invoke).toHaveBeenCalledTimes(2);unmount();
 });
+
+it('fetches on full-time transition and retries until the provider confirms final details',async()=>{
+ vi.useFakeTimers();
+ bridge.invoke.mockResolvedValueOnce({...detail('1'),matchState:'in'})
+  .mockResolvedValueOnce({...detail('1'),matchState:'in'})
+  .mockResolvedValue({...detail('1'),matchState:'post'});
+ const {rerender,unmount}=renderHook(({active,finished})=>useMatchSummary('1',active,finished),{initialProps:{active:true,finished:false}});
+ await act(async()=>{});expect(bridge.invoke).toHaveBeenCalledTimes(1);
+ rerender({active:false,finished:true});await act(async()=>{});expect(bridge.invoke).toHaveBeenCalledTimes(2);
+ await act(async()=>vi.advanceTimersByTimeAsync(60000));expect(bridge.invoke).toHaveBeenCalledTimes(3);
+ await act(async()=>vi.advanceTimersByTimeAsync(180000));expect(bridge.invoke).toHaveBeenCalledTimes(3);unmount();
+});
+it('continues final reconciliation after an IPC failure while retaining saved data',async()=>{
+ vi.useFakeTimers();bridge.invoke.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({...detail('1'),matchState:'post'});
+ const {result,unmount}=renderHook(()=>useMatchSummary('1',false,true));
+ await act(async()=>{});expect(result.current.error).toBeTruthy();
+ await act(async()=>vi.advanceTimersByTimeAsync(60000));expect(result.current.data?.matchState).toBe('post');
+ expect(bridge.invoke).toHaveBeenCalledTimes(2);unmount();
+});

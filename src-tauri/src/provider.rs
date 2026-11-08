@@ -1,4 +1,4 @@
-﻿use crate::model::{Competition, Match, Team};
+use crate::model::{Competition, Match, Team};
 use chrono::{DateTime, Datelike, Duration, Local, Months, NaiveDate, Utc};
 use serde_json::Value;
 use std::sync::{
@@ -212,6 +212,7 @@ fn normalize(event: &Value, league: Competition) -> Option<Match> {
     };
     Some(Match {
         score_stale: false,
+        score_updated_at: None,
         id: id.into(),
         home: team(home)?,
         away: team(away)?,
@@ -749,5 +750,82 @@ mod competition_tests {
             .unwrap();
         assert!(limited.rate_limited());
         assert_eq!(limited.retry_after, Some(120));
+    }
+}
+
+/// Keep the newest confirmed score when history and fixture caches overlap.
+/// Legacy ties favor history rather than an unconfirmed monthly fixture.
+pub fn merge_results(history: Vec<Match>, fixtures: Vec<Match>) -> Vec<Match> {
+    let time = |m: &Match| {
+        m.score_updated_at
+            .as_ref()
+            .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
+    };
+    let mut combined = history;
+    for m in fixtures {
+        match combined.iter().position(|old| old.id == m.id) {
+            Some(index) if time(&m) > time(&combined[index]) => combined[index] = m,
+            Some(_) => (),
+            None => combined.push(m),
+        }
+    }
+    merge(combined, Vec::new())
+}
+/// Both schedule and daily-score failures pause subsequent requests to this host.
+pub fn host_cooldown(outcomes: &[&FetchOutcome]) -> Option<u64> {
+    outcomes
+        .iter()
+        .filter_map(|o| o.error.as_ref())
+        .filter(|e| e.rate_limited())
+        .map(|e| e.retry_after.unwrap_or(60).clamp(60, 3600))
+        .max()
+}
+
+#[cfg(test)]
+mod freshness_tests {
+    use super::*;
+    #[test]
+    fn result_merge_prefers_individually_newer_confirmation_and_history_on_legacy_ties() {
+        let mut fixture = crate::demo::mock().remove(4);
+        let mut history = fixture.clone();
+        fixture.home_score = Some(1);
+        history.home_score = Some(2);
+        assert_eq!(
+            merge_results(vec![history.clone()], vec![fixture.clone()])[0].home_score,
+            Some(2)
+        );
+        fixture.score_updated_at = Some("2026-11-08T12:00:00Z".into());
+        history.score_updated_at = Some("2026-11-08T13:00:00Z".into());
+        assert_eq!(
+            merge_results(vec![history.clone()], vec![fixture.clone()])[0].home_score,
+            Some(2)
+        );
+        fixture.score_updated_at = Some("2026-11-08T14:00:00Z".into());
+        assert_eq!(
+            merge_results(vec![history], vec![fixture])[0].home_score,
+            Some(1)
+        );
+    }
+    #[test]
+    fn daily_and_fixture_rate_limits_share_a_bounded_host_cooldown() {
+        let ok = FetchOutcome::default();
+        let error = |message: &str, retry_after| {
+            FetchOutcome::failed(FetchError {
+                message: message.into(),
+                retry_after,
+            })
+        };
+        let scores = error("HTTP 429", None);
+        assert_eq!(host_cooldown(&[&ok, &scores]), Some(60));
+        assert_eq!(host_cooldown(&[&scores, &ok]), Some(60));
+        assert_eq!(
+            host_cooldown(&[&ok, &error("HTTP 503", Some(120))]),
+            Some(120)
+        );
+        assert_eq!(
+            host_cooldown(&[&ok, &error("HTTP 429", Some(u64::MAX))]),
+            Some(3600)
+        );
+        assert_eq!(host_cooldown(&[&ok, &error("HTTP 500", None)]), None);
     }
 }

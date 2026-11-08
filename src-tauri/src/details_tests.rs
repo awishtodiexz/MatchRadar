@@ -334,7 +334,7 @@ async fn optional_statistics_failure_keeps_saved_extras_and_current_summary_coun
         value: "1.23".into(),
     });
     cache
-        .get_with(Competition::PremierLeague, id, true, now, || async {
+        .get_with(Competition::PremierLeague, id, Phase::Live, now, || async {
             Ok(saved)
         })
         .await
@@ -351,7 +351,7 @@ async fn optional_statistics_failure_keeps_saved_extras_and_current_summary_coun
         .get_with(
             Competition::PremierLeague,
             id,
-            true,
+            Phase::Live,
             now + chrono::Duration::seconds(121),
             || async { Ok(current) },
         )
@@ -379,7 +379,7 @@ async fn cache_hit_failure_cooldown_and_recovery() {
     let cache = Cache::default();
     let id = "401879268";
     cache
-        .get_with(Competition::PremierLeague, id, true, now, || async {
+        .get_with(Competition::PremierLeague, id, Phase::Live, now, || async {
             Ok(example())
         })
         .await
@@ -388,7 +388,7 @@ async fn cache_hit_failure_cooldown_and_recovery() {
         .get_with(
             Competition::PremierLeague,
             id,
-            true,
+            Phase::Live,
             now + chrono::Duration::seconds(59),
             || async { panic!("fresh cache must not fetch") },
         )
@@ -399,7 +399,7 @@ async fn cache_hit_failure_cooldown_and_recovery() {
         .get_with(
             Competition::PremierLeague,
             id,
-            true,
+            Phase::Live,
             now + chrono::Duration::seconds(60),
             || async { Ok(example()) },
         )
@@ -413,7 +413,7 @@ async fn cache_hit_failure_cooldown_and_recovery() {
         .get_with(
             Competition::PremierLeague,
             id,
-            true,
+            Phase::Live,
             now + chrono::Duration::seconds(121),
             || async { Err(Failure::temporary("timeout")) },
         )
@@ -426,7 +426,7 @@ async fn cache_hit_failure_cooldown_and_recovery() {
         .get_with(
             Competition::PremierLeague,
             id,
-            true,
+            Phase::Live,
             now + chrono::Duration::seconds(150),
             || async { panic!("cooldown must not fetch") },
         )
@@ -437,7 +437,7 @@ async fn cache_hit_failure_cooldown_and_recovery() {
         .get_with(
             Competition::PremierLeague,
             id,
-            true,
+            Phase::Live,
             now + chrono::Duration::seconds(220),
             || async { Ok(example()) },
         )
@@ -457,7 +457,7 @@ async fn restart_offline_and_future_timestamps() {
         .get_with(
             Competition::PremierLeague,
             "401879268",
-            false,
+            Phase::Other,
             now,
             || async { Err(Failure::temporary("offline")) },
         )
@@ -474,7 +474,7 @@ async fn restart_offline_and_future_timestamps() {
             .get_with(
                 Competition::PremierLeague,
                 "401879268",
-                true,
+                Phase::Live,
                 now,
                 || async { Err(Failure::temporary("clock changed")) }
             )
@@ -488,12 +488,18 @@ async fn rate_limit_deadline_and_empty_cache_errors() {
     let now = clock();
     let cache = Cache::default();
     assert!(cache
-        .get_with(Competition::PremierLeague, "1", true, now, || async {
-            Err(Failure {
-                message: "HTTP 429".into(),
-                retry_after: Some(7200),
-            })
-        })
+        .get_with(
+            Competition::PremierLeague,
+            "1",
+            Phase::Live,
+            now,
+            || async {
+                Err(Failure {
+                    message: "HTTP 429".into(),
+                    retry_after: Some(7200),
+                })
+            }
+        )
         .await
         .is_err());
     // A bogus Retry-After is clamped to one hour.
@@ -506,7 +512,7 @@ async fn rate_limit_deadline_and_empty_cache_errors() {
         .get_with(
             Competition::PremierLeague,
             "1",
-            true,
+            Phase::Live,
             now + chrono::Duration::seconds(3599),
             || async { panic!("must respect Retry-After") }
         )
@@ -516,7 +522,7 @@ async fn rate_limit_deadline_and_empty_cache_errors() {
         .get_with(
             Competition::PremierLeague,
             "1",
-            true,
+            Phase::Live,
             now + chrono::Duration::seconds(3600),
             || async {
                 let mut detail = example();
@@ -533,18 +539,28 @@ async fn summary_cooldown_is_per_match() {
     let now = clock();
     let cache = Cache::default();
     assert!(cache
-        .get_with(Competition::PremierLeague, "1", true, now, || async {
-            Err(Failure::temporary("boom"))
-        })
+        .get_with(
+            Competition::PremierLeague,
+            "1",
+            Phase::Live,
+            now,
+            || async { Err(Failure::temporary("boom")) }
+        )
         .await
         .is_err());
     // A failure for one event must not pause every other summary.
     let other = cache
-        .get_with(Competition::PremierLeague, "2", true, now, || async {
-            let mut detail = example();
-            detail.match_id = "2".into();
-            Ok(detail)
-        })
+        .get_with(
+            Competition::PremierLeague,
+            "2",
+            Phase::Live,
+            now,
+            || async {
+                let mut detail = example();
+                detail.match_id = "2".into();
+                Ok(detail)
+            },
+        )
         .await
         .unwrap();
     assert!(!other.stale);
@@ -573,7 +589,7 @@ async fn serialized_simultaneous_requests_reuse_one_result() {
         cache.get_with(
             Competition::PremierLeague,
             "401879268",
-            true,
+            Phase::Live,
             clock(),
             || async {
                 calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -597,7 +613,7 @@ async fn bounded_cache_and_invalid_persisted_entries() {
             .get_with(
                 Competition::PremierLeague,
                 &id,
-                false,
+                Phase::Other,
                 clock() + chrono::Duration::seconds(i),
                 || async {
                     let mut d = example();
@@ -825,4 +841,71 @@ fn f01_recovery_preserves_details_preferences_and_pending_notifications() {
     assert!(recovered.notice.is_some());
     assert_eq!(serde_json::to_value(&recovered.snapshot).unwrap(), expected);
     std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn final_phase_bypasses_live_pregame_and_legacy_cache_until_provider_confirms_final() {
+    for state in [Some("in"), Some("pre"), None] {
+        let cache = Cache::default();
+        let mut saved = example();
+        let id = saved.match_id.clone();
+        saved.match_state = state.map(str::to_owned);
+        cache
+            .get_with(
+                Competition::PremierLeague,
+                &id,
+                Phase::Other,
+                clock(),
+                || async { Ok(saved) },
+            )
+            .await
+            .unwrap();
+        let mut still_live = example();
+        still_live.match_state = Some("in".into());
+        let pending = cache
+            .get_with(
+                Competition::PremierLeague,
+                &id,
+                Phase::Final,
+                clock() + chrono::Duration::seconds(1),
+                || async { Ok(still_live) },
+            )
+            .await
+            .unwrap();
+        assert_eq!(pending.match_state.as_deref(), Some("in"));
+        let mut final_data = example();
+        final_data.match_state = Some("post".into());
+        let final_data = cache
+            .get_with(
+                Competition::PremierLeague,
+                &id,
+                Phase::Final,
+                clock() + chrono::Duration::seconds(61),
+                || async { Ok(final_data) },
+            )
+            .await
+            .unwrap();
+        assert_eq!(final_data.match_state.as_deref(), Some("post"));
+        let cached = cache
+            .get_with(
+                Competition::PremierLeague,
+                &id,
+                Phase::Final,
+                clock() + chrono::Duration::seconds(122),
+                || async { panic!("final cache should stay fresh for 15 minutes") },
+            )
+            .await
+            .unwrap();
+        assert_eq!(cached.match_state.as_deref(), Some("post"));
+    }
+}
+
+#[test]
+fn recorded_summary_exposes_final_provider_phase_and_rejects_invalid_cached_phase() {
+    let mut d = example();
+    assert_eq!(d.match_state.as_deref(), Some("post"));
+    d.match_state = Some("invalid".into());
+    assert!(!valid_cached(&d));
+    d.match_state = None;
+    assert!(valid_cached(&d));
 }

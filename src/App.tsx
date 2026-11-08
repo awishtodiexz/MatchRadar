@@ -11,7 +11,7 @@ import { useApp } from './store';
 import { useLocalDay } from './useLocalDay';
 import { useNotificationNavigation } from './useNotificationNavigation';
 import { useRecentResults } from './useRecentResults';
-import { matchesView } from './matchViews';
+import { mergeResults, matchesView } from './matchViews';
 import { liveEmptyState } from './emptyState';
 import type { MatchView } from './matchViews';
 import type { Match } from './types';
@@ -50,7 +50,7 @@ export default function App() {
   },[allMatches,competitionView]);
   const sourceMatches=useMemo(()=>{
     const included=competitionLeagues(competitionView);
-    const base=historyView?[...new Map([...recent.data.matches,...(allMatches??[]).filter(m=>m.status==='fulltime')].map(m=>[m.id,m])).values()]:(allMatches??[]);
+    const base=historyView?mergeResults(recent.data.matches,(allMatches??[]).filter(m=>m.status==='fulltime')):(allMatches??[]);
     return base.filter(m=>included.includes(m.league??'premierLeague'));
   },[historyView,recent.data.matches,allMatches,competitionView]);
   const listError=historyView?viewResults.error:viewStatus.error;
@@ -142,7 +142,7 @@ export default function App() {
       </div>
     </header>
     {view==='settings'&&settings?<SettingsPanel settings={settings} matches={allMatches??[]} save={save} back={back} refresh={()=>void doRefresh()} refreshing={busy}/>
-      :view==='detail'&&selected&&settings?<MatchDetails key={`${selected.id}:${notificationRequest}`} match={allMatches?.find(m=>m.id===selected.id)??selected} settings={settings} back={back}/>
+      :view==='detail'&&selected&&settings?<MatchDetails key={`${selected.id}:${notificationRequest}`} match={mergeResults([selected],mergeResults(recent.data.matches,allMatches??[])).find(m=>m.id===selected.id)??selected} settings={settings} back={back}/>
       :<>
         <div className="hero"><div><h2>Matchday</h2><p>Fixtures, scores and the clubs you follow</p></div><time>{dateLabel(new Date().toISOString())}</time></div>
         <div className="summary"><CompetitionPicker value={competitionView} onChange={value=>void save({competitionView:value})} disabled={!settings}/><span className={'live-pill '+(!live?'quiet':'')} aria-label={`${competitionTitle}: ${live?`${live} live matches`:savedLive?'saved scores, awaiting live update':liveUnknown?'live status unavailable':'no confirmed live matches'}`} title="Competition status, including matches hidden by your filter. Live scores refresh about every 60 seconds."><i className="dot"/>{live?`${live} LIVE`:savedLive?'SAVED LIVE':liveUnknown?'LIVE UNAVAILABLE':'NO LIVE MATCHES'}</span></div>

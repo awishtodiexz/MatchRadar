@@ -135,12 +135,16 @@ store, and polling does not depend on a mounted component.
   the adaptive live cadence. Date-range requests are not supported.
 - **Refresh:** each competition refreshes and reports status independently.
   During live matches, scores and open match details refresh about once per minute.
+  Open matches reconcile final details at the same cadence until the provider
+  confirms full time. Overlapping results use individual score-confirmation times.
   Successful fixtures, scores, results and summaries merge by stable provider
   ID. A failed or malformed source keeps the previous cache; one competition's
   failure never erases the other's data.
 - **Persistence:** preferences, caches, notification queues and window state
   live in one local JSON snapshot. Saves use atomic replacement, a validated
-  backup and corruption recovery.
+  backup and corruption recovery. Corrupt copies are archived before defaults
+  replace them; unreadable files or failed recovery stop startup without resetting
+  preferences. Background saves serialize with acknowledged settings writes.
 - **Notifications:** events are planned deterministically, persisted before
   submission and retried with bounded backoff. Delivery is best-effort; a
   successful native call is not proof the OS displayed it.
@@ -199,8 +203,8 @@ dispatches. A passing build does not prove runtime behavior.
   delivery still needs validation.
 - Provider outages can reduce coverage. Cached data can be stale, and the widget
   labels unconfirmed scores accordingly.
-- Development-build measurements on this machine: 107 frontend tests, 116 Rust
-  tests and 44 Playwright journeys; the widget's full state is ~170KB, scoreboard
+- Development-build measurements on this machine: 122 frontend tests, 135 Rust
+  tests and 50 Playwright journeys; the widget's full state is ~170KB, scoreboard
   responses are ~6KB compressed versus ~70KB identity, and crests use 96px
   combiner images instead of 500px assets. Packaged memory/CPU were not profiled.
 

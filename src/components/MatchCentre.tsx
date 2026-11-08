@@ -15,7 +15,7 @@ const formScore = (score:string, atHome:boolean) => {
   return atHome?`${parts[0]}–${parts[1]}`:`${parts[1]}–${parts[0]}`;
 };
 export function MatchCentre({match}:{match:Match}) {
-  const summary = useMatchSummary(match.id,isLive(match));
+  const summary = useMatchSummary(match.id,isLive(match),match.status==='fulltime');
   const {loading,error,retry}=summary;
   const data=summary.data;
   const [selected,setSelected]=useState('Overview');

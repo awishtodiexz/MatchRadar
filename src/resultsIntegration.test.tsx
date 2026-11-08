@@ -49,3 +49,20 @@ it('shows a completed provider summary through Results, including events, statis
  expect(screen.getByText('James Trafford')).toBeTruthy();expect(screen.getByText('Starting XI')).toBeTruthy();
  expect(bridge.invoke.mock.calls.filter(c=>c[0]==='get_match_details')).toHaveLength(1);
 });
+
+it('uses a newer corrected result in both the result card and the opened match',async()=>{
+ const stale={...mockSnapshot.matches[4],id:'401879268',homeScore:1,awayScore:1,scoreUpdatedAt:'2026-11-08T12:00:00Z'};
+ const corrected={...stale,homeScore:2,scoreUpdatedAt:'2026-11-08T13:00:00Z'};
+ const snapshot={...structuredClone(mockSnapshot),matches:[stale]};
+ bridge.invoke.mockImplementation(async(cmd:string)=>{
+  if(cmd==='get_snapshot')return snapshot;
+  if(cmd==='get_recent_results')return {matches:[corrected],updatedAt:corrected.scoreUpdatedAt,error:null};
+  if(cmd==='get_match_details')return {matchId:corrected.id,matchState:'post',venue:null,updatedAt:corrected.scoreUpdatedAt,stale:false,error:null,events:[],statistics:[],players:[]};
+  throw Error('Unexpected command '+cmd);
+ });
+ useApp.setState({snapshot:null,loading:true,error:null});render(<App/>);
+ fireEvent.click(await screen.findByRole('button',{name:'Results'}));
+ const card=await screen.findByRole('button',{name:'Match details: Brighton & Hove Albion versus Everton'});
+ await waitFor(()=>expect(card.querySelector('.scores')?.textContent).toBe('21'));
+ fireEvent.click(card);await waitFor(()=>expect(document.querySelector('.detail-score>span')?.textContent).toBe('2 – 1'));
+});

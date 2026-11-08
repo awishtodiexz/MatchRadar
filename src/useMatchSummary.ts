@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 export interface MatchScorer { teamId:string; teamName:string; name:string; minute:string; ownGoal:boolean; penalty:boolean }
 export interface MatchSummary {
-  matchId:string; updatedAt:string; stale:boolean; error:string|null;
+  matchId:string; matchState?:string|null; updatedAt:string; stale:boolean; error:string|null;
   venue:string|null;
   venueCity?:string|null;
   referee?:string|null;
@@ -20,7 +20,7 @@ export interface MatchSummary {
   leaders?:Array<{teamId:string;category:string;name:string;jersey?:string|null;position:string;value:string}>;
 }
 type SummaryState={id:string;data:MatchSummary|null;loading:boolean;error:string|null};
-export function useMatchSummary(id:string, active:boolean) {
+export function useMatchSummary(id:string, active:boolean, finished=false) {
   const [state,setState]=useState<SummaryState>({id,data:null,loading:true,error:null});
   const [retry,setRetry]=useState(0);
   useEffect(()=>{
@@ -31,22 +31,24 @@ export function useMatchSummary(id:string, active:boolean) {
     const read=async()=>{
       if(disposed||inFlight||!visible())return;
       inFlight=true;
+      let needsFinal=finished;
       try {
         const data=await invoke<MatchSummary>('get_match_details',{id});
         if(data.matchId!==id)throw new Error('Summary identity mismatch');
+        needsFinal=finished&&(data.matchState!=='post'||data.stale||!!data.error);
         if(!disposed)setState({id,data,loading:false,error:data.error});
       } catch {
         if(!disposed)setState(old=>({...old,data:old.data?{...old.data,stale:true}:null,loading:false,error:'Match details unavailable. Saved information is retained when available.'}));
       } finally {
         inFlight=false;
-        if(!disposed&&active&&visible())timer=setTimeout(()=>void read(),60000);
+        if(!disposed&&(active||needsFinal)&&visible())timer=setTimeout(()=>void read(),60000);
       }
     };
     const visibility=()=>{clearTimeout(timer);if(visible()&&native)void read();};
     if(native)void read();
     document.addEventListener('visibilitychange',visibility);
     return ()=>{disposed=true;clearTimeout(timer);document.removeEventListener('visibilitychange',visibility);};
-  },[id,active,retry]);
+  },[id,active,finished,retry]);
   const visible=state.id===id?state:{id,data:null,loading:true,error:null};
   return {...visible,retry:()=>setRetry(n=>n+1)};
 }

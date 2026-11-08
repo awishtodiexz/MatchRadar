@@ -16,15 +16,32 @@ pub fn load(path: &Path) -> Result<Loaded, String> {
     load_with(&Disk, path)
 }
 
-/// Last-resort startup recovery: invalid bytes were already archived by `load`.
-/// Clearing the unusable files lets the app run and persist fresh state instead
-/// of refusing to launch because both copies are damaged.
+/// Reset only proven corrupt state, after preserving every damaged copy.
+/// A read or recovery failure must never be treated as an empty installation.
 pub fn start_over(path: &Path) -> Result<Loaded, String> {
-    let _ = fs::remove_file(path);
-    let _ = fs::remove_file(sibling(path, ".bak"));
+    start_over_with(&Disk, path)
+}
+fn start_over_with(storage: &impl Storage, path: &Path) -> Result<Loaded, String> {
+    let backup_path = sibling(path, ".bak");
+    let primary = inspect(storage, path)?;
+    let backup = inspect(storage, &backup_path)?;
+    if matches!(primary, Existing::Valid(..)) || matches!(backup, Existing::Valid(..)) {
+        return Err(
+            "Refuse to reset valid saved state; recovery must succeed before startup".into(),
+        );
+    }
+    for (file, existing) in [(path, &primary), (backup_path.as_path(), &backup)] {
+        if let Existing::Invalid(bytes, _) = existing {
+            archive(storage, file, bytes)?;
+        }
+    }
+    let snapshot = Snapshot::default();
+    let bytes = serde_json::to_vec(&snapshot).map_err(|e| format!("Serialize defaults: {e}"))?;
+    publish(storage, &backup_path, &bytes)?;
+    publish(storage, path, &bytes)?;
     Ok(Loaded {
-        snapshot: Snapshot::default(),
-        notice: Some("Unreadable saved state was preserved; started with defaults".into()),
+        snapshot,
+        notice: Some("Damaged saved state was archived; started with defaults".into()),
     })
 }
 
@@ -552,21 +569,71 @@ mod tests {
     }
 
     #[test]
-    fn unreadable_state_can_start_over_without_blocking_launch() {
+    fn corrupt_state_is_archived_before_starting_over() {
         let dir = Directory::new();
         let path = dir.primary();
         fs::write(&path, b"broken primary").unwrap();
         fs::write(sibling(&path, ".bak"), b"broken backup").unwrap();
         // Both copies damaged: the normal load reports a hard failure...
         assert!(load(&path).is_err());
-        // ...but startup can discard the unusable files (bytes already archived)
-        // and persist a fresh default instead of refusing to launch forever.
+        // ...but startup can archive both damaged copies and atomically publish defaults.
         let loaded = start_over(&path).unwrap();
         assert!(loaded.snapshot.matches.is_empty());
         assert!(loaded.notice.is_some());
-        assert!(!path.exists());
-        assert!(!sibling(&path, ".bak").exists());
+        assert!(load(&path).is_ok());
+        assert!(load(&sibling(&path, ".bak")).is_ok());
         save(&path, &loaded.snapshot).unwrap();
         assert!(path.exists());
+    }
+    #[test]
+    fn startup_reset_preserves_unreadable_valid_and_unarchivable_state() {
+        let fs = Memory::default();
+        put(&fs, primary(), &old());
+        put(&fs, &sibling(primary(), ".bak"), &next());
+        let original = fs.files.borrow().clone();
+        *fs.denied.borrow_mut() = Some(primary().into());
+        assert!(start_over_with(&fs, primary()).is_err());
+        assert_eq!(*fs.files.borrow(), original);
+        *fs.denied.borrow_mut() = None;
+        assert!(start_over_with(&fs, primary()).is_err());
+        assert_eq!(*fs.files.borrow(), original);
+        put(&fs, primary(), b"corrupt primary");
+        put(&fs, &sibling(primary(), ".bak"), b"corrupt backup");
+        let corrupt = fs.files.borrow().clone();
+        *fs.failed_archive.borrow_mut() = true;
+        assert!(start_over_with(&fs, primary()).is_err());
+        assert_eq!(*fs.files.borrow(), corrupt);
+        *fs.failed_archive.borrow_mut() = false;
+        start_over_with(&fs, primary()).unwrap();
+        assert_eq!(
+            fs.read(&sibling(primary(), ".corrupt-test")).unwrap(),
+            b"corrupt primary"
+        );
+        assert_eq!(
+            fs.read(&sibling(primary(), ".bak.corrupt-test")).unwrap(),
+            b"corrupt backup"
+        );
+        assert!(load_with(&fs, primary()).is_ok());
+    }
+    #[cfg(windows)]
+    #[test]
+    fn temporary_windows_sharing_failure_cannot_reset_saved_preferences() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let dir = Directory::new();
+        let path = dir.primary();
+        fs::write(&path, old()).unwrap();
+        fs::write(sibling(&path, ".bak"), next()).unwrap();
+        // FILE_SHARE_DELETE allows the destructive old reset, while denying reads.
+        let held = OpenOptions::new()
+            .read(true)
+            .share_mode(4)
+            .open(&path)
+            .unwrap();
+        assert!(load(&path).is_err());
+        assert!(start_over(&path).is_err());
+        drop(held);
+        assert_eq!(fs::read(&path).unwrap(), old());
+        assert_eq!(fs::read(sibling(&path, ".bak")).unwrap(), next());
+        assert!(load(&path).unwrap().snapshot.settings.compact);
     }
 }

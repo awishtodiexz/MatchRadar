@@ -104,6 +104,8 @@ pub struct TeamLeader {
 #[serde(rename_all = "camelCase")]
 pub struct Details {
     pub match_id: String,
+    #[serde(default)]
+    pub match_state: Option<String>,
     /// Missing in saved Premier League caches, which default to that competition.
     #[serde(default)]
     pub league: Competition,
@@ -920,6 +922,10 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
     }
     Ok(Details {
         match_id: id.into(),
+        match_state: v["header"]["competitions"][0]["status"]["type"]["state"]
+            .as_str()
+            .filter(|state| matches!(*state, "pre" | "in" | "post"))
+            .map(str::to_owned),
         league,
         venue: v["gameInfo"]["venue"]["fullName"]
             .as_str()
@@ -948,6 +954,12 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
         stale: false,
     })
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Phase {
+    Live,
+    Final,
+    Other,
+}
 pub struct Cache {
     entries: StdMutex<HashMap<String, Details>>,
     blocked: StdMutex<HashMap<String, i64>>,
@@ -974,6 +986,9 @@ fn valid_cached(d: &Details) -> bool {
     !d.match_id.is_empty()
         && d.match_id.len() <= 128
         && d.match_id.bytes().all(|b| b.is_ascii_digit())
+        && d.match_state
+            .as_deref()
+            .is_none_or(|state| matches!(state, "pre" | "in" | "post"))
         && d.events.len() <= 1000
         && d.statistics.len() <= 256
         && d.players.len() <= 80
@@ -1092,13 +1107,13 @@ impl Cache {
         &self,
         league: Competition,
         id: &str,
-        active: bool,
+        phase: Phase,
     ) -> Result<Details, String> {
         let client = self
             .client
             .get_or_init(|| crate::provider::client().ok())
             .clone();
-        self.get_with(league, id, active, Utc::now(), || async move {
+        self.get_with(league, id, phase, Utc::now(), || async move {
             let client =
                 client.ok_or_else(|| Failure::temporary("Could not create summary client"))?;
             fetch(&client, league, id).await
@@ -1111,7 +1126,7 @@ impl Cache {
         &self,
         league: Competition,
         id: &str,
-        active: bool,
+        phase: Phase,
         now: DateTime<Utc>,
         fetch: F,
     ) -> Result<Details, String>
@@ -1120,14 +1135,19 @@ impl Cache {
         Fut: std::future::Future<Output = Result<Details, Failure>>,
     {
         let key = cache_key(league, id);
-        let ttl = if active { 60 } else { 900 };
+        let ttl = if phase == Phase::Live { 60 } else { 900 };
+        let phase_matches = |d: &Details| match phase {
+            Phase::Final => d.match_state.as_deref() == Some("post"),
+            Phase::Live => d.match_state.as_deref() != Some("pre"),
+            Phase::Other => true,
+        };
         let fresh = |d: &Details| {
             DateTime::parse_from_rfc3339(&d.updated_at)
                 .map(|t| now.timestamp() - t.timestamp())
                 .unwrap_or(i64::MAX)
         };
         if let Some(d) = lock(&self.entries).get(&key) {
-            if (0..ttl).contains(&fresh(d)) {
+            if phase_matches(d) && (0..ttl).contains(&fresh(d)) {
                 return Ok(d.clone());
             }
         }
@@ -1140,7 +1160,7 @@ impl Cache {
         let _guard = key_lock.lock().await;
         let old = lock(&self.entries).get(&key).cloned();
         if let Some(d) = &old {
-            if (0..ttl).contains(&fresh(d)) {
+            if phase_matches(d) && (0..ttl).contains(&fresh(d)) {
                 return Ok(d.clone());
             }
         }

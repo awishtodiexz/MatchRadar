@@ -41,7 +41,7 @@ fn view(s: &Snapshot) -> Results {
         leagues.insert(league.slug().into(), LeagueResults { updated_at, error });
     }
     Results {
-        matches: provider::merge(
+        matches: provider::merge_results(
             s.recent_results.clone(),
             s.matches
                 .iter()
@@ -133,6 +133,9 @@ fn apply_league(
         .collect();
     if let Some(mut matches) = outcome.matches {
         matches.retain(|m| provider::recent_result(m, now.date_naive()));
+        for m in &mut matches {
+            m.score_updated_at = Some(now.to_rfc3339());
+        }
         let matches = if partial {
             provider::merge(existing, matches)
         } else {
@@ -215,15 +218,15 @@ pub async fn get_recent_results(
             league.name(),
             outcome.matches.as_ref().map_or(0, Vec::len)
         );
-        outcomes.push((league, outcome));
+        outcomes.push((league, outcome, Utc::now()));
     }
     if !outcomes.is_empty() {
         let state = app.state::<State>();
         let mut s = state.snapshot.lock().map_err(|e| e.to_string())?;
         {
             let mut next = s.clone();
-            for (league, outcome) in outcomes {
-                apply_league(&mut next, league, outcome, now);
+            for (league, outcome, confirmed_at) in outcomes {
+                apply_league(&mut next, league, outcome, confirmed_at);
             }
             let saved = write_snapshot(&state, &next);
             *s = next;
@@ -417,5 +420,55 @@ mod tests {
         assert!(view.leagues[Competition::PremierLeague.slug()]
             .error
             .is_none());
+    }
+    #[test]
+    fn partial_history_timestamps_only_the_matches_actually_returned() {
+        let now = DateTime::parse_from_rfc3339("2026-10-29T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut s = Snapshot::default();
+        let mut first = crate::demo::mock().remove(4);
+        first.id = "111".into();
+        first.kickoff = "2026-10-20T12:00:00Z".into();
+        let mut second = first.clone();
+        second.id = "222".into();
+        apply_league(
+            &mut s,
+            Competition::PremierLeague,
+            provider::FetchOutcome {
+                matches: Some(vec![first.clone(), second]),
+                error: None,
+            },
+            now,
+        );
+        let later = now + Duration::hours(1);
+        apply_league(
+            &mut s,
+            Competition::PremierLeague,
+            provider::FetchOutcome {
+                matches: Some(vec![first]),
+                error: Some(provider::FetchError {
+                    message: "partial".into(),
+                    retry_after: None,
+                }),
+            },
+            later,
+        );
+        assert_eq!(
+            s.recent_results
+                .iter()
+                .find(|m| m.id == "111")
+                .unwrap()
+                .score_updated_at,
+            Some(later.to_rfc3339())
+        );
+        assert_eq!(
+            s.recent_results
+                .iter()
+                .find(|m| m.id == "222")
+                .unwrap()
+                .score_updated_at,
+            Some(now.to_rfc3339())
+        );
     }
 }

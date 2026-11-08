@@ -2,6 +2,8 @@
 import { cleanup,fireEvent,render,screen } from '@testing-library/react';
 import { afterEach,expect,it,vi } from 'vitest';
 import { MatchCentre } from './MatchCentre';
+import { positionGroup } from './MatchLineups';
+import { formatStatisticValue } from './MatchStats';
 import { mockSnapshot } from '../test-fixtures/fixtures';
 import type { MatchSummary } from '../useMatchSummary';
 const state=vi.hoisted(()=>({data:{matchId:'1',updatedAt:'2026-10-29T12:00:00Z',error:null,stale:false,venue:null as string|null,events:[{id:'e',minute:"45+2'",period:1,seconds:2820,kind:'goal',text:'Verified provider goal',teamId:'359'}],statistics:[{teamId:'359',name:'redCards',label:'Red cards',value:'0'}],players:[{teamId:'359',name:'A long player name',position:'G',starter:true}]} as MatchSummary,loading:false,error:null,retry:vi.fn()}));
@@ -180,4 +182,34 @@ it('includes all compact goals and substitutions in Overview but excludes routin
  fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));
  expect(screen.getByRole('tab',{name:'Commentary'}).getAttribute('aria-selected')).toBe('true');
  expect(screen.getByText('Routine substitution 0')).toBeTruthy();state.data=old;
+});
+
+it('keeps low possession percentages as percentage points and scales ratio metrics',()=>{
+ const stat=(name:string,value:string)=>({teamId:'359',name,label:name,value});
+ for(const value of ['0','0.5','1','99']) expect(formatStatisticValue('possessionPct',stat('possessionPct',value))).toBe(value+'%');
+ expect(formatStatisticValue('passPct',stat('passPct','0.8'))).toBe('80%');
+ expect(formatStatisticValue('passPct',stat('passPct','0.5%'))).toBe('0.5%');
+ state.data={...state.data,statistics:[stat('possessionPct','1'),{...stat('possessionPct','99'),teamId:'363'}]};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Stats'}));
+ const row=screen.getByRole('row',{name:/Possession/});
+ expect(row.textContent).toBe('1%Possession99%');expect(row.querySelector('.stat-leading')?.textContent).toBe('99%');
+});
+it('groups defensive midfielders separately from central defenders',()=>{
+ for(const code of ['DM','CDM','DM-L','CDM-R','CM-L']) expect(positionGroup(code)).toBe('Midfielders');
+ for(const code of ['D','DF','CD','CD-L','CD-R','RB','LWB']) expect(positionGroup(code)).toBe('Defenders');
+ expect(positionGroup('UNKNOWN')).toBe('Other positions');
+});
+it('shows both on and off times for a substitute who later leaves the pitch',()=>{
+ state.data={...state.data,players:[
+  {teamId:'359',name:'Starter',position:'CF',starter:true},
+  {teamId:'359',name:'Bench Player',position:'DM',starter:false,subbedIn:true,subbedOut:true},
+  {teamId:'359',name:'Replacement',position:'DM',starter:false,subbedIn:true}
+ ],substitutions:[
+  {teamId:'359',playerIn:'Bench Player',playerOut:'Starter',minute:"60'"},
+  {teamId:'359',playerIn:'Replacement',playerOut:'Bench Player',minute:"80'"}
+ ]};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));
+ const row=screen.getAllByText('Bench Player').find(node=>node.closest('.lineup-list'))?.closest('li');
+ expect(row?.querySelector('.sub-marker.on')?.getAttribute('title')).toBe("Substituted on at 60'");
+ expect(row?.querySelector('.sub-marker.off')?.getAttribute('title')).toBe("Substituted off at 80'");
 });

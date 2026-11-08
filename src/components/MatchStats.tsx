@@ -39,7 +39,7 @@ const numeric = (value?:string) => {
   return Number.parseFloat(cleaned);
 };
 
-const scale = (name:string, value:number) => name.endsWith('Pct') && value > 0 && value <= 1 ? value * 100 : value;
+const scale = (name:string, value:number) => name !== 'possessionPct' && name.endsWith('Pct') && value > 0 && value <= 1 ? value * 100 : value;
 
 export const formatStatisticValue = (name:string, stat?:Stat) => {
   if(!stat) return '—';
