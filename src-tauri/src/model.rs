@@ -1,6 +1,20 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 
+/// A damaged or hand-edited save must not turn into unbounded memory use: keep
+/// only plausible, bounded IDs.
+fn bounded_sent_notifications<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<String>, D::Error> {
+    let values = Vec::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(values
+        .into_iter()
+        .filter_map(|value| value.as_str().map(str::to_owned))
+        .filter(|id| !id.is_empty() && id.len() <= 200 && !id.chars().any(char::is_control))
+        .take(1000)
+        .collect())
+}
+
 /// Supported ESPN competitions. The slug is the stable provider key and the
 /// storage key for per-competition status; it is not shown in the widget.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,6 +74,7 @@ impl<'de> Deserialize<'de> for CompetitionView {
 }
 
 impl CompetitionView {
+    #[cfg(test)]
     pub fn includes(self, league: Competition) -> bool {
         match self {
             Self::PremierLeague => league == Competition::PremierLeague,
@@ -181,6 +196,7 @@ pub struct Settings {
     pub followed_only: bool,
     pub compact: bool,
     pub always_on_top: bool,
+    pub start_hidden: bool,
     pub reduced_motion: bool,
     pub theme: Theme,
     #[serde(deserialize_with = "opacity")]
@@ -205,6 +221,7 @@ impl Default for Settings {
             followed_only: false,
             compact: false,
             always_on_top: true,
+            start_hidden: false,
             reduced_motion: false,
             theme: Theme::Dark,
             opacity: 96,
@@ -294,6 +311,7 @@ pub struct Snapshot {
     pub error: Option<String>,
     pub refreshing: bool,
     pub settings: Settings,
+    #[serde(deserialize_with = "bounded_sent_notifications")]
     pub sent_notifications: Vec<String>,
     pub expanded_size: Option<ExpandedSize>,
     // Missing in old caches means legacy; new snapshots explicitly start current.
@@ -328,6 +346,40 @@ impl Default for Snapshot {
         }
     }
 }
+/// The subset of the snapshot the widget actually renders. Persistence keeps the
+/// full `Snapshot`; sending details, results and notification state over IPC only
+/// inflated every poll by >6x.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetSnapshot {
+    pub matches: Vec<Match>,
+    pub league_status: HashMap<String, LeagueStatus>,
+    pub updated_at: Option<String>,
+    pub fixture_updated_at: Option<String>,
+    pub fixture_error: Option<String>,
+    pub score_error: Option<String>,
+    pub error: Option<String>,
+    pub partial: bool,
+    pub refreshing: bool,
+    pub settings: Settings,
+}
+impl From<&Snapshot> for WidgetSnapshot {
+    fn from(snapshot: &Snapshot) -> Self {
+        Self {
+            matches: snapshot.matches.clone(),
+            league_status: snapshot.league_status.clone(),
+            updated_at: snapshot.updated_at.clone(),
+            fixture_updated_at: snapshot.fixture_updated_at.clone(),
+            fixture_error: snapshot.fixture_error.clone(),
+            score_error: snapshot.score_error.clone(),
+            error: snapshot.error.clone(),
+            partial: snapshot.partial,
+            refreshing: snapshot.refreshing,
+            settings: snapshot.settings.clone(),
+        }
+    }
+}
+
 impl Snapshot {
     // Older demo builds stored synthetic subscriptions and fixtures in the real fields.
     pub fn migrate_demo_state(&mut self) {
@@ -449,6 +501,7 @@ pub(crate) fn apply_settings_at(
     effects
 }
 // Feed completion only updates feed fields, preserving preferences saved during I/O.
+#[cfg(test)]
 pub fn apply_feed(
     snapshot: &mut Snapshot,
     matches: Vec<Match>,
@@ -470,6 +523,31 @@ pub fn apply_feed(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn widget_snapshot_keeps_render_fields_and_drops_internal_state() {
+        let snapshot = Snapshot {
+            matches: crate::demo::mock(),
+            recent_results: crate::demo::mock(),
+            settings: Settings {
+                favorites: vec!["359".into()],
+                ..Settings::default()
+            },
+            ..Snapshot::default()
+        };
+        let value = serde_json::to_value(WidgetSnapshot::from(&snapshot)).unwrap();
+        assert!(value.get("matches").is_some());
+        assert!(value.get("settings").is_some());
+        for internal in [
+            "detailCache",
+            "recentResults",
+            "pendingNotifications",
+            "alertBaselines",
+            "sentNotifications",
+        ] {
+            assert!(value.get(internal).is_none(), "{internal} must stay local");
+        }
+    }
+
     #[test]
     fn legacy_demo_state_migrates_without_removing_real_preferences() {
         let mut snapshot: Snapshot = serde_json::from_str("{}").unwrap();

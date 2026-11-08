@@ -165,7 +165,7 @@ fn apply_league(
         status.recent_updated_at = Some(now.to_rfc3339());
         status.recent_retry_at = None;
     } else {
-        let seconds = retry_after.unwrap_or(300).max(300).min(i64::MAX as u64) as i64;
+        let seconds = retry_after.unwrap_or(300).clamp(300, 3600) as i64;
         status.recent_retry_at = Duration::try_seconds(seconds)
             .and_then(|delay| now.checked_add_signed(delay))
             .map(|t| t.to_rfc3339());
@@ -176,13 +176,21 @@ fn apply_league(
 pub async fn get_recent_results(
     app: tauri::AppHandle,
     history: tauri::State<'_, History>,
+    leagues: Option<Vec<String>>,
 ) -> Result<Results, String> {
     let _guard = history.0.lock().await;
     let now = Utc::now();
     let today = now.date_naive();
     let client = provider::client();
+    let requested: Vec<Competition> = match &leagues {
+        Some(list) if !list.is_empty() => Competition::ALL
+            .into_iter()
+            .filter(|league| list.iter().any(|slug| slug == league.slug()))
+            .collect(),
+        _ => Competition::ALL.to_vec(),
+    };
     let mut outcomes = Vec::new();
-    for league in Competition::ALL {
+    for league in requested {
         let fetch = {
             let state = app.state::<State>();
             let s = state.snapshot.lock().map_err(|e| e.to_string())?;
@@ -283,9 +291,9 @@ mod tests {
         assert!(s.recent_error.is_none());
         assert!(s.recent_updated_at.is_some());
         let mut m = crate::demo::mock().remove(4);
-        m.kickoff = "2026-10-14T23:59:00Z".into();
+        m.kickoff = "2026-10-13T23:59:00Z".into();
         assert!(!provider::recent_result(&m, now.date_naive()));
-        m.kickoff = "2026-10-15T00:00:00Z".into();
+        m.kickoff = "2026-10-14T00:00:00Z".into();
         assert!(provider::recent_result(&m, now.date_naive()));
     }
     #[test]

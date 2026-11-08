@@ -1,7 +1,10 @@
-use crate::model::{Competition, Match, Team};
-use chrono::{DateTime, Datelike, Duration, Months, NaiveDate, Utc};
+﻿use crate::model::{Competition, Match, Team};
+use chrono::{DateTime, Datelike, Duration, Local, Months, NaiveDate, Utc};
 use serde_json::Value;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    OnceLock,
+};
 use std::time::Duration as StdDuration;
 
 // Diagnostics only: scoreboard HTTP attempts since the last manual refresh.
@@ -265,14 +268,22 @@ fn parse_response(
     }
     Ok(matches)
 }
+static CLIENT: OnceLock<Result<reqwest::Client, FetchError>> = OnceLock::new();
+
+/// One pooled, compressed client for the whole process: sharing it keeps TLS
+/// connections alive across polls, details and results instead of rebuilding them.
 pub fn client() -> Result<reqwest::Client, FetchError> {
-    reqwest::Client::builder()
-        .timeout(StdDuration::from_secs(15))
-        .build()
-        .map_err(|e| FetchError {
-            message: format!("ESPN HTTP client: {e}"),
-            retry_after: None,
+    CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .timeout(StdDuration::from_secs(15))
+                .build()
+                .map_err(|e| FetchError {
+                    message: format!("ESPN HTTP client: {e}"),
+                    retry_after: None,
+                })
         })
+        .clone()
 }
 pub fn retry_after(value: &str, now: DateTime<Utc>) -> Option<u64> {
     value.trim().parse::<u64>().ok().or_else(|| {
@@ -342,11 +353,13 @@ fn query_months(start: NaiveDate, end: NaiveDate) -> Vec<String> {
     }
     months
 }
-/// UCL is sparse, so it looks further ahead than the Premier League.
+/// UCL is sparse, so it looks further ahead than the Premier League. One extra
+/// day on both ends keeps local-time fixtures inside the window when the UTC
+/// date has already turned over.
 pub fn fixture_window(league: Competition, today: NaiveDate) -> (NaiveDate, NaiveDate) {
     (
-        today - Duration::days(1),
-        today + Duration::days(league.lookahead_days()),
+        today - Duration::days(2),
+        today + Duration::days(league.lookahead_days() + 1),
     )
 }
 pub async fn fixtures(
@@ -382,7 +395,10 @@ pub async fn recent_results(
 pub fn recent_result(m: &Match, today: NaiveDate) -> bool {
     m.status == "fulltime"
         && parse_kickoff(&m.kickoff).is_some_and(|d| {
-            d.date_naive() >= today - Duration::days(14) && d.date_naive() <= today
+            // Allow one day of slack so a late local kick-off is not hidden by
+            // the UTC date rollover on the 14-day boundary.
+            d.date_naive() >= today - Duration::days(15)
+                && d.date_naive() <= today + Duration::days(1)
         })
 }
 pub async fn scores(
@@ -391,7 +407,11 @@ pub async fn scores(
     today: NaiveDate,
     cached: &[Match],
 ) -> FetchOutcome {
+    let local = Local::now().date_naive();
     let mut dates = vec![today.format("%Y%m%d").to_string()];
+    if local != today {
+        dates.push(local.format("%Y%m%d").to_string());
+    }
     if cached.iter().any(|m| {
         m.league == league
             && (m.status == "live" || m.status == "halftime")
@@ -400,6 +420,8 @@ pub async fn scores(
     }) {
         dates.push((today - Duration::days(1)).format("%Y%m%d").to_string());
     }
+    dates.sort();
+    dates.dedup();
     queries(client, league, &dates).await
 }
 #[cfg(test)]
@@ -683,11 +705,11 @@ mod competition_tests {
         let today = NaiveDate::from_ymd_opt(2026, 1, 31).unwrap();
         assert_eq!(
             fixture_window(Competition::PremierLeague, today),
-            (today - Duration::days(1), today + Duration::days(14))
+            (today - Duration::days(2), today + Duration::days(15))
         );
         assert_eq!(
             fixture_window(Competition::ChampionsLeague, today),
-            (today - Duration::days(1), today + Duration::days(30))
+            (today - Duration::days(2), today + Duration::days(31))
         );
         // UCL's 30-day window can touch three calendar months.
         assert_eq!(

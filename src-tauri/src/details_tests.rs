@@ -1,4 +1,4 @@
-use super::*;
+﻿use super::*;
 #[test]
 fn captured_summary_has_events_stats_and_rosters() {
     let v: Value =
@@ -99,7 +99,7 @@ fn example() -> Details {
 #[tokio::test]
 async fn cache_hit_failure_cooldown_and_recovery() {
     let now = clock();
-    let mut cache = Cache::default();
+    let cache = Cache::default();
     let id = "401879268";
     cache
         .get_with(Competition::PremierLeague, id, true, now, || async {
@@ -123,31 +123,31 @@ async fn cache_hit_failure_cooldown_and_recovery() {
             Competition::PremierLeague,
             id,
             true,
-            now + chrono::Duration::seconds(60),
+            now + chrono::Duration::seconds(121),
             || async { Err(Failure::temporary("timeout")) },
         )
         .await
         .unwrap();
     assert!(saved.stale);
     assert_eq!(saved.updated_at, now.to_rfc3339());
-    let deadline = cache.blocked_until;
-    cache
+    // While the per-match cooldown runs, the cached summary is returned untouched.
+    let blocked = cache
         .get_with(
             Competition::PremierLeague,
             id,
             true,
-            now + chrono::Duration::seconds(90),
+            now + chrono::Duration::seconds(150),
             || async { panic!("cooldown must not fetch") },
         )
         .await
         .unwrap();
-    assert_eq!(cache.blocked_until, deadline);
+    assert!(blocked.stale);
     let recovered = cache
         .get_with(
             Competition::PremierLeague,
             id,
             true,
-            now + chrono::Duration::seconds(120),
+            now + chrono::Duration::seconds(220),
             || async { Ok(example()) },
         )
         .await
@@ -160,7 +160,7 @@ async fn restart_offline_and_future_timestamps() {
     let now = clock();
     let mut d = example();
     d.updated_at = (now - chrono::Duration::hours(1)).to_rfc3339();
-    let mut cache = Cache::default();
+    let cache = Cache::default();
     cache.seed(&[d]);
     let d = cache
         .get_with(
@@ -174,7 +174,7 @@ async fn restart_offline_and_future_timestamps() {
         .unwrap();
     assert!(d.stale);
     assert!(!d.events.is_empty());
-    let mut future = Cache::default();
+    let future = Cache::default();
     let mut d = example();
     d.updated_at = (now + chrono::Duration::hours(1)).to_rfc3339();
     future.seed(&[d]);
@@ -195,7 +195,7 @@ async fn restart_offline_and_future_timestamps() {
 #[tokio::test]
 async fn rate_limit_deadline_and_empty_cache_errors() {
     let now = clock();
-    let mut cache = Cache::default();
+    let cache = Cache::default();
     assert!(cache
         .get_with(Competition::PremierLeague, "1", true, now, || async {
             Err(Failure {
@@ -205,19 +205,60 @@ async fn rate_limit_deadline_and_empty_cache_errors() {
         })
         .await
         .is_err());
-    assert_eq!(cache.blocked_until, now.timestamp() + 7200);
+    // A bogus Retry-After is clamped to one hour.
+    let key = cache_key(Competition::PremierLeague, "1");
+    assert_eq!(
+        cache.blocked.lock().unwrap().get(&key).copied(),
+        Some(now.timestamp() + 3600)
+    );
     assert!(cache
         .get_with(
             Competition::PremierLeague,
             "1",
             true,
-            now + chrono::Duration::seconds(7199),
+            now + chrono::Duration::seconds(3599),
             || async { panic!("must respect Retry-After") }
         )
         .await
         .is_err());
-    assert_eq!(cache.blocked_until, now.timestamp() + 7200);
+    let recovered = cache
+        .get_with(
+            Competition::PremierLeague,
+            "1",
+            true,
+            now + chrono::Duration::seconds(3600),
+            || async {
+                let mut detail = example();
+                detail.match_id = "1".into();
+                Ok(detail)
+            },
+        )
+        .await
+        .unwrap();
+    assert!(!recovered.stale);
 }
+#[tokio::test]
+async fn summary_cooldown_is_per_match() {
+    let now = clock();
+    let cache = Cache::default();
+    assert!(cache
+        .get_with(Competition::PremierLeague, "1", true, now, || async {
+            Err(Failure::temporary("boom"))
+        })
+        .await
+        .is_err());
+    // A failure for one event must not pause every other summary.
+    let other = cache
+        .get_with(Competition::PremierLeague, "2", true, now, || async {
+            let mut detail = example();
+            detail.match_id = "2".into();
+            Ok(detail)
+        })
+        .await
+        .unwrap();
+    assert!(!other.stale);
+}
+
 #[test]
 fn malformed_http_and_stoppage_time() {
     for status in [400, 429, 500] {
@@ -235,11 +276,10 @@ fn malformed_http_and_stoppage_time() {
 }
 #[tokio::test]
 async fn serialized_simultaneous_requests_reuse_one_result() {
-    let cache = tokio::sync::Mutex::new(Cache::default());
+    let cache = Cache::default();
     let calls = std::sync::atomic::AtomicUsize::new(0);
-    let request = || async {
-        let mut c = cache.lock().await;
-        c.get_with(
+    let request = || {
+        cache.get_with(
             Competition::PremierLeague,
             "401879268",
             true,
@@ -250,16 +290,16 @@ async fn serialized_simultaneous_requests_reuse_one_result() {
                 Ok(example())
             },
         )
-        .await
-        .unwrap()
     };
     let (a, b) = tokio::join!(request(), request());
+    let a = a.unwrap();
+    let b = b.unwrap();
     assert_eq!(a.updated_at, b.updated_at);
     assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 1);
 }
 #[tokio::test]
 async fn bounded_cache_and_invalid_persisted_entries() {
-    let mut cache = Cache::default();
+    let cache = Cache::default();
     for i in 1..=25 {
         let id = i.to_string();
         cache
@@ -277,10 +317,9 @@ async fn bounded_cache_and_invalid_persisted_entries() {
             .await
             .unwrap();
     }
-    assert_eq!(cache.entries.len(), 24);
-    assert!(!cache
-        .entries
-        .contains_key(&cache_key(Competition::PremierLeague, "1")));
+    let entries = cache.entries.lock().unwrap();
+    assert_eq!(entries.len(), 24);
+    assert!(!entries.contains_key(&cache_key(Competition::PremierLeague, "1")));
     let mut invalid = example();
     invalid.players[0].name = "x".repeat(501);
     let value = serde_json::json!({"detailCache":[serde_json::to_value(invalid).unwrap(),serde_json::to_value(example()).unwrap(),{"broken":true}]});
@@ -437,12 +476,18 @@ fn champions_league_details_use_the_ucl_endpoint_and_a_separate_cache_key() {
     );
 
     // Same ESPN event id in two leagues must not share a cache entry.
-    let mut cache = Cache::default();
-    cache.entries.insert(cache_key(pl.league, &pl.match_id), pl);
+    let cache = Cache::default();
     cache
         .entries
+        .lock()
+        .unwrap()
+        .insert(cache_key(pl.league, &pl.match_id), pl);
+    cache
+        .entries
+        .lock()
+        .unwrap()
         .insert(cache_key(ucl.league, &ucl.match_id), ucl);
-    assert_eq!(cache.entries.len(), 2);
+    assert_eq!(cache.entries.lock().unwrap().len(), 2);
 
     // Older saved detail entries have no league and default to the Premier League.
     let mut legacy = serde_json::to_value(example()).unwrap();

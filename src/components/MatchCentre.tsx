@@ -110,7 +110,7 @@ export function MatchCentre({match}:{match:Match}) {
     <div role="tabpanel" id={sectionId+'-panel'} aria-labelledby={sectionId+'-'+tab} tabIndex={0}>
     {loading&&!data&&<div className="skeletons" role="status" aria-label="Loading match details"><div/></div>}
     {error&&<p role="status">{error} <button className="text-button" onClick={retry}>Retry details</button></p>}
-    {data&&<p className="field-note">{data.stale?'Saved details':'Details checked'} · {new Date(data.updatedAt).toLocaleString()}{isLive(match)?' · live details refresh about every 60 seconds':''}</p>}
+    {data&&tab==='Overview'&&<p className="field-note">{data.stale?'Saved details':'Details checked'} · {new Date(data.updatedAt).toLocaleString()}{isLive(match)?' · live details refresh about every 60 seconds':''}</p>}
     {tab==='Overview'&&(!loading||data)&&<>
       {(data?.venue||data?.attendance)&&<div className="match-facts">
         {data.venue&&<div><MapPin size={13} aria-hidden="true"/><span>Venue</span><strong>{data.venue}</strong></div>}

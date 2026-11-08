@@ -14,6 +14,8 @@ let feed: Snapshot | null = null;
 const loadError = 'Could not load the widget state.';
 const refreshError = 'Could not refresh matches.';
 const recoveredError = (error:string|null) => error===loadError||error===refreshError?null:error;
+// Paint hint only; Rust remains the authoritative preference store.
+const rememberTheme = (settings: Settings) => {try{localStorage.setItem('matchradar.theme', settings.theme);}catch{/* Storage can be unavailable. */}};
 
 function projected(): Snapshot | null {
   if (!feed || !confirmed) return null;
@@ -35,6 +37,7 @@ export const useApp = create<Store>((set, get) => ({
       // A read started before a save acknowledgement can contain old preferences
       // and still carry fresh matches/errors. Accept its data, not its settings.
       if (revision === settingsRevision || !confirmed) confirmed = snapshot.settings;
+      rememberTheme(snapshot.settings);
       set(state=>({snapshot: projected(), loading:false, error:recoveredError(state.error)}));
     } catch {
       if (sequence > acceptedRead) set(state=>({loading:false, error:state.error??(isTauri()?loadError:'Match data is available in the desktop app.')}));
@@ -60,6 +63,7 @@ export const useApp = create<Store>((set, get) => ({
         // to authoritative state or copy a whole old snapshot on completion.
         const saved = isTauri() ? await invoke<Settings>('save_settings', {settings:next}) : next;
         confirmed = saved;
+        rememberTheme(saved);
         ++settingsRevision;
         pending.shift();
         set({snapshot:projected()});

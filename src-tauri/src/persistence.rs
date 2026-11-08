@@ -16,6 +16,18 @@ pub fn load(path: &Path) -> Result<Loaded, String> {
     load_with(&Disk, path)
 }
 
+/// Last-resort startup recovery: invalid bytes were already archived by `load`.
+/// Clearing the unusable files lets the app run and persist fresh state instead
+/// of refusing to launch because both copies are damaged.
+pub fn start_over(path: &Path) -> Result<Loaded, String> {
+    let _ = fs::remove_file(path);
+    let _ = fs::remove_file(sibling(path, ".bak"));
+    Ok(Loaded {
+        snapshot: Snapshot::default(),
+        notice: Some("Unreadable saved state was preserved; started with defaults".into()),
+    })
+}
+
 pub fn save(path: &Path, snapshot: &Snapshot) -> Result<(), String> {
     let bytes =
         serde_json::to_vec(snapshot).map_err(|e| format!("Serialize MatchRadar state: {e}"))?;
@@ -29,6 +41,9 @@ trait Storage {
     fn archive(&self, path: &Path, bytes: &[u8]) -> io::Result<PathBuf>;
 }
 
+// The byte buffers are short-lived around a single read; boxing would complicate
+// the recovery paths for no measurable benefit.
+#[allow(clippy::large_enum_variant)]
 enum Existing {
     Missing,
     Valid(Vec<u8>, Snapshot),
@@ -534,5 +549,24 @@ mod tests {
         save(&path, &Snapshot::default()).unwrap();
         assert_eq!(fs::read(&orphan).unwrap(), b"partial temp");
         assert_eq!(fs::read(sibling(&path, ".bak")).unwrap(), old());
+    }
+
+    #[test]
+    fn unreadable_state_can_start_over_without_blocking_launch() {
+        let dir = Directory::new();
+        let path = dir.primary();
+        fs::write(&path, b"broken primary").unwrap();
+        fs::write(sibling(&path, ".bak"), b"broken backup").unwrap();
+        // Both copies damaged: the normal load reports a hard failure...
+        assert!(load(&path).is_err());
+        // ...but startup can discard the unusable files (bytes already archived)
+        // and persist a fresh default instead of refusing to launch forever.
+        let loaded = start_over(&path).unwrap();
+        assert!(loaded.snapshot.matches.is_empty());
+        assert!(loaded.notice.is_some());
+        assert!(!path.exists());
+        assert!(!sibling(&path, ".bak").exists());
+        save(&path, &loaded.snapshot).unwrap();
+        assert!(path.exists());
     }
 }

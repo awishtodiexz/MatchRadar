@@ -5,7 +5,6 @@ export const competitionLeagues = (view: CompetitionView = 'premierLeague'): Com
 
 export const competitionSlug = (league: Competition) => league === 'premierLeague' ? 'eng.1' : 'uefa.champions';
 export const competitionName = (league: Competition) => league === 'premierLeague' ? 'Premier League' : 'Champions League';
-export const competitionSubtitle = (league: Competition) => league === 'premierLeague' ? 'ENGLAND · MATCH CENTRE' : 'EUROPE · MATCH CENTRE';
 
 export interface ViewStatus {
   updatedAt?: string | null;
@@ -45,8 +44,11 @@ export function competitionStatus(snapshot: Snapshot | null, view: CompetitionVi
       hasData
     };
   }
-  const updatedAt = earliest(statuses.map(status => status?.updatedAt));
-  const fixtureUpdatedAt = earliest(statuses.map(status => status?.fixtureUpdatedAt));
+  // Only claim a checked timestamp when every selected competition reported;
+  // otherwise one league's success would masquerade as complete freshness.
+  const complete = statuses.every(Boolean);
+  const updatedAt = complete ? earliest(statuses.map(status => status?.updatedAt)) : null;
+  const fixtureUpdatedAt = complete ? earliest(statuses.map(status => status?.fixtureUpdatedAt)) : null;
   const fixtureError = joinErrors(labels, statuses.map(status => status?.fixtureError));
   const scoreError = joinErrors(labels, statuses.map(status => status?.scoreError));
   const errors = [fixtureError, scoreError].filter(Boolean);
@@ -69,7 +71,8 @@ export function resultsStatus(results: { updatedAt?: string | null; error?: stri
     return { updatedAt: results.updatedAt, error: results.error };
   }
   const labels = leagues.map(competitionName);
-  const updatedAt = earliest(entries.map(entry => entry?.updatedAt));
+  const complete = entries.every(Boolean);
+  const updatedAt = complete ? earliest(entries.map(entry => entry?.updatedAt)) : null;
   const error = joinErrors(labels, entries.map(entry => entry?.error));
   return { updatedAt, error };
 }

@@ -22,7 +22,9 @@ pub fn sleep_chunk(delay: Duration) -> Duration {
     delay.min(Duration::from_secs(86400))
 }
 pub fn failure_delay(failures: u32, retry_after: Option<u64>) -> u64 {
-    retry_after.map(|s| s.max(60)).unwrap_or_else(|| {
+    // A server-requested cooldown is honoured, but a bogus header must not freeze
+    // updates for days. 60s..1h keeps Retry-After useful and recoverable.
+    retry_after.map(|s| s.clamp(60, 3600)).unwrap_or_else(|| {
         60u64
             .saturating_mul(2u64.saturating_pow(failures.min(5)))
             .min(3600)
@@ -48,7 +50,8 @@ mod tests {
     fn backoff_is_bounded_but_server_deadline_is_not_shortened() {
         assert_eq!(failure_delay(1, None), 120);
         assert_eq!(failure_delay(100, None), 1920);
-        assert_eq!(failure_delay(2, Some(7200)), 7200);
+        assert_eq!(failure_delay(2, Some(600)), 600);
+        assert_eq!(failure_delay(2, Some(7200)), 3600);
         assert_eq!(failure_delay(2, Some(0)), 60);
     }
     #[test]

@@ -2,6 +2,7 @@ import type { Match } from './types';
 
 export const isLive = (match: Match) => match.status === 'live' || match.status === 'halftime';
 const dayKey = (date: Date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+const groupDayLabel = new Intl.DateTimeFormat(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
 
 export function groupFixtures(matches: Match[], favorites: string[], now = new Date()) {
   const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
@@ -15,7 +16,7 @@ export function groupFixtures(matches: Match[], favorites: string[], now = new D
   for (const match of ordered) {
     const date = new Date(match.kickoff);
     const key = isLive(match) ? 'live' : dayKey(date);
-    const label = isLive(match) ? 'LIVE NOW' : dayKey(date) === dayKey(now) ? 'TODAY' : dayKey(date) === dayKey(tomorrow) ? 'TOMORROW' : new Intl.DateTimeFormat(undefined, { weekday: 'long', day: 'numeric', month: 'short' }).format(date);
+    const label = isLive(match) ? 'LIVE NOW' : dayKey(date) === dayKey(now) ? 'TODAY' : dayKey(date) === dayKey(tomorrow) ? 'TOMORROW' : groupDayLabel.format(date);
     if (!groups.has(key)) groups.set(key, { label, matches: [] });
     groups.get(key)!.matches.push(match);
   }

@@ -7,6 +7,7 @@ import { clubs } from '../teams';
 import type { Match, Settings, Team } from '../types';
 import { Badge, Toggle, ViewHeading } from './WidgetUi';
 import { APP_VERSION } from '../version';
+import { useApp } from '../store';
 
 const sections = ['Teams','Appearance','Alerts','App'] as const;
 type Section = typeof sections[number];
@@ -21,9 +22,14 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
   const [autostart,setAutostart] = useState<boolean|null>(null);
   const [startupError,setStartupError] = useState(false);
   const [testing,setTesting] = useState(false);
+  const [opacity,setOpacity] = useState(Math.max(70,settings.opacity));
+  const opacityDirty = useRef(false);
+  const opacityTimer = useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
   const panel = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const native = isTauri();
+  useEffect(()=>{ setOpacity(Math.max(70,settings.opacity)); },[settings.opacity]);
+  useEffect(()=>()=>{ if(opacityTimer.current) clearTimeout(opacityTimer.current); },[]);
   useEffect(()=>{
     let disposed = false;
     if(native) void isEnabled().then(value=>{if(!disposed) setAutostart(value);}).catch(()=>{if(!disposed) setStartupError(true);});
@@ -61,6 +67,21 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
   const otherVisible = needle?otherClubs.filter(matchesQuery):otherClubs;
   const anyVisible = !!followedVisible.length||!!plVisible.length||!!otherVisible.length;
   const update = (patch:Partial<Settings>) => {void save(patch);};
+  // Dragging the opacity slider must not fsync the whole state on every pixel.
+  // Preview locally, then persist once the drag pauses or ends.
+  const commitOpacity = (value:number) => {
+    if(!opacityDirty.current) return;
+    opacityDirty.current = false;
+    if(opacityTimer.current){ clearTimeout(opacityTimer.current); opacityTimer.current = undefined; }
+    update({opacity:value});
+  };
+  const previewOpacity = (value:number) => {
+    setOpacity(value);
+    opacityDirty.current = true;
+    useApp.setState(state=>state.snapshot?{snapshot:{...state.snapshot,settings:{...state.snapshot.settings,opacity:value}}}:state);
+    if(opacityTimer.current) clearTimeout(opacityTimer.current);
+    opacityTimer.current = setTimeout(()=>{ opacityTimer.current = undefined; commitOpacity(value); }, 300);
+  };
   const toggleFavorite = (id:string) => {
     const following = favoriteSet.has(id);
     const favorites = following?settings.favorites.filter(favorite=>favorite!==id):[...settings.favorites,id];
@@ -118,7 +139,11 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
         {!native&&<p className="field-note">Browser preview changes spacing only. The desktop app also resizes the window.</p>}
         <Toggle label="Always on top" description="Keep the widget above other windows" value={settings.alwaysOnTop} onChange={alwaysOnTop=>update({alwaysOnTop})}/>
         <Toggle label="Reduce motion" description="Use fewer transitions and animations" value={settings.reducedMotion} onChange={reducedMotion=>update({reducedMotion})}/>
-        <label className="range-label">Panel opacity<span>{Math.max(70,settings.opacity)}%</span><input type="range" min="70" max="100" aria-label="Panel opacity" aria-valuetext={`${Math.max(70,settings.opacity)} percent background opacity`} value={Math.max(70,settings.opacity)} onChange={e=>update({opacity:Number(e.target.value)})}/></label>
+        <label className="range-label">Panel opacity<span>{opacity}%</span><input type="range" min="70" max="100" aria-label="Panel opacity" aria-valuetext={`${opacity} percent background opacity`} value={opacity}
+          onChange={e=>previewOpacity(Number(e.target.value))}
+          onPointerUp={()=>commitOpacity(opacity)}
+          onKeyUp={()=>commitOpacity(opacity)}
+          onBlur={()=>commitOpacity(opacity)}/></label>
       </>}
       {section==='Alerts'&&<>
         <div className="section-intro"><h3>Followed-team alerts</h3><p>These settings apply to clubs you follow. A match bell turns on all alerts for that game.</p></div>
@@ -134,10 +159,11 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
       {section==='App'&&<>
         <div className="section-intro"><h3>MatchRadar <span className="version">{APP_VERSION}</span></h3><p>Your personal matchday companion.</p></div>
         <Toggle label="Launch with Windows" description={!native?'Available in the desktop app':startupError?'Startup preference unavailable':autostart===null?'Checking startup preference…':'Open MatchRadar when you sign in'} disabled={!native||autostart===null} value={autostart??false} onChange={value=>{void (value?enable():disable()).then(()=>setAutostart(value)).catch(()=>setNotice('Could not change the Windows startup setting.'));}}/>
+        <Toggle label="Start hidden in tray" description={!native?'Available in the desktop app':'Launch with Windows without opening the widget'} disabled={!native||autostart!==true} value={settings.startHidden} onChange={startHidden=>update({startHidden})}/>
         {startupError&&<p className="notice" role="status">Could not read the Windows startup setting. Reopen Settings to try again.</p>}
         <div className="about"><CircleHelp size={17}/><p>Scores use ESPN’s unofficial endpoints and may be unavailable or change. MatchRadar is not affiliated with ESPN, the Premier League, or UEFA.</p></div>
         <button className="outline-button" onClick={refresh} disabled={refreshing}><RefreshCw size={15}/>Refresh data</button>
-        <p className="field-note">X keeps MatchRadar running in the tray. Choose Quit in the tray to exit.</p>
+        <p className="field-note">MatchRadar lives in the system tray. Both the minus and X buttons hide it there; click the tray icon or press Ctrl+Shift+M anywhere to show it again, and choose Quit in the tray to exit.</p>
       </>}
       {notice&&<p className="notice" role="status">{notice}</p>}
     </div>

@@ -14,7 +14,7 @@ vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ minimize: 
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() => {}) }));
 vi.mock('@tauri-apps/plugin-autostart', () => ({ isEnabled: vi.fn().mockResolvedValue(false), enable: vi.fn(), disable: vi.fn() }));
 beforeEach(async () => {
- bridge.native = false; bridge.invoke.mockReset(); bridge.minimize.mockReset();
+ bridge.native = false; bridge.invoke.mockReset(); bridge.minimize.mockReset(); bridge.hide.mockReset();
  useApp.setState({snapshot: {...mockSnapshot, settings: {...mockSnapshot.settings}}, loading: false, error: null});
  await useApp.getState().load();
 });
@@ -87,12 +87,23 @@ describe('widget controls', () => {
   fireEvent.click(screen.getByText('Reset match bells to team defaults'));
   await waitFor(() => expect(useApp.getState().snapshot?.settings.matchAlerts).toEqual({}));
  });
- it('uses native minimize and leaves compact mode in Appearance', async () => {
-  bridge.native = true; bridge.minimize.mockResolvedValue(undefined); bridge.invoke.mockImplementation((command: string) => command === 'get_snapshot' ? Promise.resolve(mockSnapshot) : Promise.resolve());
+ it('hides to the tray instead of minimizing to the taskbar and leaves compact mode in Appearance', async () => {
+  bridge.native = true; bridge.hide.mockResolvedValue(undefined); bridge.minimize.mockResolvedValue(undefined); bridge.invoke.mockImplementation((command: string) => command === 'get_snapshot' ? Promise.resolve(mockSnapshot) : Promise.resolve());
   render(<App/>); fireEvent.click(screen.getByRole('button', {name:'Minimize widget'}));
-  expect(bridge.minimize).toHaveBeenCalledOnce(); expect(useApp.getState().snapshot?.settings.compact).toBe(false);
+  expect(bridge.hide).toHaveBeenCalledOnce(); expect(bridge.minimize).not.toHaveBeenCalled(); expect(useApp.getState().snapshot?.settings.compact).toBe(false);
   fireEvent.click(screen.getByRole('button', {name:'Settings'})); fireEvent.click(screen.getByText('Appearance'));
   expect(screen.getByLabelText(/Compact view/)).toBeTruthy();
+ });
+ it('keeps start-hidden unavailable until launch at sign-in is on', async () => {
+  bridge.native = true; vi.mocked(isEnabled).mockResolvedValueOnce(true);
+  bridge.invoke.mockImplementation((command: string, args?: {settings: Settings}) => Promise.resolve(command === 'get_snapshot' ? mockSnapshot : args?.settings));
+  render(<App/>);
+  fireEvent.click(screen.getByRole('button', {name:'Settings'}));
+  fireEvent.click(screen.getByRole('tab', {name:'App'}));
+  const toggle = await screen.findByRole('checkbox', {name:'Start hidden in tray'});
+  await waitFor(() => expect(toggle.hasAttribute('disabled')).toBe(false));
+  fireEvent.click(toggle);
+  await waitFor(() => expect(useApp.getState().snapshot?.settings.startHidden).toBe(true));
  });
  it('synchronizes footer toggles with settings and preserves update time when appearance changes', async () => {
   const updated = useApp.getState().snapshot?.updatedAt;
@@ -128,10 +139,12 @@ describe('widget controls', () => {
   expect(calls[1][1].settings).toMatchObject({alwaysOnTop:false, theme:'light', opacity:70});
   expect(useApp.getState().snapshot?.settings).toMatchObject({alwaysOnTop:false, theme:'light', opacity:70});
  });
- it('retries a trusted crest once before showing initials', async () => {
+ it('retries a trusted crest through the small variants before showing initials', async () => {
   render(<App/>); const image = document.querySelector('.match-row .badge img') as HTMLImageElement;
   expect(image.src).toContain('/500-dark/'); fireEvent.error(image);
   expect(image.src).toContain('/500/'); fireEvent.error(image);
+  // Final fallback is the raw 500px asset before initials.
+  expect(image.src).toMatch(/\/teamlogos\/soccer\/500\/\d+\.png$/); fireEvent.error(image);
   await waitFor(() => expect(image.isConnected).toBe(false));
   expect(screen.getAllByText('ARS').length).toBeGreaterThan(0);
  });

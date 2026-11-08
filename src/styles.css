@@ -82,6 +82,8 @@ h1, h2, h3, p { margin: 0; }
 .summary > div { display: flex; gap: var(--space-2); align-items: center; min-width: 0; }
 .league-mark { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 9px; background: var(--badge-bg); color: var(--accent); }
 .league-mark svg { width: 24px; height: 24px; }
+.league-mark img { display: block; width: 24px; height: 24px; object-fit: contain; }
+.mark-pair .league-mark img { width: 18px; height: 18px; }
 .summary b, .summary small { display: block; }
 .summary b { font-size: 12px; font-weight: 700; }
 .summary small { font-size: 10px; color: var(--muted); margin-top: 2px; letter-spacing: .2px; }
@@ -338,7 +340,8 @@ footer { min-height: 52px; display: flex; align-items: center; justify-content: 
 .overview-stat { display: grid; grid-template-columns: 44px minmax(0,1fr) 44px; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
 .overview-stat span { color: var(--muted); font-size: 11px; }
 .overview-stat strong { color: var(--text); }
-.timeline-period { margin: 14px 0 2px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+h4.timeline-period { display: flex; align-items: center; gap: 8px; margin: 18px 0 8px; color: var(--text); font-size: 12px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; }
+h4.timeline-period::before { content: ""; flex: none; width: 3px; height: 13px; border-radius: 2px; background: var(--accent); }
 .timeline section:first-child .timeline-period { margin-top: 4px; }
 .event-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--muted); font-size: 10px; }
 .event-meta strong { color: var(--text); font-size: 11px; }
@@ -379,7 +382,7 @@ footer { min-height: 52px; display: flex; align-items: center; justify-content: 
 .live-clock { margin-bottom: 0; }
 
 /* Flashscore-inspired alignment and stability. */
-.match-list, .settings-body, .detail-body { scrollbar-gutter: stable; }
+.match-list, .settings-body, .detail-body { scrollbar-gutter: stable both-edges; }
 .match-open { grid-template-columns: minmax(0,1fr) 70px 13px; }
 .match-state { display: flex; align-items: center; justify-content: center; gap: 5px; width: 70px; min-width: 70px; }
 .match-state .result { flex: 1; min-width: 0; text-align: center; }
@@ -391,7 +394,7 @@ footer { min-height: 52px; display: flex; align-items: center; justify-content: 
 .match-state .kickoff { display: block; font-size: 13px; white-space: nowrap; }
 .match-card { min-height: 66px; }
 .detail-league { justify-content: flex-start; }
-.detail-score { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+.detail-score { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
 .detail-score > span:first-child { font-size: 26px; line-height: 30px; letter-spacing: -.8px; font-variant-numeric: tabular-nums; }
 .detail-status { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 2px 7px; border-radius: 12px; background: var(--surface-soft); border: 1px solid var(--border); color: var(--muted); font-size: 9px; font-weight: 750; letter-spacing: .3px; }
 .detail-status.live, .detail-status.halftime { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
@@ -415,11 +418,11 @@ footer { min-height: 52px; display: flex; align-items: center; justify-content: 
 .match-state .result-meta { min-height: 13px; font-size: 10px; line-height: 14px; }
 
 /* Final alignment and Flashscore-style tabs. */
-.versus { align-items: center; padding-bottom: 24px; }
+/* Score and status stack as one block centred on the crests, not pushed down by an absolutely positioned pill. */
+.versus { align-items: center; }
 .detail-score { position: relative; }
-.detail-score .detail-status { position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%); display: inline-flex; align-items: center; justify-content: center; gap: 4px; margin: 0; padding: 2px 7px; line-height: 13px; white-space: nowrap; }
+.detail-score .detail-status { display: inline-flex; align-items: center; justify-content: center; gap: 4px; margin: 0; padding: 2px 7px; line-height: 13px; white-space: nowrap; }
 .detail-score .detail-status .dot { width: 4px; height: 4px; box-shadow: none; }
-.detail-score .detail-saved { position: absolute; top: calc(100% + 24px); left: 50%; transform: translateX(-50%); display: block; margin: 0; font-size: 9px; line-height: 12px; letter-spacing: 0; }
 .live-clock { align-items: center; justify-content: center; line-height: 13px; }
 .live-clock .dot { align-self: center; box-shadow: none; }
 
@@ -545,7 +548,7 @@ footer { min-height: 52px; display: flex; align-items: center; justify-content: 
 }
 
 /* Period labels scroll with the timeline; sticky labels covered event rows. */
-.timeline-period { padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+.timeline-period { padding-bottom: 6px; border-bottom: 1px solid var(--border); }
 .event.goal { padding-left: 8px; margin-left: -8px; box-shadow: inset 2px 0 var(--accent); }
 /* Filled shirt markers read clearly in both themes. */
 .pitch-shirt { background: var(--accent); border-color: var(--accent); color: #10180d; }

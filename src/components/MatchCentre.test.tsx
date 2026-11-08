@@ -8,6 +8,12 @@ const state=vi.hoisted(()=>({data:{matchId:'1',updatedAt:'2026-10-29T12:00:00Z',
 vi.mock('../useMatchSummary',()=>({useMatchSummary:()=>state}));
 afterEach(cleanup);
 it('offers available sections and displays explicit zero stats and player names',()=>{render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Timeline'}));expect(screen.getByText("45+2'")).toBeTruthy();expect(screen.getByText('Verified provider goal')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getByText('0')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));expect(screen.getByText('A long player name')).toBeTruthy();});
+it('keeps the details freshness line on Overview instead of repeating it above every tab',()=>{
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ expect(screen.getByText(/Details checked/)).toBeTruthy();
+ fireEvent.click(screen.getByRole('tab',{name:'Stats'}));
+ expect(screen.queryByText(/Details checked/)).toBeNull();
+});
 it('uses a singular event count and sends the CTA to Timeline',()=>{
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);
  const cta=screen.getByRole('button',{name:/Full timeline/});

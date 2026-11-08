@@ -61,7 +61,7 @@ export function CompetitionPicker({value, onChange, disabled=false}: {
         }
       }}>
       <span aria-hidden="true"><CompetitionMark league={value}/></span>
-      <span className="competition-copy"><b><span className="competition-long">{current.label}</span><span className="competition-short">{current.value==='both'?'Both':current.label}</span></b><small>{current.short} · MATCH CENTRE</small></span>
+      <span className="competition-copy"><b><span className="competition-long">{current.label}</span><span className="competition-short">{current.value==='both'?'Both':current.label}</span></b><small aria-hidden="true">{current.short} · MATCH CENTRE</small></span>
       <ChevronDown size={14} aria-hidden="true"/>
     </button>
     {open && <div className="competition-menu" role="listbox" aria-label="Competition">

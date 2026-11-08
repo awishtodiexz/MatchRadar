@@ -23,6 +23,7 @@ import { CompetitionPicker } from './components/CompetitionPicker';
 export default function App() {
   const {snapshot,loading,load,refresh,save,error} = useApp();
   const [view,setView] = useState<'home'|'settings'|'detail'>('home');
+  const [themeHint] = useState<'dark'|'light'>(()=>{try{return localStorage.getItem('matchradar.theme')==='light'?'light':'dark';}catch{return 'dark';}});
   const [matchView,setMatchView] = useState<MatchView>('All');
   const [selected,setSelected] = useState<Match|null>(null);
   const [refreshing,setRefreshing] = useState(false);
@@ -38,7 +39,7 @@ export default function App() {
   const competitionTitle = competitionView==='both' ? 'Both competitions' : competitionName(competitionView);
   const competitionMatchesLabel = competitionView==='both' ? 'matches from either competition' : `${competitionName(competitionView)} matches`;
   const historyView=matchView==='Results';
-  const recent=useRecentResults(historyView);
+  const recent=useRecentResults(historyView,competitionView);
   const viewStatus=competitionStatus(snapshot,competitionView);
   const viewResults=resultsStatus(recent.data,competitionView);
   const competitionMatches=useMemo(()=>{
@@ -70,7 +71,7 @@ export default function App() {
     if(!native) return;
     let disposed=false;
     const listeners:Array<()=>void>=[];
-    for(const [event,callback] of [['snapshot-updated',()=>{void load();}],['open-settings',()=>{homeScroll.current=root.current?.querySelector('.match-list')?.scrollTop??homeScroll.current;restoreFocus.current='settings-control';setView('settings');}]] as const) {
+    for(const [event,callback] of [['snapshot-updated',()=>{void load();}],['open-settings',()=>{homeScroll.current=root.current?.querySelector('.match-list')?.scrollTop??homeScroll.current;restoreFocus.current='settings-control';setView('settings');}],['shortcut-unavailable',()=>{useApp.setState({error:'Ctrl+Shift+M is already used by another app. Use the tray icon instead.'});}]] as const) {
       void listen(event,callback).then(fn=>{if(disposed) fn();else listeners.push(fn);}).catch(()=>useApp.setState({error:'Could not subscribe to desktop updates.'}));
     }
     return ()=>{disposed=true;listeners.forEach(fn=>fn());};
@@ -116,11 +117,11 @@ export default function App() {
   const keyDown = (event:KeyboardEvent) => {
     if(event.key==='Escape'&&!event.defaultPrevented&&view!=='home'&&!(event.target instanceof HTMLSelectElement)) {event.preventDefault();back();}
   };
-  return <main ref={root} onKeyDown={keyDown} onContextMenu={contextMenu} className={'shell theme-'+(settings?.theme??'dark')+' '+((settings?.opacity??96)<85?'transparent-panel ':'')+(settings?.compact?'compact-view ':'')+(settings?.reducedMotion?'reduced':'')} style={{'--panel-opacity':Math.min(100,Math.max(70,settings?.opacity??96))/100} as CSSProperties}>
+  return <main ref={root} onKeyDown={keyDown} onContextMenu={contextMenu} className={'shell theme-'+(settings?.theme??themeHint)+' '+((settings?.opacity??96)<85?'transparent-panel ':'')+(settings?.compact?'compact-view ':'')+(settings?.reducedMotion?'reduced':'')} style={{'--panel-opacity':Math.min(100,Math.max(70,settings?.opacity??96))/100} as CSSProperties}>
     <header className="header" data-tauri-drag-region>
       <div className="brand" data-tauri-drag-region><span className="brand-icon"><img src={logo} alt=""/></span><div data-tauri-drag-region><h1>match<span>radar</span><i>®</i></h1><p>YOUR MATCHDAY COMPANION</p></div></div>
       <div className="header-actions">
-        <button className="icon-button" title={native?'Minimize to taskbar':'Minimize is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().minimize().catch(()=>useApp.setState({error:'Could not minimize the widget.'}))} aria-label="Minimize widget"><Minus size={17}/></button>
+        <button className="icon-button" title={native?'Hide to system tray':'Hide is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().hide().catch(()=>useApp.setState({error:'Could not hide the widget.'}))} aria-label="Minimize widget"><Minus size={17}/></button>
         <button className="icon-button close" title={native?'Hide to system tray':'Hide is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().hide().catch(()=>useApp.setState({error:'Could not hide the widget.'}))} aria-label="Hide widget"><X size={16}/></button>
       </div>
     </header>

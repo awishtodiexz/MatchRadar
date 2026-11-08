@@ -84,7 +84,10 @@ export function MatchLineups({match,players,substitutions=[],formations={}}: {ma
   const formation = formations[active.id];
   const homePitch = buildPitch(players.filter(player=>player.teamId===match.home.id),formations[match.home.id]);
   const awayPitch = buildPitch(players.filter(player=>player.teamId===match.away.id),formations[match.away.id]);
-  const teamSubs = substitutions.filter(sub=>!sub.teamId||sub.teamId===active.id);
+  const playerTeam = (name:string) => players.find(player=>player.name===name)?.teamId;
+  // ESPN sometimes omits the team on a substitution; infer it from the players
+  // instead of showing the same substitution under both teams.
+  const teamSubs = substitutions.filter(sub => (sub.teamId || playerTeam(sub.playerIn) || playerTeam(sub.playerOut)) === active.id);
   return <div className="lineups">
     {homePitch&&awayPitch&&<LineupPitch match={match} home={homePitch} away={awayPitch}/>}
     <div className="lineup-tabs" role="tablist" aria-label="Lineups by team">

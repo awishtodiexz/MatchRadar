@@ -32,8 +32,8 @@ fn in_window(m: &Match, now: DateTime<Utc>, league: Competition) -> bool {
         .ok()
         .is_some_and(|kickoff| {
             let day = kickoff.with_timezone(&Utc).date_naive();
-            day >= now.date_naive() - Duration::days(1)
-                && day <= now.date_naive() + Duration::days(league.lookahead_days())
+            day >= now.date_naive() - Duration::days(2)
+                && day <= now.date_naive() + Duration::days(league.lookahead_days() + 1)
         })
 }
 
@@ -504,7 +504,7 @@ mod tests {
         apply(
             &mut s,
             Competition::PremierLeague,
-            good(vec![fixture("far", "scheduled", 15, 0)]),
+            good(vec![fixture("far", "scheduled", 16, 0)]),
             good(vec![update.clone(), update]),
         );
         assert_eq!(s.matches.len(), 1);
@@ -592,7 +592,7 @@ mod tests {
         let mut s = Snapshot {
             matches: vec![
                 ucl(fixture("ucl-25", "scheduled", 25, 0)),
-                ucl(fixture("ucl-31", "scheduled", 31, 0)),
+                ucl(fixture("ucl-32", "scheduled", 32, 0)),
             ],
             ..Snapshot::default()
         };
@@ -603,6 +603,6 @@ mod tests {
             good(vec![]),
         );
         assert!(s.matches.iter().any(|m| m.id == "ucl-25"));
-        assert!(!s.matches.iter().any(|m| m.id == "ucl-31"));
+        assert!(!s.matches.iter().any(|m| m.id == "ucl-32"));
     }
 }

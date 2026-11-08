@@ -3,7 +3,14 @@ use crate::model::Competition;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex as StdMutex, OnceLock,
+    },
+};
+use tokio::sync::Mutex as AsyncMutex;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Event {
@@ -226,6 +233,7 @@ fn scorer_from_text(body: &str) -> Option<(String, String)> {
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn add_scorer(
     rows: &mut Vec<(f64, Scorer)>,
     seen: &mut HashSet<String>,
@@ -659,11 +667,26 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
         stale: false,
     })
 }
-#[derive(Default)]
 pub struct Cache {
-    entries: HashMap<String, Details>,
-    blocked_until: i64,
-    client: Option<reqwest::Client>,
+    entries: StdMutex<HashMap<String, Details>>,
+    blocked: StdMutex<HashMap<String, i64>>,
+    key_locks: StdMutex<HashMap<String, Arc<AsyncMutex<()>>>>,
+    client: OnceLock<Option<reqwest::Client>>,
+    seeded: AtomicBool,
+}
+impl Default for Cache {
+    fn default() -> Self {
+        Self {
+            entries: StdMutex::new(HashMap::new()),
+            blocked: StdMutex::new(HashMap::new()),
+            key_locks: StdMutex::new(HashMap::new()),
+            client: OnceLock::new(),
+            seeded: AtomicBool::new(false),
+        }
+    }
+}
+fn lock<T>(mutex: &StdMutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|poison| poison.into_inner())
 }
 fn valid_cached(d: &Details) -> bool {
     let bounded = |s: &str, n: usize| s.chars().count() <= n && !s.chars().any(char::is_control);
@@ -767,26 +790,29 @@ pub fn deserialize_cache<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Details>
     Ok(entries)
 }
 impl Cache {
-    pub fn seed(&mut self, saved: &[Details]) {
-        if self.entries.is_empty() {
-            for d in saved.iter().filter(|d| valid_cached(d)).take(24) {
-                self.entries
-                    .insert(cache_key(d.league, &d.match_id), d.clone());
-            }
+    pub fn seed(&self, saved: &[Details]) {
+        if self.seeded.swap(true, Ordering::Relaxed) {
+            return;
+        }
+        let mut entries = lock(&self.entries);
+        for d in saved.iter().filter(|d| valid_cached(d)).take(24) {
+            entries
+                .entry(cache_key(d.league, &d.match_id))
+                .or_insert_with(|| d.clone());
         }
     }
 
     pub async fn get(
-        &mut self,
+        &self,
         league: Competition,
         id: &str,
         active: bool,
     ) -> Result<Details, String> {
-        if self.client.is_none() {
-            self.client = crate::provider::client().ok();
-        }
-        let client = self.client.clone();
-        self.get_with(league, id, active, Utc::now(), || async {
+        let client = self
+            .client
+            .get_or_init(|| crate::provider::client().ok())
+            .clone();
+        self.get_with(league, id, active, Utc::now(), || async move {
             let client =
                 client.ok_or_else(|| Failure::temporary("Could not create summary client"))?;
             fetch(&client, league, id).await
@@ -796,7 +822,7 @@ impl Cache {
 
     // The clock and transport boundary allow failure/restart tests without ESPN or sleeps.
     async fn get_with<F, Fut>(
-        &mut self,
+        &self,
         league: Competition,
         id: &str,
         active: bool,
@@ -808,56 +834,81 @@ impl Cache {
         Fut: std::future::Future<Output = Result<Details, Failure>>,
     {
         let key = cache_key(league, id);
-        let old = self.entries.get(&key).cloned();
-        if let Some(d) = &old {
-            let age = DateTime::parse_from_rfc3339(&d.updated_at)
+        let ttl = if active { 120 } else { 900 };
+        let fresh = |d: &Details| {
+            DateTime::parse_from_rfc3339(&d.updated_at)
                 .map(|t| now.timestamp() - t.timestamp())
-                .unwrap_or(i64::MAX);
-            if (0..if active { 60 } else { 900 }).contains(&age) {
+                .unwrap_or(i64::MAX)
+        };
+        if let Some(d) = lock(&self.entries).get(&key) {
+            if (0..ttl).contains(&fresh(d)) {
                 return Ok(d.clone());
             }
         }
-        if now.timestamp() < self.blocked_until {
+        // One in-flight request per match. Different matches no longer queue behind
+        // the same cache mutex for the full network round-trip.
+        let key_lock = lock(&self.key_locks)
+            .entry(key.clone())
+            .or_insert_with(|| Arc::new(AsyncMutex::new(())))
+            .clone();
+        let _guard = key_lock.lock().await;
+        let old = lock(&self.entries).get(&key).cloned();
+        if let Some(d) = &old {
+            if (0..ttl).contains(&fresh(d)) {
+                return Ok(d.clone());
+            }
+        }
+        let blocked = lock(&self.blocked).get(&key).copied();
+        if blocked.is_some_and(|until| now.timestamp() < until) {
             return saved_or_error(
                 old,
                 "Summary requests paused after an error; cached data retained".into(),
             );
         }
         match fetch().await {
-            Ok(mut d) => {
-                if d.match_id != id || d.league != league {
-                    return self.failed(old, Failure::temporary("Summary identity mismatch"), now);
-                }
+            Ok(mut d) if d.match_id == id && d.league == league => {
                 d.updated_at = now.to_rfc3339();
                 d.stale = false;
                 d.error = None;
-                if self.entries.len() >= 24 && !self.entries.contains_key(&key) {
-                    if let Some(oldest) = self
-                        .entries
+                let mut entries = lock(&self.entries);
+                if entries.len() >= 24 && !entries.contains_key(&key) {
+                    if let Some(oldest) = entries
                         .iter()
-                        .min_by_key(|(_, v)| &v.updated_at)
-                        .map(|(k, _)| k.clone())
+                        .min_by_key(|(_, value)| &value.updated_at)
+                        .map(|(key, _)| key.clone())
                     {
-                        self.entries.remove(&oldest);
+                        entries.remove(&oldest);
                     }
                 }
-                self.entries.insert(key, d.clone());
+                entries.insert(key.clone(), d.clone());
+                drop(entries);
+                lock(&self.blocked).remove(&key);
                 Ok(d)
             }
-            Err(e) => self.failed(old, e, now),
+            Ok(_) => self.failed(
+                &key,
+                Failure::temporary("Summary identity mismatch"),
+                now,
+                old,
+            ),
+            Err(error) => self.failed(&key, error, now, old),
         }
     }
+
     fn failed(
-        &mut self,
-        old: Option<Details>,
-        e: Failure,
+        &self,
+        key: &str,
+        error: Failure,
         now: DateTime<Utc>,
+        old: Option<Details>,
     ) -> Result<Details, String> {
-        self.blocked_until = now
+        // A bogus Retry-After must not disable summaries for days.
+        let until = now
             .timestamp()
-            .saturating_add(e.retry_after.unwrap_or(60).max(60).min(i64::MAX as u64) as i64);
-        eprintln!("MatchRadar summaries: {}", e.message);
-        saved_or_error(old, e.message)
+            .saturating_add(error.retry_after.unwrap_or(60).clamp(60, 3600) as i64);
+        lock(&self.blocked).insert(key.to_string(), until);
+        eprintln!("MatchRadar summaries: {}", error.message);
+        saved_or_error(old, error.message)
     }
 }
 fn saved_or_error(old: Option<Details>, error: String) -> Result<Details, String> {

@@ -28,13 +28,18 @@ export function MatchCard({match, settings, onOpen, showCompetition=false}: {mat
   const action = alerts.enabled ? 'Mute match alerts (all alerts on)' : alerts.state==='muted' ? 'Enable all alerts (match muted)' : 'Enable all alerts (using team settings)';
   const title = alerts.ended ? 'This match has ended. Open details to review its alert settings.'
     : `${alerts.description} ${alerts.enabled?'Click to mute.':'Click for reminders, match start and goals.'} Use match details to return to team settings.`;
+  // The score and status are aria-hidden so the button keeps one predictable
+  // name; the same facts are exposed as its accessible description.
+  const cardDetail = match.status==='scheduled'
+    ? `Kick-off ${timeLabel(match.kickoff)}`
+    : `${match.homeScore ?? '–'} to ${match.awayScore ?? '–'}, ${isLive(match) ? (match.status==='halftime' ? 'half-time' : clockText(match.detail||'live')) : (match.detail || match.status)}${match.scoreStale?' (saved)':''}`;
   return <article className="match-row match-card" data-match-id={match.id}>
-    <button id={matchButtonId(match.id)} className="match-open" onClick={onOpen} aria-label={`Match details: ${name}`} title={`View ${name}`}>
-      <div className="teams">{[match.home,match.away].map(team=><div className="team-line" key={team.id}>
+    <button id={matchButtonId(match.id)} className="match-open" onClick={onOpen} aria-label={`Match details: ${name}`} title={`View ${name}. ${cardDetail}`}>
+      <div className="teams" aria-hidden="true">{[match.home,match.away].map(team=><div className="team-line" key={team.id}>
         <Badge team={team}/><span className="team-name" title={team.name}>{team.name}</span>
         {settings.favorites.includes(team.id) && <Star aria-label={`Following ${team.name}`} role="img" className="fav" size={11} fill="currentColor"/>}
       </div>)}</div>
-      <div className={'match-state '+(isLive(match)?'is-live':'')}>
+      <div className={'match-state '+(isLive(match)?'is-live':'')} aria-hidden="true">
         <div className={'result '+(match.status==='scheduled'?'scheduled':'')}>
           {match.status==='scheduled' ? <strong className="kickoff">{timeLabel(match.kickoff)}</strong>
             : <div className="scores"><strong>{match.homeScore ?? '–'}</strong><strong>{match.awayScore ?? '–'}</strong></div>}

@@ -276,9 +276,8 @@ pub fn submit_due(
         let event = &mut staged.pending_notifications[index];
         event.attempts += 1;
         let delay = Duration::seconds(30 * 2i64.pow(u32::from(event.attempts - 1)));
-        event.next_attempt_at = (clock() + delay)
-            .min(date(&event.expires_at).unwrap())
-            .to_rfc3339();
+        let expires = date(&event.expires_at).unwrap_or_else(|| clock() + Duration::minutes(5));
+        event.next_attempt_at = (clock() + delay).min(expires).to_rfc3339();
         // No native call if the durable attempt/candidate cannot be saved.
         save(&staged)?;
         *snapshot = staged;
@@ -310,9 +309,9 @@ pub fn submit_due(
                     .take(512)
                     .collect();
                 let event = &mut snapshot.pending_notifications[index];
-                event.next_attempt_at = (clock() + delay)
-                    .min(date(&event.expires_at).unwrap())
-                    .to_rfc3339();
+                let expires =
+                    date(&event.expires_at).unwrap_or_else(|| clock() + Duration::minutes(5));
+                event.next_attempt_at = (clock() + delay).min(expires).to_rfc3339();
                 log(&format!(
                     "Notification {} attempt {}: {}{}",
                     event.id,
