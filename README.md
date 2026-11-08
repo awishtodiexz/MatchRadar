@@ -13,7 +13,7 @@ and ships as a small NSIS installer for 64-bit Windows 10/11.
 
 **Requirements:** 64-bit Windows 10/11 with the Microsoft Edge WebView2 runtime.
 
-> **Release status:** local v1.0.0 builds. The installer is unsigned and there is
+> **Release status:** local v1.1.0 builds. The installer is unsigned and there is
 > no auto-updater — install a newer build over the old one to update. Public
 > distribution is pending the remaining
 > [native runtime checks](#windows-acceptance).
@@ -67,7 +67,7 @@ ESPN's CDN. They are not packaged Windows captures.*
 MatchRadar targets 64-bit Windows 10/11 with the Microsoft Edge WebView2 runtime.
 
 1. Build the local installer with `.\scripts\build-local.ps1` and use
-   `MatchRadar_1.0.0_x64-setup.exe`, or download a private local-build artifact
+   `MatchRadar_1.1.0_x64-setup.exe`, or download a private local-build artifact
    from a successful [Windows validation run](https://github.com/awishtodiexz/MatchRadar/actions/workflows/windows.yml).
 2. Quit any running MatchRadar instance from its tray menu.
 3. Run the installer and launch MatchRadar. The installer is unsigned, so
