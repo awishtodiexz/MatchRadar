@@ -53,7 +53,7 @@ try {
     if (git tag --list $Tag) { throw "Tag $Tag already exists." }
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'GitHub CLI (gh) is required to publish.' }
 
-    $notes = "Locally built unsigned Windows x64 installer from main commit $head.`n`nSee CHANGELOG.md for changes in this build.`n`nApp version: $version`nSHA-256: $hash`n`nQuit MatchRadar from the tray before installing. There is no auto-updater; install this build over the previous version. Packaged Windows runtime acceptance remains pending."
+    $notes = "Unsigned Windows x64 installer for MatchRadar $version, built from main commit $head.`n`nSee CHANGELOG.md for changes.`n`nApp version: $version`nSHA-256: $hash`n`nRequires 64-bit Windows 10/11 with the WebView2 runtime. Quit MatchRadar from the tray before installing. There is no auto-updater; install this build over the previous version."
     $notesPath = Join-Path $installer.DirectoryName "release-notes.txt"
     [IO.File]::WriteAllText($notesPath, $notes, [Text.UTF8Encoding]::new($false))
     gh release create $Tag "$($installer.FullName)#MatchRadar $version installer" `

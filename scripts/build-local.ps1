@@ -38,8 +38,8 @@ try {
     Enter-VsDevShell -VsInstallPath $vsPath -SkipAutomaticLocation `
         -DevCmdArguments '-arch=x64 -host_arch=x64' | Out-Null
 
-    # MSVC and the linker create temporary files under %TEMP%; on this machine that
-    # fails with D8050/LNK1104, so keep them inside the ignored target directory.
+    # MSVC and the linker create temporary files under %TEMP%. Keep them inside
+    # the ignored target directory so builds are not affected by locked temp files.
     $tempDir = Join-Path $root 'src-tauri\target\.build-temp'
     New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
     $env:TEMP = $tempDir

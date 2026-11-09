@@ -11,7 +11,8 @@
     "check:version": "node scripts/check-version.mjs",
     "tauri": "tauri",
     "verify:fast": "npm run check:version && npm run lint && npm test && npm run build",
-    "verify:ui": "npm run build && playwright test --config verification/playwright.config.ts"
+    "verify:ui": "npm run build && playwright test --config verification/playwright.config.ts",
+    "screenshots": "npm run build && node verification/capture-screenshots.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

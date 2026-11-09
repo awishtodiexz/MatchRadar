@@ -1,24 +1,24 @@
+# OS and editor noise
+.DS_Store
+Thumbs.db
+*.log
+
+# Dependencies and build output
 node_modules/
 .npm-cache/
 dist/
 *.tsbuildinfo
 src-tauri/target/
 src-tauri/gen/
-*.log
-.DS_Store
+.vite/
 
-# Local secrets and generated test/build caches
+# Local secrets
 .env
 .env.*
 !.env.example
+
+# Generated test and screenshot artifacts
 coverage/
-.vite/
 verification/artifacts/
 playwright-report/
 test-results/
-
-# Markdown policy: only README.md and CHANGELOG.md are published.
-# AGENTS.md and HANDOFF.md are local-only and remain ignored.
-*.md
-!/README.md
-!/CHANGELOG.md

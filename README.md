@@ -1,264 +1,86 @@
-# MatchRadar
+<p align="center">
+  <img src="src/assets/logo.png" width="88" alt="MatchRadar">
+</p>
 
-<p align="center"><img src="src/assets/logo.png" alt="MatchRadar logo" width="96"></p>
+<h1 align="center">MatchRadar</h1>
 
-[![Windows validation](https://github.com/awishtodiexz/MatchRadar/actions/workflows/windows.yml/badge.svg)](https://github.com/awishtodiexz/MatchRadar/actions/workflows/windows.yml)
+<p align="center">
+  <strong>Premier League and Champions League, live on your Windows desktop.</strong><br>
+  A frameless, always-on-top widget with a full Match Centre.
+</p>
 
-**Your matchday companion, right on your Windows desktop.**
+<p align="center">
+  <a href="https://github.com/awishtodiexz/MatchRadar/actions/workflows/windows.yml"><img src="https://github.com/awishtodiexz/MatchRadar/actions/workflows/windows.yml/badge.svg" alt="Windows validation"></a>
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows&logoColor=white" alt="Windows 10 and 11">
+  <img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Tauri 2">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=06202a" alt="React 19">
+</p>
 
-MatchRadar is a compact Premier League and Champions League widget that keeps
-fixtures and scores in view while you work, browse, or play. It is built with
-Tauri 2, Rust, React, and TypeScript, keeps preferences and cached data local,
-and ships as a small NSIS installer for 64-bit Windows 10/11.
+<p align="center">
+  <a href="docs/screenshots/widget-dark.png"><img src="docs/screenshots/widget-dark.png" width="390" alt="MatchRadar widget showing live Premier League scores and upcoming fixtures"></a>
+  <a href="docs/screenshots/match-centre-overview.png"><img src="docs/screenshots/match-centre-overview.png" width="390" alt="Match Centre overview showing the Arsenal versus Leeds United timeline"></a>
+</p>
 
-**Requirements:** 64-bit Windows 10/11 with the Microsoft Edge WebView2 runtime.
+<p align="center">
+  <sub><strong>Widget</strong> · scores at a glance &nbsp;·&nbsp; <strong>Match Centre</strong> · the full story</sub><br>
+  <sub>Screenshots use sample match data.</sub>
+</p>
 
-> **Release status:** local v1.0.0 builds. The installer is unsigned and there is
-> no auto-updater — install a newer build over the old one to update. Public
-> distribution is pending the remaining
-> [native runtime checks](#windows-acceptance).
+MatchRadar keeps scores, fixtures and the clubs you follow in a small window that stays with you while you work. Open any match for a Match Centre built around one scoreboard: a compact incident timeline, match statistics, lineups and full commentary. Everything is local, and there is no account to create.
 
-## Screenshots
+## Features
 
-<table>
-  <tr><th>Widget</th><th>Match Centre</th></tr>
-  <tr>
-    <td><img src="docs/screenshots/widget-dark.png" alt="MatchRadar widget in dark theme showing fixtures and live scores" width="390"></td>
-    <td><img src="docs/screenshots/match-centre-timeline.png" alt="Match Centre Overview using captured ESPN match data" width="320"></td>
-  </tr>
-</table>
+- **Live at a glance.** Follow the Premier League, Champions League, or both. Scores, kick-off times and independent refresh status stay in view.
+- **A proper Match Centre.** Goals, cards and substitutions by half, provider stats with comparison bars, formation lineups, and filtered commentary in the same compact window.
+- **Clubs, not accounts.** Follow a club once across both competitions. Get reminders, match-start alerts and optional goal alerts, with per-match mute when you need quiet.
+- **Tray-first by design.** Both window controls hide to the tray. Toggle with `Ctrl+Shift+M`, pin above other windows, start hidden at sign-in, and recover automatically if a monitor disappears.
+- **Private and local.** No account, API key, analytics or telemetry. Preferences and cached data stay on your device.
 
-*Browser renders using test fixtures (widget), captured ESPN match data
-(Overview), and offline crest fallbacks. They are not packaged Windows captures.*
+<details>
+<summary>More screenshots</summary>
 
-## What it does
+<p align="center">
+  <a href="docs/screenshots/match-centre-stats.png"><img src="docs/screenshots/match-centre-stats.png" width="390" alt="Match Centre statistics comparing Arsenal and Leeds United"></a>
+</p>
 
-- **Widget first:** frameless and resizable, with compact and expanded views,
-  adjustable background opacity, dark and light themes, always-on-top, and tray
-  controls. The widget lives in the system tray: minus and close both hide it
-  there, clicking the tray icon toggles it, and `Ctrl+Shift+M` does the same from
-  anywhere. Launch at sign-in, optionally starting hidden in the tray.
-- **Two competitions at a glance:** switch between Premier League, Champions
-  League, or Both. The choice persists; Both shows one chronological list with a
-  small PL/UCL tag per card, and the live count follows the selection. UCL looks
-  30 days ahead so sparse fixtures still appear. Follow a club once — ESPN uses
-  the same ID in both competitions, so its UCL matches and alerts come along.
-- **Match Centre:** a shared scoreboard and sticky Overview, Stats, Lineups and
-  Commentary navigation. Overview shows a compact incident timeline by half,
-  match information (referee, stadium, capacity and attendance,
-  with missing fields marked). Cards show their type and reported reason;
-  substitutions label incoming and outgoing players. Stats adds available match-specific xG, chances,
-  duels, recoveries and more, with category filters. Commentary retains fuller
-  provider text and stoppages, with event-type filters and newest/oldest ordering.
-  Some competitions or matches have fewer metrics; saved extended stats are
-  labelled if their refresh fails. Team-tabbed vertical formation pitches keep
-  shirt numbers and player names readable in the narrow widget. Lineups use
-  numbers consistently on the pitch and in player lists. The
-  Coach row shows supplied match coaches or explicitly reports missing data. Scores remain
-  sourced from the scoreboard.
-- **Views that fit matchday:** All, Live, Following, Upcoming, and Results.
-  Results covers completed matches from the previous 14 days with a separate
-  per-competition cache.
-- **Alerts:** followed-team reminders, match-start and optional goal alerts for
-  both competitions, per-match subscribe/mute, persistent deduplication, and a
-  durable retry queue. Clicking a new on-screen alert restores the widget and
-  opens the relevant match Overview, including matches hidden by filters.
-  Enabling a match bell during live play keeps subsequent goal alerts active
-  without replaying earlier goals.
-  Alerts keep monitoring both leagues regardless of the
-  competition you are viewing.
-- **Built for interruptions:** independent fixture and score refreshes, offline
-  cache, stale-data labels, retry/backoff handling, automatic recovery when a
-  display change leaves the widget off-screen, and an immediate refresh after the
-  machine wakes from sleep.
-- **Private by design:** no account, API key, analytics, or telemetry.
-  Preferences and cache stay on the device; ESPN requests and crest/badge
-  downloads need network access.
+</details>
 
 ## Install
 
-MatchRadar targets 64-bit Windows 10/11 with the Microsoft Edge WebView2 runtime.
+**Windows 10/11 (64-bit)** with the [WebView2 runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
 
-1. Download the latest locally built installer from [GitHub Releases](https://github.com/awishtodiexz/MatchRadar/releases/latest), or build it with `.\scripts\build-local.ps1` and use
-   `MatchRadar_1.0.0_x64-setup.exe`, or download a private local-build artifact
-   from a successful [Windows validation run](https://github.com/awishtodiexz/MatchRadar/actions/workflows/windows.yml).
-2. Quit any running MatchRadar instance from its tray menu.
-3. Run the installer and launch MatchRadar. The installer is unsigned, so
-   Windows may show a reputation prompt.
-4. Work through the [Windows acceptance checks](#windows-acceptance).
+1. Download the latest installer from [Releases](https://github.com/awishtodiexz/MatchRadar/releases/latest).
+2. Quit any running MatchRadar instance from the tray.
+3. Run the installer and launch MatchRadar.
 
-Installer packaging runs on `v*` tags and manual dispatches; ordinary pushes run
-checks without packaging. Artifacts expire.
+The installer is unsigned, so Windows may show a SmartScreen prompt. There is no auto-updater yet; install newer builds over the previous version.
 
-## Develop
+## Development
 
-Install Node.js 22 and npm, stable Rust, the Microsoft C++ build tools, and
-WebView2. Follow the official [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/)
-for Windows.
+You will need Node.js 22, stable Rust with the MSVC toolchain, the Visual Studio C++ build tools, and WebView2. See the [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/) for details.
 
 ```powershell
 npm ci
-npm run tauri dev        # native app with live IPC
-npm run dev              # browser shell with test fixtures
+npm run tauri dev        # native app
+npm run dev              # browser shell with mocked native APIs
 ```
 
-Browser previews use test-only fixtures and mocked IPC; they do not validate
-native notifications, tray behavior, or window sizing.
-
 ```powershell
-npm run verify:fast      # version check, lint, frontend tests, production build
-npm run verify:ui        # production build + Playwright journeys
-cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+npm run verify:fast      # version check, lint, frontend tests and production build
+npm run verify:ui        # Playwright journeys and accessibility checks
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 ```
 
-`npm run verify:ui` runs Playwright at 320px and 390px with mocked IPC. Rust
-tests need the Visual Studio C++ environment; `.\scripts\build-local.ps1` loads
-it and keeps MSVC temp files under `src-tauri/target/.build-temp`.
+Rust tests need the Visual Studio C++ environment; run them from a Developer PowerShell, or use `.\scripts\build-local.ps1`, which loads it and builds the NSIS installer. Tauri and Rust own the native window, networking, persistence, notifications and background refresh; React renders the interface. `npm run screenshots` rebuilds the images above.
 
-To build the installer locally, run `.\scripts\build-local.ps1`. It loads the
-Visual Studio environment, runs the checks, and prints the installer path and
-SHA-256. Output lands in `src-tauri/target/release/bundle/nsis/`. If PowerShell
-blocks unsigned scripts, run
-`powershell -ExecutionPolicy Bypass -File .\scripts\build-local.ps1`.
+## Data
 
-## Architecture
+Fixtures, scores and match details come from ESPN's **unofficial, undocumented** public JSON endpoints. Availability, accuracy and usage rights are not guaranteed.
 
-Tauri and Rust own the native window, networking, persistence, notifications,
-and background refresh. React reads normalized snapshots through Tauri commands
-and subscribes to native snapshot events; it does not own a second preference
-store, and polling does not depend on a mounted component.
+MatchRadar is not affiliated with ESPN, the Premier League or UEFA. Club crests and competition badges load from ESPN's CDN, with initials as an offline fallback.
 
-- **Provider:** ESPN's unofficial JSON endpoints for the Premier League
-  (`eng.1`) and Champions League (`uefa.champions`). Fixture queries use monthly
-  scoreboards (14-day PL window, 30-day UCL window); scores use daily queries at
-  the adaptive live cadence. Date-range requests are not supported.
-- **Refresh:** each competition refreshes and reports status independently.
-  During live matches, scores and open match details refresh about once per minute.
-  Open matches reconcile final details at the same cadence until the provider
-  confirms full time. Overlapping results use individual score-confirmation times.
-  Successful fixtures, scores, results and summaries merge by stable provider
-  ID. A failed or malformed source keeps the previous cache; one competition's
-  failure never erases the other's data.
-- **Persistence:** preferences, caches, notification queues and window state
-  live in one local JSON snapshot. Saves use atomic replacement, a validated
-  backup and corruption recovery. Corrupt copies are archived before defaults
-  replace them; unreadable files or failed recovery stop startup without resetting
-  preferences. Background saves serialize with acknowledged settings writes.
-- **Notifications:** events are planned deterministically, persisted before
-  submission and retried with bounded backoff. Delivery is best-effort; a
-  successful native call is not proof the OS displayed it.
-- **Window recovery:** placement is a pure rectangle calculation. Recovery runs
-  after restore, on focus/scale changes and from a watchdog, centring a widget
-  that no monitor shows at least 64×48 physical pixels of.
+---
 
-## Project layout
-
-| Area | Start here |
-| --- | --- |
-| Widget shell and navigation | `src/App.tsx` |
-| Match details and centre | `src/components/MatchCentre.tsx`, `src/components/MatchDetails.tsx`, `src/components/MatchEvents.tsx` |
-| UI state and native contracts | `src/store.ts`, `src/types.ts`, `src/presentation.ts` |
-| Local-day, summary and results hooks | `src/useLocalDay.ts`, `src/useMatchSummary.ts`, `src/useRecentResults.ts` |
-| Native entry point and lifecycle | `src-tauri/src/main.rs` |
-| ESPN transport and refresh | `src-tauri/src/provider.rs`, `src-tauri/src/refresh.rs`, `src-tauri/src/results.rs` |
-| Match summaries and lineups | `src-tauri/src/details.rs` |
-| Models and atomic persistence | `src-tauri/src/model.rs`, `src-tauri/src/persistence.rs` |
-| Notifications and scheduling | `src-tauri/src/alerts.rs`, `src-tauri/src/delivery.rs`, `src-tauri/src/scheduling.rs` |
-| Window sizing and recovery | `src-tauri/src/window.rs` |
-| Native configuration | `src-tauri/tauri.conf.json`, `src-tauri/capabilities/default.json` |
-
-The interface uses React, TypeScript, Vite, Tailwind CSS, Zustand and Lucide
-icons. Vitest and React Testing Library cover frontend behavior; Rust tests
-cover native domain and reliability logic.
-
-## UI conventions
-
-- Dark is the default; light is optional. Both themes use the same semantic
-  variables in `src/styles.css`: charcoal glass and lime for dark, pale surfaces
-  and deeper green for light. Do not fork layouts per theme.
-- Use flat fixture rows, shared section bands and one underline-tab style.
-  Keep the compact score strip and match tabs visible while details scroll.
-- Inspect at 320px (minimum) and 390px. Keep one intended scroll region per view,
-  stable tabular scores and one-line match rows with initials crest fallbacks.
-- Panel opacity applies to backgrounds, never text or controls. Content must stay
-  readable at 70% opacity over bright and dark wallpapers.
-- Preserve keyboard navigation, visible focus, accessible names and reduced
-  motion. Match Centre and Settings use the WAI-ARIA tabs pattern.
-
-## Validation and limitations
-
-CI runs lint, frontend tests, the TypeScript/Vite build, the Playwright journeys
-(including the axe accessibility pass), Rust formatting and Rust tests on pushes
-and pull requests; installers are packaged only for `v*` tags and manual
-dispatches. A passing build does not prove runtime behavior.
-
-- Match Centre events, statistics and lineups depend on provider availability;
-  live and halftime summary shapes still need real-match validation. The UCL
-  scoreboard and one completed UCL summary were verified on 6 November 2026, but
-  UCL live/halftime details still need a real match.
-- Off-screen window recovery runs after display changes but still needs packaged
-  Windows verification; `Retry-After` cooldowns are process-local. A sleep/resume
-  watchdog now forces a refresh after the machine wakes; packaged notification
-  delivery still needs validation.
-- Provider outages can reduce coverage. Cached data can be stale, and the widget
-  labels unconfirmed scores accordingly.
-- Development-build measurements on this machine: 122 frontend tests, 135 Rust
-  tests and 50 Playwright journeys; the widget's full state is ~170KB, scoreboard
-  responses are ~6KB compressed versus ~70KB identity, and crests use 96px
-  combiner images instead of 500px assets. Packaged memory/CPU were not profiled.
-
-### Windows acceptance
-
-Before calling a build release-ready, install the packaged NSIS build and record
-the commit, OS version, display scale, theme, opacity and result for each check:
-
-- Minus and X both hide to the tray; there is no taskbar button. Tray Show/Hide,
-  the tray-icon toggle, `Ctrl+Shift+M`, Settings, Quit and second-instance
-  restoration work. Start-hidden at sign-in is honoured when enabled.
-- Pin, theme, opacity, compact mode and favorites persist across restart. Compact
-  shrinks the native window and restores the saved expanded size.
-- Both themes remain readable at minimum opacity, and all views stay inside
-  320px/390px windows with only the intended pane scrolling at 100%/125%/150%.
-- Click a newly generated goal, start or reminder banner while the widget is
-  hidden or minimized: it should restore, focus and open the correct Overview.
-  Repeat from Settings and another match. Old banners lack the new destination.
-- Live updates, alerts, sleep/resume, monitor removal/recovery and crest fallback
-  work with the packaged app.
-- UCL live/halftime summaries are checked when a real fixture is available.
-
-The current notification plugin reports Windows clicks while the banner is
-on screen; clicks after it moves into Notification Centre are not reported.
-See the [Tauri notification platform behavior](https://docs.rs/tauri-plugin-notification/2.8.0/tauri_plugin_notification/struct.NotificationBuilder.html#method.show).
-
-## Releasing
-
-Releases use a locally built unsigned NSIS installer, not the CI artifact. The
-version in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`
-must agree (`npm run check:version`).
-
-1. Update `CHANGELOG.md` and bump the three version fields together.
-2. Run `npm run verify:fast`, the Rust formatting check and the Rust tests.
-3. Build and review with `.\scripts\release-local.ps1`. It prints the installer
-   path, size and SHA-256 and stops before publishing.
-4. Publish only with explicit approval:
-   `.\scripts\release-local.ps1 -SkipBuild -Publish`. It requires a clean tree,
-   `HEAD == origin/main`, an unused tag and `gh` authentication. Private local builds use a commit-specific `v1.0.0-build.<commit>` tag while keeping app version `1.0.0`; `-Tag` overrides the tag. The release targets the exact commit and records the local installer SHA-256.
-5. Download the release asset once to confirm its SHA-256.
-
-The release script never force-pushes, merges, or builds through Actions.
-Creating a tag triggers the Windows workflow for validation/packaging only.
-
-## Data and assets
-
-Scores and fixtures come from ESPN's **unofficial, undocumented** public JSON
-endpoints for the Premier League and Champions League. Availability, format,
-rate limits, and usage rights are not guaranteed; MatchRadar is not affiliated
-with ESPN, the Premier League, or UEFA. Crests and competition badges load from
-ESPN's CDN when available, with initials and inline glyphs as fallbacks. Monthly
-fixture and daily score queries are retained because ESPN rejects date-range
-requests.
-
-## Version history
-
-See [CHANGELOG.md](CHANGELOG.md).
+<p align="center">
+  <sub><a href="CHANGELOG.md">Changelog</a> · <a href="https://github.com/awishtodiexz/MatchRadar/releases">Releases</a> · <a href="https://github.com/awishtodiexz/MatchRadar/issues">Issues</a></sub>
+</p>

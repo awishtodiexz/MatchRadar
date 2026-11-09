@@ -4,7 +4,7 @@ import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ListFilter, Minus, Pin, Radio, RefreshCw, Settings2, X } from 'lucide-react';
-import logo from './assets/logo-mark.png';
+import logo from './assets/logo.png';
 import { groupFixtures, isLive } from './fixtures';
 import { competitionLeagues, competitionName, competitionSlug, competitionStatus, resultsStatus, updateStatus } from './freshness';
 import { useApp } from './store';

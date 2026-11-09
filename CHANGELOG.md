@@ -1,8 +1,7 @@
 # Changelog
 
-Notable changes to MatchRadar. All local builds remain version **1.0.0** until
-the first public release; the sections below describe the complete local feature
-set.
+Notable changes to MatchRadar. The app is currently version **1.0.0**; unreleased
+sections describe fixes on `main` since the last build.
 
 ## Reliability review fixes (unreleased)
 
@@ -75,10 +74,10 @@ set.
 - Fixed scored penalties being misidentified as red cards and used provider
   position codes to arrange formation lines.
 
-## Local build — 2026-11-08
+## 1.0.0 build — 2026-11-08
 
 - Removed the duplicate visible team/statistic header from Match Centre Stats while retaining accessible column names.
-- Local releases use commit-specific tags, target the exact main commit and record the installer SHA-256, allowing fresh private builds without moving existing tags.
+- Build tags are commit-specific, target the exact main commit and record the installer SHA-256, so a rebuild does not move an existing tag.
 
 ## [1.0.0] — 2026-11-07
 
@@ -184,5 +183,4 @@ set.
   and substitution rows without a team are assigned from the player list.
 - Tray double-clicks no longer toggle twice, a conflicting Ctrl+Shift+M surfaces
   a message, and the diagnostic log rotates at 1 MB.
-- The long-form `docs/` tree, `AGENTS.md`, `HANDOFF.md`, handoff scripts and site
-  screenshots were removed; README and this changelog are the documentation.
+- README and this changelog are the user-facing documentation.
