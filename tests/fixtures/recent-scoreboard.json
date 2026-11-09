@@ -1,0 +1,130 @@
+{
+  "events": [
+    {
+      "id": "401878771",
+      "date": "2026-10-17T11:30Z",
+      "status": {
+        "clock": 5400.0,
+        "displayClock": "90'+14'",
+        "period": 2,
+        "type": {
+          "id": "28",
+          "name": "STATUS_FULL_TIME",
+          "state": "post",
+          "completed": true,
+          "description": "Full Time",
+          "detail": "FT",
+          "shortDetail": "FT"
+        }
+      },
+      "competitions": [
+        {
+          "competitors": [
+            {
+              "homeAway": "home",
+              "score": "0",
+              "team": {
+                "id": "368",
+                "displayName": "Everton",
+                "abbreviation": "EVE"
+              }
+            },
+            {
+              "homeAway": "away",
+              "score": "2",
+              "team": {
+                "id": "363",
+                "displayName": "Chelsea",
+                "abbreviation": "CHE"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401879262",
+      "date": "2026-10-17T14:00Z",
+      "status": {
+        "clock": 5400.0,
+        "displayClock": "90'+7'",
+        "period": 2,
+        "type": {
+          "id": "28",
+          "name": "STATUS_FULL_TIME",
+          "state": "post",
+          "completed": true,
+          "description": "Full Time",
+          "detail": "FT",
+          "shortDetail": "FT"
+        }
+      },
+      "competitions": [
+        {
+          "competitors": [
+            {
+              "homeAway": "home",
+              "score": "1",
+              "team": {
+                "id": "337",
+                "displayName": "Brentford",
+                "abbreviation": "BRE"
+              }
+            },
+            {
+              "homeAway": "away",
+              "score": "2",
+              "team": {
+                "id": "364",
+                "displayName": "Liverpool",
+                "abbreviation": "LIV"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401878770",
+      "date": "2026-10-17T14:00Z",
+      "status": {
+        "clock": 5400.0,
+        "displayClock": "90'+7'",
+        "period": 2,
+        "type": {
+          "id": "28",
+          "name": "STATUS_FULL_TIME",
+          "state": "post",
+          "completed": true,
+          "description": "Full Time",
+          "detail": "FT",
+          "shortDetail": "FT"
+        }
+      },
+      "competitions": [
+        {
+          "competitors": [
+            {
+              "homeAway": "home",
+              "score": "1",
+              "team": {
+                "id": "370",
+                "displayName": "Fulham",
+                "abbreviation": "FUL"
+              }
+            },
+            {
+              "homeAway": "away",
+              "score": "0",
+              "team": {
+                "id": "306",
+                "displayName": "Hull City",
+                "abbreviation": "HUL"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

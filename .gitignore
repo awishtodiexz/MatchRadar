@@ -1,0 +1,24 @@
+# OS and editor noise
+.DS_Store
+Thumbs.db
+*.log
+
+# Dependencies and build output
+node_modules/
+.npm-cache/
+dist/
+*.tsbuildinfo
+src-tauri/target/
+src-tauri/gen/
+.vite/
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Generated test and screenshot artifacts
+coverage/
+verification/artifacts/
+playwright-report/
+test-results/

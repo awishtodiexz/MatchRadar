@@ -1,0 +1,215 @@
+// @vitest-environment jsdom
+import { cleanup,fireEvent,render,screen } from '@testing-library/react';
+import { afterEach,expect,it,vi } from 'vitest';
+import { MatchCentre } from './MatchCentre';
+import { positionGroup } from './MatchLineups';
+import { formatStatisticValue } from './MatchStats';
+import { mockSnapshot } from '../test-fixtures/fixtures';
+import type { MatchSummary } from '../useMatchSummary';
+const state=vi.hoisted(()=>({data:{matchId:'1',updatedAt:'2026-10-29T12:00:00Z',error:null,stale:false,venue:null as string|null,events:[{id:'e',minute:"45+2'",period:1,seconds:2820,kind:'goal',text:'Verified provider goal',teamId:'359'}],statistics:[{teamId:'359',name:'redCards',label:'Red cards',value:'0'}],players:[{teamId:'359',name:'A long player name',position:'G',starter:true}]} as MatchSummary,loading:false,error:null,retry:vi.fn()}));
+vi.mock('../useMatchSummary',()=>({useMatchSummary:()=>state}));
+const initial=structuredClone(state.data);
+afterEach(()=>{cleanup();state.data=structuredClone(initial);state.loading=false;state.error=null;});
+it('offers available sections and displays explicit zero stats and player names',()=>{render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));expect(screen.getByText("45+2'")).toBeTruthy();expect(screen.getByText('Verified provider goal')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getByText('0')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));expect(screen.getByText('A long player name')).toBeTruthy();});
+it('keeps the details freshness line on Overview instead of repeating it above every tab',()=>{
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ expect(screen.getByText(/Details checked/)).toBeTruthy();
+ fireEvent.click(screen.getByRole('tab',{name:'Stats'}));
+ expect(screen.queryByText(/Details checked/)).toBeNull();
+});
+it('uses the existing tabs to access Stats and Commentary without repeated Overview links',()=>{
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ expect(screen.queryByRole('button',{name:/Match commentary|Full statistics/})).toBeNull();
+ fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getByRole('table',{name:'Team statistics'})).toBeTruthy();
+ fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));expect(screen.getByText('Verified provider goal')).toBeTruthy();
+});
+it('omits unavailable sections rather than displaying empty tabs',()=>{const old=state.data;state.data={...old,events:[],statistics:[],players:[]};render(<MatchCentre match={mockSnapshot.matches[0]}/>);expect(screen.queryByRole('tab',{name:'Commentary'})).toBeNull();expect(screen.getByRole('region',{name:'Match information'})).toBeTruthy();state.data=old;});
+it('retains visible detail content without inserting a skeleton during a refresh',()=>{
+ state.loading=true;render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ expect(screen.queryByLabelText('Loading match details')).toBeNull();
+ expect(screen.getByRole('tab',{name:'Commentary'})).toBeTruthy();
+ expect(screen.getByRole('region',{name:'Match centre'}).getAttribute('aria-busy')).toBe('true');state.loading=false;
+});
+it('shows a supplied venue and clear pre-match copy without empty tabs',()=>{
+ const old=state.data;state.data={...old,venue:'Villa Park',events:[],statistics:[],players:[]};
+ render(<MatchCentre match={{...mockSnapshot.matches[0],status:'scheduled'}}/>);
+ expect(screen.getByText('Villa Park')).toBeTruthy();expect(screen.getByText('Lineups and match coverage will appear when available.')).toBeTruthy();
+ expect(screen.queryByRole('tab',{name:'Commentary'})).toBeNull();state.data=old;
+});
+
+it('compares each statistic once and distinguishes a missing value from zero',()=>{
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Stats'}));
+ const row=screen.getByRole('row',{name:/Red cards/});expect(row.textContent).toBe('0Red cards—');
+});
+it('highlights comparable ESPN statistics while keeping disciplinary counts neutral',()=>{
+ const old=state.data;
+ state.data={...old,statistics:[
+  {teamId:'359',name:'possessionPct',label:'Possession',value:'58.2'},
+  {teamId:'363',name:'possessionPct',label:'Possession',value:'41.8'},
+  {teamId:'359',name:'totalShots',label:'Shots',value:'13'},
+  {teamId:'363',name:'totalShots',label:'Shots',value:'11'},
+  {teamId:'359',name:'foulsCommitted',label:'Fouls',value:'12'},
+  {teamId:'363',name:'foulsCommitted',label:'Fouls',value:'20'},
+  {teamId:'359',name:'passPct',label:'Pass Completion %',value:'0.8'},
+  {teamId:'363',name:'passPct',label:'Pass Completion %',value:'0.7'}
+ ]};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Stats'}));
+ expect(screen.getByRole('columnheader',{name:'Passing'})).toBeTruthy();
+ expect(screen.getByRole('row',{name:/Possession/}).querySelector('.stat-leading')?.textContent).toBe('58.2%');
+ expect(screen.getByRole('row',{name:/Shots/}).querySelector('.stat-leading')?.textContent).toBe('13');
+ expect(screen.getByRole('row',{name:/Fouls/}).querySelector('.stat-leading')).toBeNull();
+ expect(screen.getByRole('row',{name:/Pass completion/}).textContent).toBe('80%Pass completion70%');state.data=old;
+});
+it('groups known positions without inventing a position for unknown players',()=>{
+ const old=state.data;state.data={...old,players:[...old.players,{teamId:'359',name:'Unknown Player',position:'',starter:true}]};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));
+ expect(screen.getByText('Goalkeepers')).toBeTruthy();expect(screen.getByText('Other positions')).toBeTruthy();expect(screen.getByText('Unknown Player')).toBeTruthy();state.data=old;
+});
+
+it('explains when one team has no lineup rather than showing an empty starting XI',()=>{
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));
+ expect(screen.getByText('Starting XI')).toBeTruthy();
+ fireEvent.click(screen.getByRole('tab',{name:/Chelsea/}));
+ expect(screen.getByText('Lineup unavailable')).toBeTruthy();
+});
+
+it('shows scorers, formation, jersey numbers and substitutes without inventing data',()=>{
+ const old=state.data;
+ state.data={...old,
+  events:[],
+  scorers:[{teamId:'359',teamName:'Arsenal',name:'Bukayo Saka',minute:"23'",ownGoal:false,penalty:false}],
+  substitutions:[{teamId:'359',playerIn:'Leandro Trossard',playerOut:'Bukayo Saka',minute:"60'"}],
+  formations:{'359':'4-3-3'},
+  players:[{teamId:'359',name:'David Raya',position:'G',starter:true,jersey:'22',formationPlace:1},
+   {teamId:'359',name:'Bukayo Saka',position:'RW',starter:true,jersey:'7',formationPlace:5},
+   {teamId:'359',name:'Leandro Trossard',position:'SUB',starter:false,jersey:'19',subbedIn:true}]};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ expect(screen.getByLabelText('Goalscorers')).toBeTruthy();
+ expect(screen.getByText('Bukayo Saka')).toBeTruthy();
+ fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));
+ expect(screen.getByText('4-3-3')).toBeTruthy();
+ expect(screen.getByText('#22')).toBeTruthy();
+ expect(screen.getByText('Substitutes')).toBeTruthy();
+ expect(screen.getByText('#19')).toBeTruthy();
+ expect(screen.getAllByText(/Trossard/).length).toBeGreaterThan(0);
+ expect(screen.getByText(/↓ 60'/)).toBeTruthy();
+ expect(screen.getByText(/↑ 60'/)).toBeTruthy();
+ expect(screen.getByText('Substitutions')).toBeTruthy();
+ expect(screen.getByText(/for Bukayo Saka/)).toBeTruthy();
+ state.data=old;
+});
+
+it('shows real venue, attendance, form and team leaders on Overview',()=>{
+ const old=state.data;
+ state.data={...old,venue:'Elland Road',attendance:36924,
+  form:{'359':[{opponent:'Chelsea',opponentId:'363',result:'W',score:'2-1',atHome:true}],
+   '363':[{opponent:'Leeds United',opponentId:'357',result:'L',score:'1-2',atHome:false}]},
+  leaders:[{teamId:'359',category:'Shots',name:'Bukayo Saka',jersey:'7',position:'RW',value:'3'}]};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ expect(screen.getByText('Elland Road')).toBeTruthy();
+ expect(screen.getByText('36,924')).toBeTruthy();
+ expect(screen.getByRole('heading',{name:/Form/})).toBeTruthy();
+ expect(screen.getByLabelText(/Win against Chelsea/)).toBeTruthy();
+ expect(screen.getByText('Team leaders')).toBeTruthy();
+ expect(screen.getByText(/Bukayo Saka/)).toBeTruthy();
+ state.data=old;
+});
+
+it('filters the timeline to key events without losing the full list',()=>{
+ const old=state.data;
+ state.data={...old,events:[...old.events,{id:'foul-1',minute:"15'",period:1,seconds:900,kind:'foul',text:'Foul by a defender.',teamId:'359'}]};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));
+ expect(screen.getByText('Foul by a defender.')).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Key events'}));
+ expect(screen.queryByText('Foul by a defender.')).toBeNull();
+ expect(screen.getByText('Verified provider goal')).toBeTruthy();
+ expect(screen.getByRole('button',{name:'Key events'}).getAttribute('aria-pressed')).toBe('true');
+ fireEvent.click(screen.getByRole('button',{name:'All'}));
+ expect(screen.getByText('Foul by a defender.')).toBeTruthy();
+ state.data=old;
+});
+
+it('draws the selected team formation and changes the pitch with its tab',()=>{
+ const old=state.data;
+ const squad=(teamId:string)=>Array.from({length:11},(_,i)=>({
+  teamId,name:`${teamId} Player ${i+1}`,position:i===0?'G':i<5?'CD':i<8?'CM':'CF',starter:true,jersey:String(i+1),formationPlace:i+1
+ }));
+ state.data={...old,formations:{'359':'4-3-3','363':'4-3-3'},players:[...squad('359'),...squad('363')]};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));
+ const pitch=document.querySelector('.lineup-pitch');
+ expect(pitch).toBeTruthy();
+ expect(pitch?.getAttribute('aria-hidden')).toBe('true');
+ expect(pitch?.querySelectorAll('.pitch-shirt')).toHaveLength(11);
+ expect(pitch?.textContent).toContain('1');
+ fireEvent.click(screen.getByRole('tab',{name:/Chelsea/}));
+ expect(document.querySelector('.pitch-player')?.getAttribute('title')).toContain('Chelsea');
+ expect(document.querySelectorAll('.pitch-shirt')).toHaveLength(11);
+ expect(screen.getAllByText('4-3-3').length).toBeGreaterThan(0);
+ state.data=old;
+});
+
+it('labels timeline periods and event types',()=>{
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));
+ expect(screen.getByText('First half')).toBeTruthy();
+ expect(screen.getByText('Goal',{selector:'.event-kind'})).toBeTruthy();
+});
+
+it('exposes selected panels and supports arrow, Home and End keyboard navigation',()=>{
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ const overview=screen.getByRole('tab',{name:'Overview'});overview.focus();fireEvent.keyDown(overview,{key:'End'});
+ const timeline=screen.getByRole('tab',{name:'Commentary'});expect(document.activeElement).toBe(timeline);expect(timeline.getAttribute('aria-selected')).toBe('true');expect(screen.getByRole('tabpanel',{name:'Commentary'})).toBeTruthy();
+ fireEvent.keyDown(timeline,{key:'ArrowLeft'});expect(document.activeElement).toBe(screen.getByRole('tab',{name:'Lineups'}));fireEvent.keyDown(document.activeElement!,{key:'Home'});expect(document.activeElement).toBe(overview);
+});
+
+it('includes all compact goals and substitutions in Overview but excludes routine goal kicks',()=>{
+ const old=state.data;
+ state.data={...old,statistics:[{teamId:'359',name:'totalShots',label:'Shots',value:'9'}],events:[
+  {id:'goal-kick',minute:'75',period:2,seconds:4500,kind:'goal-kick',text:'Routine goal kick',teamId:'359'},
+  ...Array.from({length:15},(_,i)=>({id:'sub-'+i,minute:'73',period:2,seconds:4380+i,kind:'substitution',text:'Routine substitution '+i,teamId:'359',participants:['Player on '+i,'Player off '+i]})),
+  ...Array.from({length:7},(_,i)=>({id:'goal-'+i,minute:String(50+i),period:2,seconds:3000+i,kind:'goal',text:'Goal '+i,teamId:'359',participants:['Scorer '+i]}))
+ ]};
+ const {container}=render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ expect(container.querySelectorAll('.match-events .event')).toHaveLength(22);
+ expect(container.querySelectorAll('.overview-scorers li')).toHaveLength(0);
+ expect(screen.getByText('Second half')).toBeTruthy();expect(screen.getByText('Player on 0')).toBeTruthy();
+ expect(screen.getByRole('region',{name:'Match information'})).toBeTruthy();
+ expect(screen.queryByText('Routine goal kick')).toBeNull();
+ expect(screen.queryByText('Shots')).toBeNull();
+ fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));
+ expect(screen.getByRole('tab',{name:'Commentary'}).getAttribute('aria-selected')).toBe('true');
+ expect(screen.getByText('Routine substitution 0')).toBeTruthy();state.data=old;
+});
+
+it('keeps low possession percentages as percentage points and scales ratio metrics',()=>{
+ const stat=(name:string,value:string)=>({teamId:'359',name,label:name,value});
+ for(const value of ['0','0.5','1','99']) expect(formatStatisticValue('possessionPct',stat('possessionPct',value))).toBe(value+'%');
+ expect(formatStatisticValue('passPct',stat('passPct','0.8'))).toBe('80%');
+ expect(formatStatisticValue('passPct',stat('passPct','0.5%'))).toBe('0.5%');
+ state.data={...state.data,statistics:[stat('possessionPct','1'),{...stat('possessionPct','99'),teamId:'363'}]};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Stats'}));
+ const row=screen.getByRole('row',{name:/Possession/});
+ expect(row.textContent).toBe('1%Possession99%');expect(row.querySelector('.stat-leading')?.textContent).toBe('99%');
+});
+it('groups defensive midfielders separately from central defenders',()=>{
+ for(const code of ['DM','CDM','DM-L','CDM-R','CM-L']) expect(positionGroup(code)).toBe('Midfielders');
+ for(const code of ['D','DF','CD','CD-L','CD-R','RB','LWB']) expect(positionGroup(code)).toBe('Defenders');
+ expect(positionGroup('UNKNOWN')).toBe('Other positions');
+});
+it('shows both on and off times for a substitute who later leaves the pitch',()=>{
+ state.data={...state.data,players:[
+  {teamId:'359',name:'Starter',position:'CF',starter:true},
+  {teamId:'359',name:'Bench Player',position:'DM',starter:false,subbedIn:true,subbedOut:true},
+  {teamId:'359',name:'Replacement',position:'DM',starter:false,subbedIn:true}
+ ],substitutions:[
+  {teamId:'359',playerIn:'Bench Player',playerOut:'Starter',minute:"60'"},
+  {teamId:'359',playerIn:'Replacement',playerOut:'Bench Player',minute:"80'"}
+ ]};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));
+ const row=screen.getAllByText('Bench Player').find(node=>node.closest('.lineup-list'))?.closest('li');
+ expect(row?.querySelector('.sub-marker.on')?.getAttribute('title')).toBe("Substituted on at 60'");
+ expect(row?.querySelector('.sub-marker.off')?.getAttribute('title')).toBe("Substituted off at 80'");
+});

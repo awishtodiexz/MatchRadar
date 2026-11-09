@@ -1,0 +1,282 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import App from './App';
+import { mockSnapshot } from './test-fixtures/fixtures';
+import { useApp } from './store';
+import type { Snapshot } from './types';
+
+vi.mock('@tauri-apps/api/core',()=>({isTauri:()=>false,invoke:vi.fn()}));
+vi.mock('@tauri-apps/api/event',()=>({listen:vi.fn().mockResolvedValue(()=>{})}));
+vi.mock('@tauri-apps/api/window',()=>({getCurrentWindow:vi.fn()}));
+vi.mock('@tauri-apps/plugin-autostart',()=>({isEnabled:vi.fn(),enable:vi.fn(),disable:vi.fn()}));
+const detailName = 'Match details: Arsenal versus Chelsea';
+const inheritName = 'Enable all alerts (using team settings): Arsenal versus Chelsea';
+async function load(snapshot:Snapshot) {
+  useApp.setState({snapshot,loading:false,error:null});
+  await useApp.getState().load();
+}
+const openMatchAlerts = () => fireEvent.click(screen.getByRole('button',{name:/^Match alerts: /}));
+beforeEach(async()=>{await load(structuredClone(mockSnapshot));});
+afterEach(cleanup);
+
+describe('focused usability refinements',()=>{
+  it('distinguishes a quiet live view from a failed scoreboard and hidden live matches',async()=>{
+    const base=structuredClone(mockSnapshot);
+    await load({...base,matches:base.matches.filter(m=>m.status==='scheduled'),updatedAt:'2026-10-29T12:00:00Z'});
+    const {unmount}=render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Live'}));
+    expect(screen.getByText('No Premier League matches are live right now')).toBeTruthy();
+    unmount();
+    await load({...base,matches:base.matches.filter(m=>m.status==='scheduled'),scoreError:'HTTP 500',error:'Scores failed'});
+    const failed=render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Live'}));
+    expect(screen.getByText('Live status unavailable')).toBeTruthy();expect(screen.queryByText('No Premier League matches are live right now')).toBeNull();
+    failed.unmount();
+    await load({...base,settings:{...base.settings,followedOnly:true,favorites:[]}});
+    render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Live'}));
+    expect(screen.getByText('No followed clubs are live')).toBeTruthy();
+    expect(screen.getByLabelText(/Premier League: .* live matches/)).toBeTruthy();
+  });
+  it('explains when the Following view has no matching clubs',async()=>{
+    await load({...structuredClone(mockSnapshot),settings:{...mockSnapshot.settings,favorites:[]}});
+    render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Following'}));
+    expect(screen.getByText('No matches involving followed clubs')).toBeTruthy();
+    expect(screen.getByRole('button',{name:'Show all matches'})).toBeTruthy();
+  });
+  it('exposes the score and status as the match card description',()=>{
+    render(<App/>);
+    const card=screen.getByRole('button',{name:detailName});
+    const description=document.getElementById(card.getAttribute('aria-describedby')??'');
+    expect(description?.textContent).toContain('2 to 1');
+  });
+  it('describes an empty Upcoming view as empty rather than as an active filter',async()=>{
+    const base=structuredClone(mockSnapshot);
+    await load({...base,matches:base.matches.filter(m=>m.status!=='scheduled')});
+    render(<App/>);
+    fireEvent.click(screen.getByRole('button',{name:'Upcoming'}));
+    expect(screen.getByText('No upcoming matches')).toBeTruthy();
+    expect(screen.queryByText(/active filters hide/)).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'Show all matches'}));
+    expect(screen.getByRole('button',{name:detailName})).toBeTruthy();
+  });
+  it('lets a stale followed-club id be removed when it is absent from the feed',async()=>{
+    await load({...structuredClone(mockSnapshot),settings:{...mockSnapshot.settings,favorites:['999']}});
+    render(<App/>);
+    fireEvent.click(screen.getByRole('button',{name:'Settings'}));
+    expect(screen.getByText(/Unknown club · 999/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'Unfollow unknown club 999'}));
+    await waitFor(()=>expect(useApp.getState().snapshot?.settings.favorites).not.toContain('999'));
+  });
+  it('suppresses surface context menus on cards, icons, details and settings',()=>{
+    render(<App/>);
+    expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Matchday'}))).toBe(false);
+    const card=screen.getByRole('button',{name:detailName});
+    expect(fireEvent.contextMenu(card)).toBe(false);
+    expect(fireEvent.contextMenu(screen.getByRole('button',{name:inheritName}).querySelector('svg')!)).toBe(false);
+    fireEvent.click(card);
+    expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Match details'}))).toBe(false);
+    openMatchAlerts();
+    expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Match alerts'}))).toBe(false);
+    fireEvent.click(screen.getByRole('button',{name:'Settings'}));
+    expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Your clubs'}))).toBe(false);
+    expect(fireEvent.contextMenu(screen.getByRole('searchbox',{name:'Search clubs'}))).toBe(true);
+    fireEvent.change(screen.getByRole('searchbox',{name:'Search clubs'}),{target:{value:'Arsenal'}});
+    expect(screen.getByRole('button',{name:'Arsenal'})).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab',{name:'Appearance'}));
+    expect(fireEvent.contextMenu(screen.getByRole('combobox',{name:'Theme'}))).toBe(true);
+  });
+
+  it('preserves context menus for copyable errors and editable descendants',()=>{
+    render(<App/>);
+    act(()=>useApp.setState({error:'Could not save settings. Please try again.'}));
+    expect(fireEvent.contextMenu(screen.getByText('Could not save settings. Please try again.'))).toBe(true);
+    const main=screen.getByRole('main');
+    const textarea=document.createElement('textarea');main.append(textarea);
+    expect(fireEvent.contextMenu(textarea)).toBe(true);
+    const editor=document.createElement('div');const child=document.createElement('span');
+    editor.append(child);main.append(editor);
+    for(const value of ['', 'true', 'plaintext-only']) {
+      editor.setAttribute('contenteditable',value);
+      expect(fireEvent.contextMenu(child)).toBe(true);
+    }
+    child.setAttribute('contenteditable','false');
+    expect(fireEvent.contextMenu(child)).toBe(false);
+    editor.remove();textarea.remove();
+  });
+
+  it('keeps league-wide live counts when only followed cards are shown and can clear an empty filter',async()=>{
+    await load({...structuredClone(mockSnapshot),settings:{...mockSnapshot.settings,favorites:[],followedOnly:true}});
+    render(<App/>);
+    expect(screen.getByLabelText('Premier League: 3 live matches').textContent).toBe('3 LIVE');
+    expect(screen.queryByText('NO LIVE MATCHES')).toBeNull();
+    expect(screen.getByRole('heading',{name:'No followed-team matches'})).toBeTruthy();
+    expect(screen.queryByRole('button',{name:detailName})).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'Show all matches'}));
+    await waitFor(()=>expect(screen.getByRole('button',{name:detailName})).toBeTruthy());
+    expect(useApp.getState().snapshot?.settings.followedOnly).toBe(false);
+    expect(screen.getByRole('button',{name:'Following only'}).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('keeps saved league scores distinct even when the filter hides every card',async()=>{
+    await load({...structuredClone(mockSnapshot),matches:mockSnapshot.matches.map(m=>({...m,scoreStale:true})),settings:{...mockSnapshot.settings,favorites:[],followedOnly:true}});
+    render(<App/>);
+    expect(screen.getByLabelText('Premier League: saved scores, awaiting live update').textContent).toBe('SAVED LIVE');
+    expect(screen.queryByText('NO LIVE MATCHES')).toBeNull();
+  });
+
+  it('resets one match to team settings without deleting other subscriptions',async()=>{
+    const other = {enabled:false,expiresAt:'2026-12-01T00:00:00Z'};
+    await load({...structuredClone(mockSnapshot),settings:{...mockSnapshot.settings,matchAlerts:{'demo-2':other}}});
+    render(<App/>);
+    const bell=screen.getByRole('button',{name:inheritName});
+    expect(bell.getAttribute('data-alert-state')).toBe('team');
+    fireEvent.click(bell);
+    await waitFor(()=>expect(useApp.getState().snapshot?.settings.matchAlerts['demo-1'].enabled).toBe(true));
+    expect(screen.getByRole('button',{name:'Mute match alerts (all alerts on): Arsenal versus Chelsea'}).getAttribute('data-alert-state')).toBe('on');
+    fireEvent.click(screen.getByRole('button',{name:detailName}));
+    openMatchAlerts();
+    expect(screen.getByText('All alerts on',{exact:true})).toBeTruthy();
+    const reset=screen.getByRole('button',{name:'Use team settings'});reset.focus();fireEvent.click(reset);
+    await waitFor(()=>expect(useApp.getState().snapshot?.settings.matchAlerts).toEqual({'demo-2':other}));
+    expect(screen.getByText('Team settings',{exact:true})).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('heading',{name:'Match alerts'}));
+    fireEvent.click(screen.getByRole('button',{name:'Back to matches'}));
+    expect(screen.getByRole('button',{name:inheritName}).getAttribute('data-alert-state')).toBe('team');
+  });
+
+  it('distinguishes explicit mute from team defaults in names, tooltips and visual state',async()=>{
+    render(<App/>);
+    fireEvent.click(screen.getByRole('button',{name:inheritName}));
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Mute match alerts (all alerts on): Arsenal versus Chelsea'})).toBeTruthy());
+    fireEvent.click(screen.getByRole('button',{name:'Mute match alerts (all alerts on): Arsenal versus Chelsea'}));
+    const muted=await screen.findByRole('button',{name:'Enable all alerts (match muted): Arsenal versus Chelsea'});
+    expect(muted.getAttribute('data-alert-state')).toBe('muted');
+    expect(muted.title).toContain('even for followed clubs');
+    expect(muted.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button',{name:'Match ended: Brighton & Hove Albion versus Everton'}).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('does not offer ended-match alert actions when no override exists',()=>{
+    render(<App/>);
+    fireEvent.click(screen.getByRole('button',{name:'Match details: Brighton & Hove Albion versus Everton'}));
+    openMatchAlerts();
+    expect(screen.getByText('This match has ended.')).toBeTruthy();
+    expect(screen.queryByText(/mute or reset existing alerts/)).toBeNull();
+    expect(screen.queryByRole('button',{name:'Use team settings'})).toBeNull();
+    expect(screen.queryByRole('button',{name:'Notify me about this match'})).toBeNull();
+  });
+
+  it('offers only applicable actions for ended subscribed and muted matches',async()=>{
+    const base=structuredClone(mockSnapshot);
+    await load({...base,settings:{...base.settings,matchAlerts:{'demo-5':{enabled:true,expiresAt:'2099-01-01T00:00:00Z'}}}});
+    render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Match details: Brighton & Hove Albion versus Everton'}));
+    openMatchAlerts();
+    expect(screen.getByText('This match has ended. Mute it or use team settings.')).toBeTruthy();
+    const mute=screen.getByRole('button',{name:'Mute this match'});mute.focus();fireEvent.click(mute);
+    await waitFor(()=>expect(screen.getByText('This match has ended. Reset it to use team settings.')).toBeTruthy());
+    expect(document.activeElement).toBe(screen.getByRole('heading',{name:'Match alerts'}));
+    expect(screen.queryByRole('button',{name:'Notify me about this match'})).toBeNull();
+    expect(screen.getByRole('button',{name:'Use team settings'})).toBeTruthy();
+  });
+
+  it('keeps keyboard focus in Settings after resetting all match alerts',async()=>{
+    const base=structuredClone(mockSnapshot);
+    await load({...base,settings:{...base.settings,matchAlerts:{'demo-1':{enabled:true,expiresAt:'2099-01-01T00:00:00Z'}}}});
+    render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Settings'}));fireEvent.click(screen.getByRole('tab',{name:'Alerts'}));
+    const reset=screen.getByRole('button',{name:'Reset match bells to team defaults'});reset.focus();fireEvent.click(reset);
+    await waitFor(()=>expect(screen.queryByRole('button',{name:'Reset match bells to team defaults'})).toBeNull());
+    expect(document.activeElement).toBe(screen.getByRole('tabpanel',{name:'Alerts'}));
+    fireEvent.keyDown(document.activeElement??document.body,{key:'Escape'});
+    expect(document.activeElement).toBe(screen.getByRole('button',{name:'Settings'}));
+  });
+
+  it('returns focus to club search after clearing an empty result',()=>{
+    render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Settings'}));
+    const search=screen.getByRole('searchbox',{name:'Search clubs'});fireEvent.change(search,{target:{value:'zzzzzz'}});
+    const clear=screen.getByRole('button',{name:'Clear search'});clear.focus();fireEvent.click(clear);
+    expect(document.activeElement).toBe(search);expect((search as HTMLInputElement).value).toBe('');
+  });
+
+  it('moves focus into details and restores the originating card and scroll position on Escape',()=>{
+    render(<App/>);
+    const card=screen.getByRole('button',{name:detailName});
+    card.focus();
+    const list=document.querySelector('.match-list');if(list) list.scrollTop=123;
+    fireEvent.click(card);
+    expect(document.activeElement).toBe(screen.getByRole('heading',{name:'Match details'}));
+    fireEvent.keyDown(document.activeElement??document.body,{key:'Escape'});
+    expect(document.activeElement).toBe(screen.getByRole('button',{name:detailName}));
+    expect(document.querySelector('.match-list')?.scrollTop).toBe(123);
+  });
+
+  it('updates an open match from fresh snapshots and keeps it visible when temporarily absent',()=>{
+    render(<App/>);fireEvent.click(screen.getByRole('button',{name:detailName}));
+    act(()=>useApp.setState({snapshot:{...mockSnapshot,matches:mockSnapshot.matches.map(m=>m.id==='demo-1'?{...m,homeScore:3,detail:"72'"}:m)}}));
+    expect(document.querySelector('.detail-score')?.textContent).toContain('3 – 1');
+    expect(document.querySelector('.detail-status')?.textContent).toContain("72'");
+    act(()=>useApp.setState({snapshot:{...mockSnapshot,matches:mockSnapshot.matches.filter(m=>m.id!=='demo-1')}}));
+    expect(screen.getByRole('heading',{name:'Match details'})).toBeTruthy();
+    expect(document.querySelector('.detail-score')?.textContent).toContain('3 – 1');
+    expect(document.querySelector('.detail-score')?.textContent).toContain('Saved');
+    act(()=>useApp.setState({snapshot:{...mockSnapshot,matches:mockSnapshot.matches.map(m=>m.id==='demo-1'?{...m,homeScore:4,detail:"80'"}:m)}}));
+    expect(document.querySelector('.detail-score')?.textContent).toContain('4 – 1');
+    expect(document.querySelector('.detail-score')?.textContent).not.toContain('Saved');
+  });
+
+  it('announces selected tabs, implements arrow/Home/End navigation and restores Settings focus',()=>{
+    render(<App/>);
+    const settings=screen.getByRole('button',{name:'Settings'});
+    fireEvent.click(settings);
+    expect(document.activeElement).toBe(screen.getByRole('heading',{name:'Settings'}));
+    const teams=screen.getByRole('tab',{name:'Teams'});
+    for(const tab of screen.getAllByRole('tab')) expect(document.getElementById(tab.getAttribute('aria-controls')??'')).toBe(screen.getByRole('tabpanel'));
+    expect(teams.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab',{name:'Appearance'}).tabIndex).toBe(-1);
+    teams.focus();fireEvent.keyDown(teams,{key:'ArrowRight'});
+    const appearance=screen.getByRole('tab',{name:'Appearance'});
+    expect(document.activeElement).toBe(appearance);
+    expect(appearance.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tabpanel',{name:'Appearance'})).toBeTruthy();
+    fireEvent.keyDown(appearance,{key:'End'});
+    expect(document.activeElement).toBe(screen.getByRole('tab',{name:'App'}));
+    fireEvent.keyDown(document.activeElement??document.body,{key:'Home'});
+    expect(document.activeElement).toBe(teams);
+    fireEvent.keyDown(teams,{key:'ArrowLeft'});
+    expect(document.activeElement).toBe(screen.getByRole('tab',{name:'App'}));
+    fireEvent.keyDown(document.activeElement??document.body,{key:'ArrowRight'});
+    expect(document.activeElement).toBe(teams);
+    fireEvent.keyDown(teams,{key:'Escape'});
+    expect(document.activeElement).toBe(settings);
+  });
+
+  it('separates valid empty schedules, startup loading and failed requests while preserving cached matches',async()=>{
+    await load({...structuredClone(mockSnapshot),matches:[]});
+    const {unmount}=render(<App/>);
+    expect(screen.getByRole('heading',{name:'No fixtures in this window'})).toBeTruthy();
+    expect(screen.queryByRole('button',{name:'Retry'})).toBeNull();
+    act(()=>{useApp.setState({snapshot:{...mockSnapshot,matches:[],error:'HTTP 500',scoreError:'HTTP 500'}});});
+    expect(screen.getByRole('heading',{name:'Unable to update matches'})).toBeTruthy();
+    expect(screen.getAllByRole('button',{name:'Retry'})).toHaveLength(1);
+    expect(screen.getByLabelText('Premier League: live status unavailable')).toBeTruthy();
+    act(()=>{useApp.setState({snapshot:{...mockSnapshot,error:'HTTP 500'}});});
+    expect(screen.getByRole('button',{name:detailName})).toBeTruthy();
+    expect(screen.queryByLabelText('Loading fixtures')).toBeNull();
+    unmount();
+    await load({...mockSnapshot,matches:[],updatedAt:null,fixtureUpdatedAt:null,refreshing:true});
+    render(<App/>);
+    expect(screen.getByLabelText('Loading fixtures')).toBeTruthy();
+  });
+
+  it('explains native-only controls and provides full club names without changing compact on tab switches',async()=>{
+    render(<App/>);
+    expect(screen.getByRole('button',{name:'Minimize widget'}).hasAttribute('disabled')).toBe(true);
+    expect(screen.getAllByText('Wolverhampton Wanderers')[0].title).toBe('Wolverhampton Wanderers');
+    fireEvent.click(screen.getByRole('button',{name:'Settings'}));
+    fireEvent.click(screen.getByRole('tab',{name:'Appearance'}));
+    fireEvent.click(screen.getByRole('checkbox',{name:'Compact view'}));
+    await waitFor(()=>expect(useApp.getState().snapshot?.settings.compact).toBe(true));
+    fireEvent.click(screen.getByRole('tab',{name:'App'}));
+    expect(screen.getByRole('checkbox',{name:'Launch with Windows'}).hasAttribute('disabled')).toBe(true);
+    fireEvent.click(screen.getByRole('tab',{name:'Teams'}));
+    expect(useApp.getState().snapshot?.settings.compact).toBe(true);
+  });
+});

@@ -1,0 +1,52 @@
+{
+  "name": "matchradar",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A compact Premier League and Champions League widget for Windows.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/awishtodiexz/MatchRadar.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite --configLoader runner",
+    "build": "tsc -b && vite build --configLoader runner",
+    "test": "vitest run src --configLoader runner",
+    "lint": "eslint .",
+    "check:version": "node scripts/check-version.mjs",
+    "tauri": "tauri",
+    "verify:fast": "npm run check:version && npm run lint && npm test && npm run build",
+    "verify:ui": "npm run build && playwright test --config verification/playwright.config.ts",
+    "screenshots": "npm run build && node verification/capture-screenshots.mjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-autostart": "^2.0.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@eslint/js": "^9.0.0",
+    "@playwright/test": "^1.64.1",
+    "@tauri-apps/cli": "^2.0.0",
+    "@testing-library/react": "^16.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "autoprefixer": "^10.4.0",
+    "eslint": "^9.0.0",
+    "globals": "^15.0.0",
+    "jsdom": "^25.0.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.0.0",
+    "vite": "^7.3.7",
+    "vitest": "^4.1.12"
+  }
+}
