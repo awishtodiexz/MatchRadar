@@ -1,6 +1,8 @@
 # Changelog
 
-## 1.1.0 — 2026-11-10
+## 1.0.0 — 2026-11-09 (updated 2026-11-10)
+
+### Improved build (2026-11-10)
 
 ### App
 
@@ -15,7 +17,7 @@
 - Native Windows: improved hidden-window recovery, restored-size handling, start-in-tray semantics, sleep/resume placement recovery, and bounded shortcut retry.
 - QA: new reliability journeys, damaged-timestamp resilience, corrected Results pending state, and CI failure-artifact upload.
 
-## 1.0.0 — 2026-11-09
+### Initial release (2026-11-09)
 
 Initial release.
 
