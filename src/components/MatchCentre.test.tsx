@@ -213,3 +213,50 @@ it('shows both on and off times for a substitute who later leaves the pitch',()=
  expect(row?.querySelector('.sub-marker.on')?.getAttribute('title')).toBe("Substituted on at 60'");
  expect(row?.querySelector('.sub-marker.off')?.getAttribute('title')).toBe("Substituted off at 80'");
 });
+it('labels both statistic columns with their teams and uses a singular metric count',()=>{
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Stats'}));
+ expect(screen.getByText('Match totals · 1 metric')).toBeTruthy();
+ expect(screen.getByRole('columnheader',{name:'Arsenal'})).toBeTruthy();
+ expect(screen.getByRole('columnheader',{name:'Chelsea'})).toBeTruthy();
+});
+it('reports how many commentary events a filter hides and offers a clear reset',()=>{
+ const old=state.data;
+ state.data={...old,events:[...old.events,{id:'foul-1',minute:"15'",period:1,seconds:900,kind:'foul',text:'Foul by a defender.',teamId:'359'}]};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));
+ fireEvent.change(screen.getByRole('combobox',{name:'Commentary event type'}),{target:{value:'cards'}});
+ expect(screen.getByText(/0 of 2 events/)).toBeTruthy();
+ expect(screen.getByText(/No events match this filter/)).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Clear filters'}));
+ expect(screen.getByText('Verified provider goal')).toBeTruthy();
+ expect(screen.getByText('Foul by a defender.')).toBeTruthy();
+ state.data=old;
+});
+it('keeps half-time, full-time and VAR reviews in the commentary key-event filter',()=>{
+ const old=state.data;
+ state.data={...old,events:[...old.events,
+  {id:'ht',minute:"45'+2'",period:1,seconds:2820,kind:'halftime',text:'Half-time.',teamId:null},
+  {id:'var',minute:"23'",period:1,seconds:1380,kind:'var---referee-decision-cancelled',text:'VAR review.',teamId:'363',participants:['Igor Thiago']},
+  {id:'ft',minute:"90'+6'",period:2,seconds:5400,kind:'end-regular-time',text:'Second half ends.',teamId:null}
+ ]};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));
+ fireEvent.click(screen.getByRole('button',{name:'Key events'}));
+ expect(screen.getByText('Half-time.')).toBeTruthy();
+ expect(screen.getByText('VAR review.')).toBeTruthy();
+ expect(screen.getByText('Second half ends.')).toBeTruthy();
+ state.data=old;
+});
+it('supports Home and End on the lineup team tabs',()=>{
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));
+ const arsenal=screen.getByRole('tab',{name:/Arsenal/});const chelsea=screen.getByRole('tab',{name:/Chelsea/});
+ arsenal.focus();fireEvent.keyDown(arsenal,{key:'End'});
+ expect(document.activeElement).toBe(chelsea);expect(chelsea.getAttribute('aria-selected')).toBe('true');
+ fireEvent.keyDown(chelsea,{key:'Home'});
+ expect(document.activeElement).toBe(arsenal);expect(arsenal.getAttribute('aria-selected')).toBe('true');
+});
+it('explains why a complete starting XI has no formation pitch',()=>{
+ const old=state.data;
+ state.data={...old,formations:{},players:Array.from({length:11},(_,i)=>({teamId:'359',name:`Player ${i+1}`,position:i===0?'G':'CD',starter:true}))};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));
+ expect(screen.getByText('Formation unavailable for this lineup.')).toBeTruthy();
+ state.data=old;
+});

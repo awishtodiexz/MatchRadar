@@ -55,3 +55,16 @@ it('makes card reasons and both substitution directions visible without commenta
  expect(screen.getByText('Incoming player')).toBeTruthy();expect(screen.getByText(/Outgoing player/)).toBeTruthy();
  expect(screen.getByText(/\(Injury\)/)).toBeTruthy();
 });
+it('orders stoppage-time events by the displayed minute when provider clocks disagree',()=>{
+ const stoppage:MatchSummary['events']=[
+  {id:'four',minute:"90'+4'",period:2,seconds:5632,kind:'shot-blocked',text:'Blocked in 90+4',teamId:match.home.id},
+  {id:'end',minute:"90'+6'",period:2,seconds:5400,kind:'end-regular-time',text:'Second half ends',teamId:null},
+  {id:'one',minute:"90'+1'",period:2,seconds:5405,kind:'offside',text:'Offside in 90+1',teamId:match.home.id},
+  {id:'three',minute:"90'+3'",period:2,seconds:5568,kind:'foul',text:'Foul in 90+3',teamId:match.away.id},
+ ];
+ const text=()=>screen.getAllByRole('listitem').map(row=>row.querySelector('p')?.textContent);
+ const {unmount}=render(<MatchEvents match={match} events={stoppage} commentary newestFirst={false}/>);
+ expect(text()).toEqual(['Offside in 90+1','Foul in 90+3','Blocked in 90+4','Second half ends']);unmount();
+ render(<MatchEvents match={match} events={stoppage} commentary newestFirst/>);
+ expect(text()).toEqual(['Second half ends','Blocked in 90+4','Foul in 90+3','Offside in 90+1']);
+});

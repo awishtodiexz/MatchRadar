@@ -2,7 +2,7 @@ export type Status = 'scheduled' | 'live' | 'halftime' | 'fulltime' | 'postponed
 export type Competition = 'premierLeague' | 'championsLeague';
 export type CompetitionView = Competition | 'both';
 export interface Team { id: string; name: string; short: string; logo?: string | null }
-export interface Match { id: string; league: Competition; home: Team; away: Team; homeScore?: number | null; awayScore?: number | null; kickoff: string; status: Status; detail: string; competition: string; scoreStale?: boolean; scoreUpdatedAt?: string | null }
+export interface Match { id: string; league: Competition; home: Team; away: Team; homeScore?: number | null; awayScore?: number | null; kickoff: string; status: Status; detail: string; competition: string; leg?: string | null; aggregate?: string | null; scoreStale?: boolean; scoreUpdatedAt?: string | null }
 export interface MatchAlert { enabled: boolean; expiresAt: string }
 export interface LeagueStatus {
   fixtureUpdatedAt?: string | null;

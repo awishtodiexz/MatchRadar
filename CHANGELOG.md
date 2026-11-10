@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.0 — 2026-11-10
+
+### App
+
+- Match Centre improvements: stoppage-time event ordering, VAR/key-event labels, accessible sticky statistics headers, clearer commentary counts and empty-filter recovery, lineup keyboard navigation, and explicit postponed/cancelled/unknown states.
+- Widget and status polish: correct `CHECKING LIVE` state for unchecked competitions, honest failed-first-load recovery, scroll reset when changing views, clearer Both-competitions card descriptions, and one-line 12-hour kickoff times.
+- Champions League knockout context: optional leg and aggregate fields, surfaced in match details.
+
+### Data and reliability
+
+- ESPN robustness: unplayed fixtures no longer report 0–0, shootout/disallowed goals are excluded from scorers, suspended previous-day matches are refreshed, provider identities and text are bounded, and crest URLs must match the club.
+- Notifications: reminders survive provider outages, are re-planned after preference changes, newer goals supersede older pending scores, and delayed kickoffs get a bounded start-alert grace period.
+- Native Windows: improved hidden-window recovery, restored-size handling, start-in-tray semantics, sleep/resume placement recovery, and bounded shortcut retry.
+- QA: new reliability journeys, damaged-timestamp resilience, corrected Results pending state, and CI failure-artifact upload.
+
 ## 1.0.0 — 2026-11-09
 
 Initial release.

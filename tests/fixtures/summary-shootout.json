@@ -1,0 +1,111 @@
+{
+  "header": {
+    "id": "401862897",
+    "competitions": [
+      {
+        "status": {
+          "period": 5,
+          "type": {
+            "id": "47",
+            "name": "STATUS_FINAL_PEN",
+            "state": "post",
+            "completed": true,
+            "description": "Final Score - After Penalties",
+            "detail": "FT-Pens",
+            "shortDetail": "FT-Pens"
+          }
+        },
+        "competitors": [
+          {
+            "homeAway": "home",
+            "score": "1",
+            "shootoutScore": "4",
+            "team": {
+              "id": "160",
+              "displayName": "Paris Saint-Germain",
+              "abbreviation": "PSG"
+            }
+          },
+          {
+            "homeAway": "away",
+            "score": "1",
+            "shootoutScore": "3",
+            "team": {
+              "id": "359",
+              "displayName": "Arsenal",
+              "abbreviation": "ARS"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "keyEvents": [
+    {
+      "id": "47783787",
+      "type": { "type": "goal" },
+      "text": "Goal! Paris Saint Germain 0, Arsenal 1. Kai Havertz (Arsenal) left footed shot from a difficult angle on the left to the top left corner. Assisted by Leandro Trossard.",
+      "period": { "number": 1 },
+      "clock": { "value": 302.0, "displayValue": "6'" },
+      "scoringPlay": true,
+      "shootout": false,
+      "team": { "id": "359" },
+      "participants": [
+        { "athlete": { "displayName": "Kai Havertz" } },
+        { "athlete": { "displayName": "Leandro Trossard" } }
+      ]
+    },
+    {
+      "id": "47783898",
+      "type": { "type": "penalty---scored" },
+      "text": "Goal! Paris Saint Germain 1, Arsenal 1. Ousmane Dembélé (Paris Saint Germain) converts the penalty with a right footed shot to the bottom left corner.",
+      "period": { "number": 2 },
+      "clock": { "value": 3855.0, "displayValue": "65'" },
+      "scoringPlay": true,
+      "shootout": false,
+      "team": { "id": "160" },
+      "participants": [{ "athlete": { "displayName": "Ousmane Dembélé" } }]
+    }
+  ],
+  "commentary": [
+    {
+      "sequence": 143,
+      "time": { "value": 7200.0, "displayValue": "120'" },
+      "play": {
+        "id": "47784095",
+        "type": { "type": "penalty---scored" },
+        "text": "Goal! Paris Saint Germain 1(1), Arsenal 1. Gonçalo Ramos (Paris Saint Germain) converts the penalty with a right footed shot to the top right corner.",
+        "period": { "number": 5 },
+        "clock": { "value": 7200.0, "displayValue": "120'" },
+        "team": { "displayName": "Paris Saint-Germain" },
+        "participants": [{ "athlete": { "displayName": "Gonçalo Ramos" } }]
+      }
+    },
+    {
+      "sequence": 144,
+      "time": { "value": 7200.0, "displayValue": "120'" },
+      "play": {
+        "id": "47784098",
+        "type": { "type": "penalty---scored" },
+        "text": "Goal! Paris Saint Germain 1(1), Arsenal 1(1). Viktor Gyökeres (Arsenal) converts the penalty with a right footed shot to the bottom right corner.",
+        "period": { "number": 5 },
+        "clock": { "value": 7200.0, "displayValue": "120'" },
+        "team": { "displayName": "Arsenal" },
+        "participants": [{ "athlete": { "displayName": "Viktor Gyökeres" } }]
+      }
+    },
+    {
+      "sequence": 146,
+      "time": { "value": 7200.0, "displayValue": "120'" },
+      "play": {
+        "id": "47784104",
+        "type": { "type": "penalty---missed" },
+        "text": "Penalty missed. Eberechi Eze (Arsenal) right footed shot is close, but misses to the left.",
+        "period": { "number": 5 },
+        "clock": { "value": 7200.0, "displayValue": "120'" },
+        "team": { "displayName": "Arsenal" },
+        "participants": [{ "athlete": { "displayName": "Eberechi Eze" } }]
+      }
+    }
+  ]
+}

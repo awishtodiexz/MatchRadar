@@ -1,9 +1,14 @@
 import type { MatchView } from './matchViews';
 
-export function liveEmptyState({scoreError, savedLive, live, followedOnly, view, competition = 'Premier League', both = false}: {
-  scoreError: boolean; savedLive: boolean; live: number; followedOnly: boolean; view: MatchView; competition?: string; both?: boolean;
+export function liveEmptyState({checking = false, scoreError, savedLive, live, followedOnly, view, competition = 'Premier League', both = false}: {
+  checking?: boolean; scoreError: boolean; savedLive: boolean; live: number; followedOnly: boolean; view: MatchView; competition?: string; both?: boolean;
 }): {title:string; message:string; canShowAll:boolean} | null {
   if (view !== 'Live') return null;
+  if (checking) return {
+    title:both?'Checking live scores':`Checking ${competition} live scores`,
+    message:'Live status will update when the first check completes.',
+    canShowAll:false
+  };
   if (savedLive) return {
     title:'Live scores awaiting confirmation',
     message:'Saved live scores may be out of date. Refresh to check for updates.',

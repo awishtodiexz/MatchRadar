@@ -1,0 +1,48 @@
+{
+  "events": [
+    {
+      "id": "401879233",
+      "date": "2026-11-21T12:30Z",
+      "status": {
+        "clock": 0.0,
+        "displayClock": "0'",
+        "period": 0,
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Sat, November 21st at 7:30 AM EST",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": [
+        {
+          "competitors": [
+            {
+              "homeAway": "home",
+              "score": "0",
+              "team": {
+                "id": "382",
+                "displayName": "Manchester City",
+                "abbreviation": "MNC",
+                "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/382.png"
+              }
+            },
+            {
+              "homeAway": "away",
+              "score": "0",
+              "team": {
+                "id": "370",
+                "displayName": "Fulham",
+                "abbreviation": "FUL",
+                "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/370.png"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

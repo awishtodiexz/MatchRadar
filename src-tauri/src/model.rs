@@ -167,6 +167,14 @@ pub struct Match {
     pub status: String,
     pub detail: String,
     pub competition: String,
+    /// Knockout tie context from ESPN ("1st Leg"/"2nd Leg"). Optional and
+    /// additive: league-phase matches and old saved state omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub leg: Option<String>,
+    /// Aggregate score from the home club's perspective after a two-legged
+    /// tie, e.g. "6-4". Missing on the first leg and for league matches.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aggregate: Option<String>,
     /// Missing in saved Premier League state, which defaults to that competition.
     #[serde(default)]
     pub league: Competition,
@@ -782,6 +790,8 @@ mod tests {
             CompetitionView::PremierLeague
         );
         assert_eq!(legacy.matches[0].league, Competition::PremierLeague);
+        assert_eq!(legacy.matches[0].leg, None);
+        assert_eq!(legacy.matches[0].aggregate, None);
         assert!(legacy.league_status.is_empty());
         assert_eq!(
             serde_json::from_str::<Settings>(r#"{"competitionView":"bogus"}"#)

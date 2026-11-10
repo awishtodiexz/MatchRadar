@@ -27,4 +27,10 @@ describe('local fixture dates', () => {
     const groups = groupFixtures([fixture('tomorrow', 32, 0), fixture('today', 31, 23)], [], new Date(2026, 9, 31, 23, 59));
     expect(groups.map(g => g.label)).toEqual(['TODAY', 'TOMORROW']);
   });
+  it('keeps a fixture with a damaged kickoff visible instead of throwing', () => {
+    const broken: Match = { ...fixture('broken', 29, 12), kickoff: 'not-a-date' };
+    const groups = groupFixtures([broken, fixture('good', 29, 15)], [], new Date(2026, 9, 28, 12));
+    expect(groups.map(g => g.label)).toEqual(['TOMORROW', 'DATE UNAVAILABLE']);
+    expect(groups[1].matches.map(m => m.id)).toEqual(['broken']);
+  });
 });

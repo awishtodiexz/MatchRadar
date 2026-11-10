@@ -57,6 +57,101 @@ fn incidents_keep_card_reasons_names_and_substitution_context() {
     ));
 }
 #[test]
+fn shootout_penalties_are_timeline_events_not_goalscorers() {
+    // Captured from uefa.champions summary?event=401862897 (2026 final,
+    // Paris Saint-Germain 1-1 Arsenal, PSG won 4-3 on penalties).
+    let v: Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/summary-shootout.json")).unwrap();
+    let d = normalize(&v, "401862897", Competition::ChampionsLeague).unwrap();
+    let names: Vec<_> = d
+        .scorers
+        .iter()
+        .map(|scorer| scorer.name.as_str())
+        .collect();
+    assert_eq!(names, ["Kai Havertz", "Ousmane Dembélé"]);
+    for shootout in ["Gonçalo Ramos", "Viktor Gyökeres"] {
+        assert!(
+            !d.scorers.iter().any(|scorer| scorer.name == shootout),
+            "{shootout} must not be listed as a match goalscorer"
+        );
+    }
+    assert!(d.events.iter().any(|event| event.period == 5
+        && event.kind == "penalty---scored"
+        && event.participants == vec!["Gonçalo Ramos"]));
+    assert!(d
+        .events
+        .iter()
+        .any(|event| event.period == 5 && event.kind == "penalty---missed"));
+}
+
+#[test]
+fn scoreless_shootout_keeps_penalties_out_of_scorers() {
+    let mut v: Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/summary-shootout.json")).unwrap();
+    v["keyEvents"] = serde_json::json!([]);
+    v["header"]["competitions"][0]["competitors"][0]["score"] = serde_json::json!("0");
+    v["header"]["competitions"][0]["competitors"][1]["score"] = serde_json::json!("0");
+    let d = normalize(&v, "401862897", Competition::ChampionsLeague).unwrap();
+    assert!(d.scorers.is_empty());
+    assert!(d
+        .events
+        .iter()
+        .any(|event| event.period == 5 && event.kind == "penalty---scored"));
+}
+
+#[test]
+fn disallowed_commentary_goal_is_an_event_but_not_a_scorer() {
+    let mut v: Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/summary-shootout.json")).unwrap();
+    v["commentary"].as_array_mut().unwrap().push(serde_json::json!({
+        "sequence": 70,
+        "time": {"value": 4000.0, "displayValue": "70'"},
+        "play": {
+            "id": "var-goal",
+            "type": {"type": "goal"},
+            "text": "Goal! Paris Saint Germain 2, Arsenal 1. Disallowed Player (Paris Saint Germain) scores. The goal is disallowed after a VAR review.",
+            "period": {"number": 2},
+            "clock": {"value": 4000.0, "displayValue": "70'"},
+            "team": {"displayName": "Paris Saint-Germain"},
+            "participants": [{"athlete": {"displayName": "Disallowed Player"}}]
+        }
+    }));
+    let d = normalize(&v, "401862897", Competition::ChampionsLeague).unwrap();
+    assert!(!d
+        .scorers
+        .iter()
+        .any(|scorer| scorer.name == "Disallowed Player"));
+    assert!(d
+        .events
+        .iter()
+        .any(|event| event.id == "c-var-goal" && event.kind == "goal"));
+}
+
+#[test]
+fn legitimate_goal_with_an_overturned_flag_is_still_a_scorer() {
+    let mut v: Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/summary-shootout.json")).unwrap();
+    v["commentary"].as_array_mut().unwrap().push(serde_json::json!({
+        "sequence": 71,
+        "time": {"value": 4100.0, "displayValue": "71'"},
+        "play": {
+            "id": "legit-overturn",
+            "type": {"type": "goal"},
+            "text": "Goal! Paris Saint Germain 2, Arsenal 1. Legit Player (Paris Saint Germain) scores after the offside flag is overturned.",
+            "period": {"number": 2},
+            "clock": {"value": 4100.0, "displayValue": "71'"},
+            "team": {"displayName": "Paris Saint-Germain"},
+            "participants": [{"athlete": {"displayName": "Legit Player"}}]
+        }
+    }));
+    let d = normalize(&v, "401862897", Competition::ChampionsLeague).unwrap();
+    assert!(
+        d.scorers.iter().any(|scorer| scorer.name == "Legit Player"),
+        "a goal awarded after an overturned offside flag must keep its scorer"
+    );
+}
+
+#[test]
 fn captured_full_match_has_richer_statistics_without_season_placeholders() {
     let v: Value = serde_json::from_str(include_str!(
         "../../tests/fixtures/summary-brighton-full.json"
@@ -446,6 +541,68 @@ async fn cache_hit_failure_cooldown_and_recovery() {
     assert!(!recovered.stale);
     assert!(recovered.error.is_none());
 }
+#[tokio::test]
+async fn oversized_summary_is_rejected_instead_of_cached() {
+    let now = clock();
+    let cache = Cache::default();
+    let id = "401879268";
+    let valid = example();
+    cache
+        .get_with(Competition::PremierLeague, id, Phase::Live, now, || async {
+            Ok(valid)
+        })
+        .await
+        .unwrap();
+    let mut invalid = example();
+    let template = invalid.events[0].clone();
+    invalid.events = (0..1001)
+        .map(|index| {
+            let mut event = template.clone();
+            event.id = format!("e{index}");
+            event
+        })
+        .collect();
+    let saved = cache
+        .get_with(
+            Competition::PremierLeague,
+            id,
+            Phase::Live,
+            now + chrono::Duration::seconds(121),
+            || async { Ok(invalid) },
+        )
+        .await
+        .unwrap();
+    assert!(saved.stale);
+    assert!(saved.error.unwrap().contains("limits"));
+    assert_eq!(
+        cache
+            .entries
+            .lock()
+            .unwrap()
+            .get(&cache_key(Competition::PremierLeague, id))
+            .unwrap()
+            .events
+            .len(),
+        example().events.len()
+    );
+    // With no prior copy there is nothing valid to show.
+    let empty = Cache::default();
+    let mut invalid = example();
+    invalid.events = (0..1001)
+        .map(|index| {
+            let mut event = template.clone();
+            event.id = format!("x{index}");
+            event
+        })
+        .collect();
+    assert!(empty
+        .get_with(Competition::PremierLeague, id, Phase::Live, now, || async {
+            Ok(invalid)
+        })
+        .await
+        .is_err());
+}
+
 #[tokio::test]
 async fn restart_offline_and_future_timestamps() {
     let now = clock();

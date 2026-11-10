@@ -1,6 +1,11 @@
 use crate::model::{AlertBaseline, Settings, Snapshot};
 use chrono::{DateTime, Duration, Utc};
 
+// A provider can keep a delayed kickoff marked "scheduled" and then report it
+// live well after the nominal time. The observation still needs a fresh
+// scheduled baseline, but the kickoff age alone must not swallow the alert.
+const START_GRACE_MINUTES: i64 = 30;
+
 fn date(value: &str) -> Option<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(value)
         .ok()
@@ -117,10 +122,11 @@ pub fn plan(snapshot: &mut Snapshot, now: DateTime<Utc>) -> Vec<(String, String)
                         }
                         alerts.push((reminder_id, format!("{name} kicks off soon")));
                     }
+                    // Record the kickoff only once a reminder is allowed. Recording it
+                    // while reminders are disabled would silently consume the current
+                    // reminder when the user turns them on later in the same window.
+                    planned_reminder_kickoff = reminder_kickoff.clone();
                 }
-                // Remember the fixture even when reminders are off, so enabling them
-                // later in the same window does not replay an older reminder.
-                planned_reminder_kickoff = reminder_kickoff.clone();
             }
             // First/unconfirmed observations establish a baseline. A subscription
             // armed from a recent confirmed score keeps watching the next change.
@@ -128,7 +134,9 @@ pub fn plan(snapshot: &mut Snapshot, now: DateTime<Utc>) -> Vec<(String, String)
                 if (subscribed || snapshot.settings.starts)
                     && m.status == "live"
                     && previous.status == "scheduled"
-                    && kickoff.is_some_and(|k| now >= k && now - k <= Duration::minutes(10))
+                    && kickoff.is_some_and(|k| {
+                        now >= k && now - k <= Duration::minutes(START_GRACE_MINUTES)
+                    })
                 {
                     alerts.push((format!("{}:start", m.id), format!("{name} is underway")));
                 }
@@ -241,6 +249,50 @@ mod tests {
         assert_eq!(second.len(), 1);
         assert_eq!(second[0].0, "match-1:reminder");
         assert!(!s.sent_notifications.contains(&"match-1:reminder".into()));
+    }
+
+    #[test]
+    fn enabling_kickoff_reminders_inside_the_window_still_alerts_once() {
+        let mut s = fixture();
+        s.settings.favorites.push(s.matches[0].home.id.clone());
+        // Followed club, but kickoff reminders are off: observing the window must
+        // not consume the reminder that the user then asks for.
+        assert!(plan(&mut s, now()).is_empty());
+        assert!(s.alert_baselines["match-1"].reminder_kickoff.is_none());
+        s.settings.reminders = true;
+        let alerts = plan(&mut s, now());
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].0, "match-1:reminder");
+        assert!(plan(&mut s, now()).is_empty());
+    }
+
+    #[test]
+    fn a_delayed_kickoff_still_reports_the_start_within_the_grace_period() {
+        let mut s = fixture();
+        s.matches[0].kickoff = (now() + Duration::minutes(5)).to_rfc3339();
+        s.settings.favorites.push(s.matches[0].home.id.clone());
+        s.settings.starts = true;
+        plan(&mut s, now());
+        // The provider keeps reporting "scheduled" for 15 minutes after kickoff.
+        plan(&mut s, now() + Duration::minutes(19));
+        s.matches[0].status = "live".into();
+        let alerts = plan(&mut s, now() + Duration::minutes(20));
+        assert_eq!(alerts.len(), 1);
+        assert!(alerts[0].0.ends_with(":start"));
+    }
+
+    #[test]
+    fn a_provider_lag_beyond_the_grace_period_does_not_replay_the_start() {
+        let mut s = fixture();
+        s.matches[0].kickoff = (now() - Duration::minutes(10)).to_rfc3339();
+        s.settings.favorites.push(s.matches[0].home.id.clone());
+        s.settings.starts = true;
+        plan(&mut s, now() + Duration::minutes(30));
+        s.matches[0].status = "live".into();
+        assert!(
+            plan(&mut s, now() + Duration::minutes(31)).is_empty(),
+            "a start observed long after the nominal kickoff is not useful"
+        );
     }
 
     #[test]

@@ -46,5 +46,8 @@ export function MatchOverview({match,data}:{match:Match;data:MatchSummary|null})
       <div><dt><Users size={13} aria-hidden="true"/>Attendance</dt><dd>{data?.attendance?.toLocaleString()??'Not provided'}</dd></div>
     </dl></section>
     {match.status==='scheduled'&&<p className="field-note">Lineups and match coverage will appear when available.</p>}
+    {match.status==='postponed'&&<p className="field-note">This match has been postponed.</p>}
+    {match.status==='cancelled'&&<p className="field-note">This match was cancelled.</p>}
+    {match.status==='unknown'&&<p className="field-note">Match status is unavailable. Check back for updates.</p>}
   </article>;
 }

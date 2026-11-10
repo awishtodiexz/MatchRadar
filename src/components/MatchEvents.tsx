@@ -1,14 +1,27 @@
-import { ArrowLeftRight, Flag, Play, Square } from 'lucide-react';
+import { ArrowLeftRight, Flag, MonitorPlay, Play, Square } from 'lucide-react';
 import type { Match } from '../types';
 import type { MatchSummary } from '../useMatchSummary';
 
 type Event = MatchSummary['events'][number];
-import { eventLabel, isGoal, isCard, isSubstitution } from './matchEventKinds';
+import { eventLabel, isGoal, isCard, isSubstitution, isVarReview } from './matchEventKinds';
 export { keyEvent } from './matchEventKinds';
 const periodLabel = (period:number) => period===0?'Before match':period===1?'First half':period===2?'Second half':period===3?'Extra time · first half':period===4?'Extra time · second half':'Penalties';
 
+// Provider clock values can disagree with the minute it displays. Added-time
+// commentary often carries elapsed seconds past the recorded final whistle
+// (e.g. 90'+4' = 5632) while the final whistle is capped at 5400. Order by the
+// minute the provider shows, then use the numeric clock only as a tie-breaker.
+const minuteSeconds = (minute:string) => {
+  const match=/^\s*(\d+)(?:\s*[′']?\s*\+\s*(\d+))?/.exec(minute);
+  if(!match) return null;
+  return Number(match[1])*60+Number(match[2]??0);
+};
+const eventSeconds = (event:Event) => minuteSeconds(event.minute)??event.seconds;
+const chronological = (events:Event[]) => [...events].sort((a,b)=>a.period-b.period||eventSeconds(a)-eventSeconds(b)||a.seconds-b.seconds||a.id.localeCompare(b.id));
+
 function EventIcon({kind}:{kind:string}) {
   const props = {size:13,'aria-hidden':true} as const;
+  if(isVarReview(kind)) return <MonitorPlay {...props}/>;
   if(/\bred\b|yellow|card/i.test(kind)) return <Square {...props} fill="currentColor"/>;
   if(/sub/i.test(kind)) return <ArrowLeftRight {...props}/>;
   if(/goal|penalty/i.test(kind)) return <svg className="football-icon" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -21,7 +34,7 @@ function EventIcon({kind}:{kind:string}) {
 }
 
 export function MatchEvents({match,events,commentary=false,groupByPeriod=true,newestFirst=true}:{match:Match;events:Event[];commentary?:boolean;groupByPeriod?:boolean;newestFirst?:boolean}) {
-  const ordered = [...events].sort((a,b)=>a.period-b.period||a.seconds-b.seconds||a.id.localeCompare(b.id));
+  const ordered = chronological(events);
   const goals=ordered.filter(event=>isGoal(event.kind));
   const complete=!match.scoreStale&&match.homeScore!=null&&match.awayScore!=null
     &&!goals.some(event=>event.period>=5||event.kind==='own-goal')

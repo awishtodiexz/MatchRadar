@@ -41,6 +41,18 @@ jobs:
       - run: npm run verify:ui
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      # Playwright traces and failure screenshots are the only diagnosis for a
+      # failed UI journey; keep them from the failing run instead of discarding
+      # the evidence with the runner.
+      - uses: actions/upload-artifact@v6
+        if: failure()
+        with:
+          name: matchradar-ui-artifacts
+          path: |
+            verification/artifacts/browser
+            test-results
+          if-no-files-found: ignore
+          retention-days: 7
       - run: npm run tauri build
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
       - uses: actions/upload-artifact@v6

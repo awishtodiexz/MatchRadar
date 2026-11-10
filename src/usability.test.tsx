@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from './App';
 import { mockSnapshot } from './test-fixtures/fixtures';
 import { useApp } from './store';
@@ -41,6 +41,29 @@ describe('focused usability refinements',()=>{
     render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Following'}));
     expect(screen.getByText('No matches involving followed clubs')).toBeTruthy();
     expect(screen.getByRole('button',{name:'Show all matches'})).toBeTruthy();
+  });
+  it('does not claim live status is unavailable while the first feed check is in flight',async()=>{
+    await load({...structuredClone(mockSnapshot),matches:[],updatedAt:null,fixtureUpdatedAt:null,refreshing:true});
+    render(<App/>);
+    expect(screen.getByText('CHECKING LIVE',{exact:true})).toBeTruthy();
+    expect(screen.queryByText('LIVE UNAVAILABLE')).toBeNull();
+    expect(screen.getByLabelText(/checking live status/)).toBeTruthy();
+  });
+  it('presents a failed first load as an error with recovery instead of an empty schedule',async()=>{
+    useApp.setState({snapshot:null,loading:false,error:'Could not load the widget state.'});
+    render(<App/>);
+    expect(await screen.findByRole('heading',{name:'Unable to load matches'})).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toContain('Could not load the widget state.');
+    expect(screen.getByRole('button',{name:'Retry'})).toBeTruthy();
+    expect(screen.getByText('NOT CONNECTED')).toBeTruthy();
+    expect(document.querySelector('.error-banner')).toBeNull();
+  });
+  it('returns focus to the first recovered card after showing filtered-out matches',async()=>{
+    await load({...structuredClone(mockSnapshot),settings:{...mockSnapshot.settings,favorites:[],followedOnly:true}});
+    render(<App/>);
+    fireEvent.click(screen.getByRole('button',{name:'Following'}));
+    fireEvent.click(screen.getByRole('button',{name:'Show all matches'}));
+    await waitFor(()=>expect(document.activeElement).toBe(screen.getByRole('button',{name:detailName})));
   });
   it('exposes the score and status as the match card description',()=>{
     render(<App/>);
@@ -178,6 +201,25 @@ describe('focused usability refinements',()=>{
     expect(screen.getByRole('button',{name:'Use team settings'})).toBeTruthy();
   });
 
+  it('labels a cancelled match as cancelled rather than as having ended',()=>{
+    render(<App/>);
+    const bell=screen.getByRole('button',{name:'Match cancelled: Everton versus Wolverhampton Wanderers'});
+    expect(bell.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(screen.getByRole('button',{name:'Match details: Everton versus Wolverhampton Wanderers'}));
+    openMatchAlerts();
+    // The Match Centre overview also explains the cancellation; scope this
+    // assertion to the alert dialog it is testing.
+    expect(within(screen.getByRole('dialog')).getByText('This match was cancelled.')).toBeTruthy();
+  });
+
+  it('explains that a postponed match can alert again after it is rescheduled',()=>{
+    render(<App/>);
+    const bell=screen.getByRole('button',{name:'Enable all alerts (using team settings): Wolverhampton Wanderers versus West Ham United'});
+    expect(bell.title).toContain('postponed');
+    expect(bell.title).toContain('resume if it is rescheduled');
+    expect(bell.hasAttribute('disabled')).toBe(false);
+  });
+
   it('keeps keyboard focus in Settings after resetting all match alerts',async()=>{
     const base=structuredClone(mockSnapshot);
     await load({...base,settings:{...base.settings,matchAlerts:{'demo-1':{enabled:true,expiresAt:'2099-01-01T00:00:00Z'}}}});
@@ -278,5 +320,13 @@ describe('focused usability refinements',()=>{
     expect(screen.getByRole('checkbox',{name:'Launch with Windows'}).hasAttribute('disabled')).toBe(true);
     fireEvent.click(screen.getByRole('tab',{name:'Teams'}));
     expect(useApp.getState().snapshot?.settings.compact).toBe(true);
+  });
+  it('keeps match alert controls usable when a saved kickoff is malformed',async()=>{
+    const broken={...structuredClone(mockSnapshot.matches[0]),kickoff:'not-a-date'};
+    await load({...structuredClone(mockSnapshot),matches:[broken]});
+    render(<App/>);
+    fireEvent.click(screen.getByRole('button',{name:/Enable all alerts/}));
+    await waitFor(()=>expect(useApp.getState().snapshot?.settings.matchAlerts[broken.id]?.enabled).toBe(true));
+    expect(useApp.getState().snapshot?.settings.matchAlerts[broken.id]?.expiresAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 });

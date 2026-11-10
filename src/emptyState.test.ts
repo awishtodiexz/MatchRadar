@@ -8,5 +8,7 @@ it('distinguishes confirmed quiet, filtered, unavailable and unconfirmed live st
   expect(liveEmptyState({...base,scoreError:true})?.title).toBe('Live status unavailable');
   expect(liveEmptyState({...base,scoreError:true,followedOnly:true,live:1})?.title).toBe('Live status unavailable');
   expect(liveEmptyState({...base,scoreError:true,savedLive:true})?.title).toBe('Live scores awaiting confirmation');
+  expect(liveEmptyState({...base,checking:true})?.title).toBe('Checking Premier League live scores');
+  expect(liveEmptyState({...base,checking:true,both:true,competition:'live'})?.title).toBe('Checking live scores');
   expect(liveEmptyState({...base,view:'All'})).toBeNull();
 });

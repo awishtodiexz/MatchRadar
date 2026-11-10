@@ -695,6 +695,13 @@ async fn watch_resume(app: tauri::AppHandle) {
         if !resumed {
             continue;
         }
+        // A display may have been attached or detached while the machine slept.
+        // Recover placement now rather than waiting for the next watchdog tick.
+        if let Some(window) = app.get_webview_window("main") {
+            if let Err(error) = ensure_visible(&window) {
+                eprintln!("MatchRadar window recovery: {error}");
+            }
+        }
         let state = app.state::<State>();
         let idle = state
             .snapshot
@@ -710,10 +717,36 @@ async fn watch_resume(app: tauri::AppHandle) {
 fn show_main_window(window: &tauri::WebviewWindow) {
     let _ = window.show();
     let _ = window.unminimize();
-    let _ = window.set_focus();
+    // Place the window before focusing it so a widget restored from a detached
+    // display is brought onto the current monitor, not focused off-screen.
     if let Err(error) = ensure_visible(window) {
         eprintln!("MatchRadar window recovery: {error}");
     }
+    let _ = window.set_focus();
+}
+
+/// A sign-in launch (`--hidden`) stays in the tray only when the user asked to
+/// start hidden. A manual launch is always shown, even if it carries the flag.
+fn starts_in_tray(launched_hidden: bool, start_hidden: bool) -> bool {
+    launched_hidden && start_hidden
+}
+
+/// Re-register the global shortcut for a short window after a failed first
+/// attempt. Relaunches and sign-in can race another process that still owns the
+/// combination for a moment; a transient conflict should not cost the shortcut
+/// for the whole session.
+const SHORTCUT_RETRY_SECONDS: [u64; 4] = [1, 2, 4, 8];
+
+async fn retry_global_shortcut(app: tauri::AppHandle, shortcut: Shortcut) {
+    for delay in SHORTCUT_RETRY_SECONDS {
+        tokio::time::sleep(Duration::from_secs(delay)).await;
+        if app.global_shortcut().register(shortcut).is_ok() {
+            eprintln!("MatchRadar global shortcut: registered after retry");
+            return;
+        }
+    }
+    eprintln!("MatchRadar global shortcut: Ctrl+Shift+M is unavailable");
+    let _ = app.emit("shortcut-unavailable", ());
 }
 
 fn toggle_main_window(app: &tauri::AppHandle) {
@@ -730,13 +763,8 @@ fn toggle_main_window(app: &tauri::AppHandle) {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.show();
-                let _ = w.unminimize();
-                let _ = w.set_focus();
-                if let Err(error) = ensure_visible(&w) {
-                    eprintln!("MatchRadar window recovery: {error}");
-                }
+            if let Some(window) = app.get_webview_window("main") {
+                show_main_window(&window);
             }
         }))
         // Restore explicitly in setup before applying compact mode; plugin ready hooks
@@ -788,11 +816,13 @@ fn main() {
             delivery::cleanup(&mut snapshot, Utc::now());
             let launched_hidden = std::env::args().any(|arg| arg == "--hidden");
             let start_hidden = snapshot.settings.start_hidden;
+            let start_in_tray = starts_in_tray(launched_hidden, start_hidden);
             if let Some(window) = app.get_webview_window("main") {
-                // Restore placement/size without the visibility flag: the widget
-                // should not steal focus at login, and start-hidden gets one clean
-                // hide instead of a show/focus/hide flash.
-                if let Err(error) = window.restore_state(StateFlags::all() & !StateFlags::VISIBLE) {
+                // The configured window is created hidden. Restore only placement and
+                // size: a widget must never reopen from an old maximized/fullscreen
+                // state (it would fight compact sizing), and visibility is decided
+                // below so a sign-in launch never paints or steals focus first.
+                if let Err(error) = window.restore_state(StateFlags::POSITION | StateFlags::SIZE) {
                     eprintln!("MatchRadar window state: {error}");
                 }
                 if let Err(error) = window.set_always_on_top(snapshot.settings.always_on_top) {
@@ -809,14 +839,23 @@ fn main() {
                         eprintln!("MatchRadar compact size: {error}");
                     }
                 }
+                if !start_in_tray {
+                    if let Err(error) = window.show() {
+                        eprintln!("MatchRadar show window: {error}");
+                    }
+                }
                 // The saved position may belong to a monitor that is no longer attached.
+                // Hidden windows are left alone; showing one recovers its placement.
                 if let Err(error) = ensure_visible(&window) {
                     eprintln!("MatchRadar window recovery: {error}");
                 }
-                // Launch-at-sign-in passes --hidden; honour it only when the user
-                // asked to start in the tray.
-                if launched_hidden && start_hidden {
-                    let _ = window.hide();
+                // Only a launch-at-sign-in with the user's start-hidden preference on
+                // stays in the tray; a manual launch is brought to the foreground after
+                // it has been placed on a display.
+                if !start_in_tray {
+                    if let Err(error) = window.set_focus() {
+                        eprintln!("MatchRadar focus window: {error}");
+                    }
                 }
             }
             let detail_cache = snapshot.detail_cache.clone();
@@ -869,8 +908,8 @@ fn main() {
             }
             let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyM);
             if let Err(error) = app.global_shortcut().register(shortcut) {
-                eprintln!("MatchRadar global shortcut: {error}");
-                let _ = app.emit("shortcut-unavailable", ());
+                eprintln!("MatchRadar global shortcut: {error}; retrying");
+                tauri::async_runtime::spawn(retry_global_shortcut(app.handle().clone(), shortcut));
             }
             let show = MenuItem::with_id(app, "show", "Show / Hide", true, None::<&str>)?;
             let settings = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
@@ -1028,5 +1067,25 @@ mod persistence_tests {
         .unwrap();
         writer.unwrap().join().unwrap();
         assert_eq!(*disk.lock().unwrap(), 80);
+    }
+}
+
+#[cfg(test)]
+mod native_tests {
+    use super::*;
+
+    #[test]
+    fn only_a_sign_in_launch_with_start_hidden_stays_in_the_tray() {
+        assert!(starts_in_tray(true, true));
+        assert!(!starts_in_tray(true, false));
+        assert!(!starts_in_tray(false, true));
+        assert!(!starts_in_tray(false, false));
+    }
+
+    #[test]
+    fn shortcut_retry_is_bounded_and_positive() {
+        // Guards against accidentally retrying forever or busy-looping.
+        assert!(SHORTCUT_RETRY_SECONDS.iter().all(|delay| *delay > 0));
+        assert!(SHORTCUT_RETRY_SECONDS.iter().sum::<u64>() <= 30);
     }
 }
