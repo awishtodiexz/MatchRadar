@@ -9,6 +9,15 @@ export const clubs: Team[] = [
 const crestSize = 96;
 const combined = (path: string) => `https://a.espncdn.com/combiner/i?img=${path}&w=${crestSize}&h=${crestSize}`;
 
+// A crest must identify the same team. ESPN logo files are named by team id,
+// so a shuffled or malformed response cannot make a club wear another badge.
+function crestBelongsTo(url: URL, id: string): boolean {
+  if (!/^\d+$/.test(id)) return false;
+  const file = url.pathname.split('/').pop() ?? '';
+  const stem = file.split('.')[0];
+  return stem === id || stem.startsWith(`${id}-`);
+}
+
 export function crestCandidates(team: Team, theme: 'dark' | 'light' = 'light'): string[] {
   const urls: string[] = [];
   if (/^\d+$/.test(team.id)) {
@@ -18,7 +27,7 @@ export function crestCandidates(team: Team, theme: 'dark' | 'light' = 'light'): 
   if (team.logo) {
     try {
       const url = new URL(team.logo);
-      if (url.protocol === 'https:' && url.hostname === 'a.espncdn.com' && !url.username && !url.password && !url.port) urls.push(url.href);
+      if (url.protocol === 'https:' && url.hostname === 'a.espncdn.com' && !url.username && !url.password && !url.port && crestBelongsTo(url, team.id)) urls.push(url.href);
     } catch { /* Invalid provider URLs use the canonical crest. */ }
   }
   if (/^\d+$/.test(team.id)) urls.push(`https://a.espncdn.com/i/teamlogos/soccer/500/${team.id}.png`);

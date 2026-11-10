@@ -228,6 +228,38 @@ fn scoring_kind(kind: &str) -> bool {
             .iter()
             .any(|word| kind.contains(word)))
 }
+/// Commentary can describe a goal that was later chalked off, and shootout
+/// penalties are not goalscorers for the match. Neither may create a scorer row.
+fn non_goal_event(kind: &str, body: &str) -> bool {
+    let kind = kind.to_ascii_lowercase();
+    if kind.contains("missed") || kind.contains("saved") {
+        return true;
+    }
+    let lower = body.to_ascii_lowercase();
+    // Keep this phrase-specific. A legitimate goal can mention a flag or an
+    // on-field decision being overturned in its favour, so a bare "overturned"
+    // or "cancelled" must not disqualify the score.
+    [
+        "disallowed",
+        "no goal",
+        "chalked off",
+        "ruled out",
+        "goal cancelled",
+        "goal canceled",
+        "goal overturned",
+        "goal was cancelled",
+        "goal was canceled",
+        "goal was overturned",
+        "goal has been cancelled",
+        "goal has been canceled",
+        "goal has been overturned",
+        "goal is cancelled",
+        "goal is canceled",
+        "goal is overturned",
+    ]
+    .iter()
+    .any(|word| lower.contains(word))
+}
 fn array(v: &Value) -> &[Value] {
     v.as_array().map(Vec::as_slice).unwrap_or(&[])
 }
@@ -481,8 +513,11 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
             continue;
         }
         let team_id = event_team(&e["team"], &team_by_name);
-        if scoring_kind(&kind)
-            || (e["scoringPlay"].as_bool() == Some(true) && !kind.contains("disallowed"))
+        let shootout = e["shootout"].as_bool() == Some(true) || period == 5;
+        if !shootout
+            && !non_goal_event(&kind, &body)
+            && (scoring_kind(&kind)
+                || (e["scoringPlay"].as_bool() == Some(true) && !kind.contains("disallowed")))
         {
             let participant = e["participants"][0]["athlete"]["displayName"]
                 .as_str()
@@ -560,6 +595,12 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
         if kind.is_empty() {
             kind = commentary_kind(&body).into();
         }
+        let raw_period = play["period"]["number"]
+            .as_u64()
+            .or_else(|| entry["time"]["period"].as_u64());
+        let shootout = play["shootout"].as_bool() == Some(true)
+            || entry["shootout"].as_bool() == Some(true)
+            || raw_period == Some(5);
         let mut seconds = play["clock"]["value"]
             .as_f64()
             .or_else(|| entry["time"]["value"].as_f64())
@@ -601,9 +642,7 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
                     .unwrap_or(2),
             )
         } else {
-            play["period"]["number"]
-                .as_u64()
-                .or_else(|| entry["time"]["period"].as_u64())
+            raw_period
                 .filter(|n| *n > 0 && *n <= 10)
                 .or_else(|| commentary_period(&body, &minute, seconds))
         }) else {
@@ -637,7 +676,10 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
                 None
             }
         });
-        if scoring_kind(&kind) || (kind == "commentary" && body.starts_with("Goal!")) {
+        if !shootout
+            && !non_goal_event(&kind, &body)
+            && (scoring_kind(&kind) || (kind == "commentary" && body.starts_with("Goal!")))
+        {
             let participant = play["participants"][0]["athlete"]["displayName"]
                 .as_str()
                 .map(str::to_owned);
@@ -1172,7 +1214,7 @@ impl Cache {
             );
         }
         match fetch().await {
-            Ok(mut d) if d.match_id == id && d.league == league => {
+            Ok(mut d) if d.match_id == id && d.league == league && valid_cached(&d) => {
                 if d.statistics_note.is_some() {
                     let mut retained = false;
                     if let Some(saved) = &old {
@@ -1209,6 +1251,12 @@ impl Cache {
                 lock(&self.blocked).remove(&key);
                 Ok(d)
             }
+            Ok(d) if d.match_id == id && d.league == league => self.failed(
+                &key,
+                Failure::temporary("Summary exceeds cache and display limits"),
+                now,
+                old,
+            ),
             Ok(_) => self.failed(
                 &key,
                 Failure::temporary("Summary identity mismatch"),

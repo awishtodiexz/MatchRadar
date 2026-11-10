@@ -15,7 +15,9 @@ export function MatchDetails({match, settings, back}: {match:Match; settings:Set
     ? (match.status==='halftime'?'HALF-TIME':`LIVE ${match.detail || ''}`.trim())
     : match.status==='fulltime'?'FULL-TIME':match.status==='scheduled'?'SCHEDULED':(match.detail||match.status).toUpperCase();
   const statusText = match.scoreStale ? `${status} · Saved` : status;
-  const score = match.status==='scheduled'?timeLabel(match.kickoff):`${match.homeScore ?? '–'} – ${match.awayScore ?? '–'}`;
+  const awaitingScore = match.homeScore==null&&match.awayScore==null;
+  const showKickoff = match.status==='scheduled'||(awaitingScore&&(match.status==='postponed'||match.status==='cancelled'||match.status==='unknown'));
+  const score = showKickoff?timeLabel(match.kickoff):`${match.homeScore ?? '–'} – ${match.awayScore ?? '–'}`;
   return <>
     <div className="detail-route">
       <button className="back-link" onClick={back} aria-label="Back to matches" title="Back to matches (Esc)"><ArrowLeft size={16}/>Matches</button>
@@ -25,7 +27,7 @@ export function MatchDetails({match, settings, back}: {match:Match; settings:Set
     </div>
     <div className="detail-body" onScroll={event=>setCollapsed(event.currentTarget.scrollTop >= (hero.current?.offsetHeight??180)-24)}>
       <div className="detail-hero" ref={hero}>
-      <p className="detail-date"><time dateTime={match.kickoff}>{dateLabel(match.kickoff)} · {timeLabel(match.kickoff)}</time> local time</p>
+      <p className="detail-date"><time dateTime={match.kickoff}>{dateLabel(match.kickoff)} · {timeLabel(match.kickoff)}</time> local time{match.leg?` · ${match.leg}`:''}{match.aggregate?` · Aggregate ${match.aggregate}`:''}</p>
       <div className="versus">
         <div><Badge team={match.home}/><b title={match.home.name}>{match.home.name}</b></div>
         <div className="detail-score">

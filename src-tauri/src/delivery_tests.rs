@@ -511,15 +511,27 @@ fn full_queue_stays_bounded_and_rescheduled_reminders_are_discarded() {
     let mut s = goal();
     s.settings.favorites.push(s.matches[0].home.id.clone());
     s.settings.goals = true;
+    // Use a second match for the overflow assertion: a fresh scoreline for a match
+    // with a queued goal now supersedes that older entry rather than overflowing.
+    let mut second = s.matches[0].clone();
+    second.id = "match-2".into();
+    second.home_score = Some(0);
+    second.away_score = Some(0);
+    s.matches.push(second);
+    enqueue(&mut s, &["match-1".into(), "match-2".into()], now());
     for i in 1..MAX_PENDING {
         let mut event = s.pending_notifications[0].clone();
         event.match_id = format!("extra-{i}");
         event.id = id(&event.match_id, &event.kind);
         s.pending_notifications.push(event);
     }
-    s.matches[0].home_score = Some(2);
+    s.matches[1].home_score = Some(1);
     assert_eq!(
-        enqueue(&mut s, &["match-1".into()], now() + Duration::seconds(30)),
+        enqueue(
+            &mut s,
+            &["match-1".into(), "match-2".into()],
+            now() + Duration::seconds(30)
+        ),
         1
     );
     assert_eq!(s.pending_notifications.len(), MAX_PENDING);
@@ -529,6 +541,94 @@ fn full_queue_stays_bounded_and_rescheduled_reminders_are_discarded() {
     run(&mut s, now(), &mut sink);
     assert!(sink.calls.is_empty());
     assert!(s.pending_notifications.is_empty());
+}
+
+#[test]
+fn cached_kickoff_reminders_are_planned_without_a_provider_response() {
+    let mut s = subscribed("scheduled");
+    s.matches[0].kickoff = (now() + Duration::minutes(10)).to_rfc3339();
+    s.settings.reminder_minutes = 15;
+    // A poll cycle whose fixture and score requests both failed still calls
+    // revalidate, which has all the data a reminder needs.
+    revalidate(&mut s, &[], now());
+    assert_eq!(s.pending_notifications.len(), 1);
+    assert_eq!(s.pending_notifications[0].id, "match-1:reminder");
+    let mut sink = Sink::default();
+    run(&mut s, now(), &mut sink);
+    assert_eq!(sink.calls, ["match-1:reminder"]);
+    assert_eq!(s.sent_notifications, sink.calls);
+}
+
+#[test]
+fn successful_poll_cycle_plans_each_reminder_once_across_revalidate_and_enqueue() {
+    let mut s = subscribed("scheduled");
+    s.matches[0].kickoff = (now() + Duration::minutes(10)).to_rfc3339();
+    s.settings.reminder_minutes = 15;
+    // The poll loop calls revalidate and then enqueue for the same confirmed cycle.
+    revalidate(&mut s, &[], now());
+    enqueue(&mut s, &[], now());
+    assert_eq!(s.pending_notifications.len(), 1);
+    let mut sink = Sink::default();
+    run(&mut s, now(), &mut sink);
+    assert_eq!(sink.calls, ["match-1:reminder"]);
+}
+
+#[test]
+fn cached_reminder_planning_never_invents_score_events() {
+    let mut s = goal();
+    let seen_at = s.alert_baselines["match-1"].seen_at.clone();
+    s.matches[0].home_score = Some(2);
+    revalidate(&mut s, &[], now() + Duration::seconds(30));
+    assert_eq!(s.pending_notifications.len(), 1);
+    assert_eq!(s.pending_notifications[0].id, "match-1:score:1:0");
+    assert_eq!(s.alert_baselines["match-1"].home, Some(1));
+    assert_eq!(s.alert_baselines["match-1"].seen_at, seen_at);
+}
+
+#[test]
+fn shortening_the_reminder_window_replans_the_undelivered_reminder() {
+    let mut s = reminder();
+    assert_eq!(s.pending_notifications[0].id, "match-1:reminder");
+    let mut settings = s.settings.clone();
+    settings.reminder_minutes = 15;
+    crate::model::apply_settings_at(&mut s, settings, now());
+    assert!(s.pending_notifications.is_empty());
+    // Fifteen minutes before the kickoff of a 60-minute reminder window.
+    let later = now() + Duration::minutes(45);
+    revalidate(&mut s, &[], later);
+    assert_eq!(s.pending_notifications.len(), 1);
+    assert_eq!(s.pending_notifications[0].id, "match-1:reminder");
+    let mut sink = Sink::default();
+    run(&mut s, later, &mut sink);
+    assert_eq!(sink.calls, ["match-1:reminder"]);
+}
+
+#[test]
+fn muting_then_unmuting_before_kickoff_restores_the_reminder() {
+    let mut s = reminder();
+    let mut muted = s.settings.clone();
+    muted.match_alerts.get_mut("match-1").unwrap().enabled = false;
+    crate::model::apply_settings_at(&mut s, muted, now());
+    assert!(s.pending_notifications.is_empty());
+    let mut enabled = s.settings.clone();
+    enabled.match_alerts.get_mut("match-1").unwrap().enabled = true;
+    crate::model::apply_settings_at(&mut s, enabled, now());
+    revalidate(&mut s, &[], now());
+    assert_eq!(s.pending_notifications.len(), 1);
+    assert_eq!(s.pending_notifications[0].id, "match-1:reminder");
+}
+
+#[test]
+fn a_newer_confirmed_goal_supersedes_an_undelivered_older_scoreline() {
+    let mut s = goal();
+    s.pending_notifications[0].attempts = 2;
+    s.matches[0].home_score = Some(2);
+    enqueue(&mut s, &["match-1".into()], now() + Duration::seconds(30));
+    assert_eq!(s.pending_notifications.len(), 1);
+    assert_eq!(s.pending_notifications[0].id, "match-1:score:2:0");
+    let mut sink = Sink::default();
+    run(&mut s, now() + Duration::seconds(30), &mut sink);
+    assert_eq!(sink.calls, ["match-1:score:2:0"]);
 }
 
 #[test]

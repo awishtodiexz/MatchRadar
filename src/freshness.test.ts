@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { updateStatus } from './freshness';
+import { competitionStatus, updateStatus } from './freshness';
 import { mockSnapshot } from './test-fixtures/fixtures';
 
 describe('independent source freshness', () => {
@@ -21,5 +21,15 @@ describe('independent source freshness', () => {
     expect(updateStatus({...mockSnapshot,updatedAt:'checked'})).toEqual({label:'SCORES CHECKED',timestamp:'checked'});
     expect(updateStatus({...mockSnapshot,refreshing:true})).toEqual({label:'UPDATING'});
     expect(updateStatus(null)).toEqual({label:'CONNECTING'});
+  });
+  it('never claims a checked timestamp when only one selected competition reported', () => {
+    const snapshot = {...mockSnapshot,leagueStatus:{'eng.1':{updatedAt:'2026-11-06T10:00:00Z',fixtureUpdatedAt:'2026-11-05T10:00:00Z'}}};
+    const both = competitionStatus(snapshot,'both');
+    expect(both.updatedAt).toBeNull();
+    expect(both.fixtureUpdatedAt).toBeNull();
+    expect(both.error).toBeNull();
+    // The Premier League alone is still reported accurately.
+    expect(competitionStatus(snapshot,'premierLeague').updatedAt).toBe('2026-11-06T10:00:00Z');
+    expect(updateStatus(snapshot,'both').label).toBe('CONNECTING');
   });
 });

@@ -115,10 +115,11 @@ fn still_relevant(
 
 pub fn cleanup(snapshot: &mut Snapshot, now: DateTime<Utc>) {
     let mut seen = HashSet::new();
+    let mut dropped_reminders = Vec::new();
     snapshot.pending_notifications = std::mem::take(&mut snapshot.pending_notifications)
         .into_iter()
         .filter(|event| {
-            valid(event)
+            let keep = valid(event)
                 && date(&event.created_at).is_some_and(|t| t <= now)
                 && date(&event.expires_at).is_some_and(|t| t > now)
                 && !snapshot.sent_notifications.contains(&event.id)
@@ -128,10 +129,23 @@ pub fn cleanup(snapshot: &mut Snapshot, now: DateTime<Utc>) {
                     .iter()
                     .find(|m| m.id == event.match_id)
                     .is_none_or(|m| still_relevant(snapshot, event, m, now))
-                && seen.insert(event.id.clone())
+                && seen.insert(event.id.clone());
+            if !keep && matches!(event.kind, NotificationKind::Reminder) {
+                dropped_reminders.push(event.match_id.clone());
+            }
+            keep
         })
         .take(MAX_PENDING)
         .collect();
+    // A reminder that never reached the OS must not leave its kickoff marked as
+    // reminded. Clearing the marker lets a later mute/unmute, reminder-time change
+    // or reschedule plan the reminder again; the sent list still suppresses an
+    // already-delivered reminder.
+    for match_id in dropped_reminders {
+        if let Some(baseline) = snapshot.alert_baselines.get_mut(&match_id) {
+            baseline.reminder_kickoff = None;
+        }
+    }
     // Corrupt/far-future cooldowns must not disable alerts indefinitely after a clock change.
     if !snapshot
         .notification_retry_after
@@ -143,14 +157,48 @@ pub fn cleanup(snapshot: &mut Snapshot, now: DateTime<Utc>) {
     }
 }
 
-/// Called only with newly confirmed observations; retries never re-run the planner.
-pub fn enqueue(snapshot: &mut Snapshot, score_ids: &[String], now: DateTime<Utc>) -> usize {
-    crate::alerts::cleanup(snapshot, now);
-    cleanup(snapshot, now);
-    let mut observed = crate::refresh::notification_view(snapshot, score_ids);
-    let candidates = crate::alerts::plan(&mut observed, now);
-    snapshot.alert_baselines = observed.alert_baselines;
-    snapshot.sent_notifications = observed.sent_notifications;
+fn build_event(
+    observed: &Snapshot,
+    event_id: &str,
+    body: &str,
+    now: DateTime<Utc>,
+) -> Option<PendingNotification> {
+    observed.matches.iter().find_map(|m| {
+        let kind = [
+            NotificationKind::Reminder,
+            NotificationKind::Start,
+            NotificationKind::Goal {
+                home: m.home_score.unwrap_or(0),
+                away: m.away_score.unwrap_or(0),
+            },
+        ]
+        .into_iter()
+        .find(|kind| id(&m.id, kind) == event_id)?;
+        let expiry = match kind {
+            NotificationKind::Reminder => date(&m.kickoff)?.min(now + lifetime(&kind)),
+            _ => now + lifetime(&kind),
+        };
+        Some(PendingNotification {
+            id: event_id.to_owned(),
+            match_id: m.id.clone(),
+            home_team: m.home.id.clone(),
+            away_team: m.away.id.clone(),
+            body: body.to_owned(),
+            kind,
+            created_at: now.to_rfc3339(),
+            expires_at: expiry.to_rfc3339(),
+            next_attempt_at: now.to_rfc3339(),
+            attempts: 0,
+        })
+    })
+}
+
+fn queue_candidates(
+    snapshot: &mut Snapshot,
+    observed: &Snapshot,
+    candidates: Vec<(String, String)>,
+    now: DateTime<Utc>,
+) -> usize {
     let mut overflow = 0;
     for (event_id, body) in candidates {
         if snapshot
@@ -160,42 +208,35 @@ pub fn enqueue(snapshot: &mut Snapshot, score_ids: &[String], now: DateTime<Utc>
         {
             continue;
         }
-        let event = observed.matches.iter().find_map(|m| {
-            let kind = [
-                NotificationKind::Reminder,
-                NotificationKind::Start,
-                NotificationKind::Goal {
-                    home: m.home_score.unwrap_or(0),
-                    away: m.away_score.unwrap_or(0),
-                },
-            ]
-            .into_iter()
-            .find(|kind| id(&m.id, kind) == event_id)?;
-            let expiry = match kind {
-                NotificationKind::Reminder => date(&m.kickoff)?.min(now + lifetime(&kind)),
-                _ => now + lifetime(&kind),
-            };
-            Some(PendingNotification {
-                id: event_id.clone(),
-                match_id: m.id.clone(),
-                home_team: m.home.id.clone(),
-                away_team: m.away.id.clone(),
-                body: body.clone(),
-                kind,
-                created_at: now.to_rfc3339(),
-                expires_at: expiry.to_rfc3339(),
-                next_attempt_at: now.to_rfc3339(),
-                attempts: 0,
-            })
-        });
-        if let Some(event) = event.filter(valid) {
-            if snapshot.pending_notifications.len() < MAX_PENDING {
-                snapshot.pending_notifications.push(event);
-            } else {
-                overflow += 1;
-            }
+        let Some(event) = build_event(observed, &event_id, &body, now).filter(valid) else {
+            continue;
+        };
+        // A newer confirmed scoreline makes an older undelivered goal obsolete.
+        // Delivering both after a pause would replay stale scores for the same match.
+        if matches!(event.kind, NotificationKind::Goal { .. }) {
+            snapshot.pending_notifications.retain(|pending| {
+                !(pending.match_id == event.match_id
+                    && matches!(pending.kind, NotificationKind::Goal { .. }))
+            });
+        }
+        if snapshot.pending_notifications.len() < MAX_PENDING {
+            snapshot.pending_notifications.push(event);
+        } else {
+            overflow += 1;
         }
     }
+    overflow
+}
+
+/// Called only with newly confirmed observations; retries never re-run the planner.
+pub fn enqueue(snapshot: &mut Snapshot, score_ids: &[String], now: DateTime<Utc>) -> usize {
+    crate::alerts::cleanup(snapshot, now);
+    cleanup(snapshot, now);
+    let mut observed = crate::refresh::notification_view(snapshot, score_ids);
+    let candidates = crate::alerts::plan(&mut observed, now);
+    snapshot.alert_baselines = observed.alert_baselines.clone();
+    snapshot.sent_notifications = observed.sent_notifications.clone();
+    let overflow = queue_candidates(snapshot, &observed, candidates, now);
     cleanup(snapshot, now);
     overflow
 }
@@ -341,8 +382,34 @@ pub fn submit_due(
     Ok(())
 }
 
-// Hold migrated pending alerts until their matches are freshly confirmed.
+// Kickoff times are already durable, so a reminder must not wait for the provider:
+// a poll cycle that failed both fixtures and scores still has everything a reminder
+// needs. Score events stay out of this path because only a newly confirmed response
+// may advance their baselines.
+fn queue_cached_reminders(snapshot: &mut Snapshot, now: DateTime<Utc>) {
+    let mut observed = snapshot.clone();
+    observed
+        .matches
+        .retain(|m| m.status == "scheduled" && !m.score_stale);
+    let candidates: Vec<_> = crate::alerts::plan(&mut observed, now)
+        .into_iter()
+        .filter(|(event_id, _)| event_id.ends_with(":reminder"))
+        .collect();
+    snapshot.alert_baselines = observed.alert_baselines.clone();
+    snapshot.sent_notifications = observed.sent_notifications.clone();
+    if candidates.is_empty() {
+        return;
+    }
+    cleanup(snapshot, now);
+    queue_candidates(snapshot, &observed, candidates, now);
+    cleanup(snapshot, now);
+}
+
+// Called after every poll cycle, even a failed one. Cached reminders are planned
+// first; then migrated pending alerts stay held until their matches are freshly
+// confirmed.
 pub fn revalidate(snapshot: &mut Snapshot, score_ids: &[String], now: DateTime<Utc>) {
+    queue_cached_reminders(snapshot, now);
     if !snapshot.revalidate_pending {
         return;
     }

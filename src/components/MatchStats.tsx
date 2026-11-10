@@ -73,9 +73,11 @@ export function MatchStats({match,statistics}:{match:Match;statistics:MatchSumma
   if(!sections.length) return <p className="field-note">Statistics are not available for this match.</p>;
 
   const active=sections.some(section=>section.title===group)?group:'All';
-  return <><div className="stats-toolbar"><span>Match totals · {byName.size} metrics</span><select aria-label="Statistic group" value={active} onChange={event=>setGroup(event.target.value)}><option value="All">All statistics</option>{sections.map(section=><option key={section.title}>{section.title}</option>)}</select></div><div className="stat-comparison" role="table" aria-label="Team statistics">
-    <div className="sr-only" role="row"><strong role="columnheader">{match.home.name}</strong><span role="columnheader">Statistic</span><strong role="columnheader">{match.away.name}</strong></div>
-    {sections.filter(section=>active==='All'||section.title===active).map(section=><div className="stat-section" role="rowgroup" key={section.title}>
+  const visibleSections=sections.filter(section=>active==='All'||section.title===active);
+  const visibleCount=visibleSections.reduce((count,section)=>count+section.rows.length,0);
+  return <><div className="stats-toolbar"><span>{active==='All'?`Match totals · ${byName.size} ${byName.size===1?'metric':'metrics'}`:`${active} · ${visibleCount} ${visibleCount===1?'metric':'metrics'}`}</span><select aria-label="Statistic group" value={active} onChange={event=>setGroup(event.target.value)}><option value="All">All statistics</option>{sections.map(section=><option key={section.title}>{section.title}</option>)}</select></div><div className="stat-comparison" role="table" aria-label="Team statistics">
+    <div className="stat-teams" role="row"><strong role="columnheader" aria-label={match.home.name} title={match.home.name}>{match.home.short||match.home.name}</strong><span role="columnheader">Statistic</span><strong role="columnheader" aria-label={match.away.name} title={match.away.name}>{match.away.short||match.away.name}</strong></div>
+    {visibleSections.map(section=><div className="stat-section" role="rowgroup" key={section.title}>
       <div className="stat-section-title" role="row"><span role="columnheader" aria-colspan={3}>{section.title}</span></div>
       {section.rows.map(pair=>{
         const left=numeric(pair.home?.value),right=numeric(pair.away?.value);

@@ -9,6 +9,11 @@ use tauri::{PhysicalPosition, PhysicalRect, WebviewWindow};
 /// A smaller overlap is not a usable grab target for a compact widget.
 const MIN_VISIBLE_WIDTH: i64 = 64;
 const MIN_VISIBLE_HEIGHT: i64 = 48;
+/// The widget is frameless and can only be moved by dragging its 48px header,
+/// so a rectangle whose top edge is above the display is not recoverable by the
+/// user even when plenty of the body remains visible. A small tolerance keeps an
+/// almost-flush window (and normal DWM frame/monitor differences) untouched.
+const HEADER_TOLERANCE: i64 = 24;
 
 /// A physical-pixel rectangle, kept wider than the native types to avoid math overflow.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -51,9 +56,13 @@ impl Bounds {
     }
 
     fn is_usable_on(self, monitor: Self) -> bool {
-        self.overlap(monitor).is_some_and(|(width, height)| {
-            width >= MIN_VISIBLE_WIDTH && height >= MIN_VISIBLE_HEIGHT
-        })
+        // The header (drag region) runs along the top edge. If that edge is above
+        // the monitor, the visible part of the widget cannot be dragged back.
+        let header_reachable = self.y >= monitor.y.saturating_sub(HEADER_TOLERANCE);
+        header_reachable
+            && self.overlap(monitor).is_some_and(|(width, height)| {
+                width >= MIN_VISIBLE_WIDTH && height >= MIN_VISIBLE_HEIGHT
+            })
     }
 }
 
@@ -227,6 +236,49 @@ mod tests {
                 &[secondary, primary()],
                 Some(primary())
             ),
+            None
+        );
+    }
+
+    #[test]
+    fn a_visible_body_with_an_offscreen_drag_header_is_recovered() {
+        // 400px of the widget is still visible, but the frameless drag header is
+        // above the work area, so the user could not move it back themselves.
+        assert_eq!(
+            placement(widget_390x700(500, -300), &[primary()], Some(primary())),
+            Some((765, 170))
+        );
+    }
+
+    #[test]
+    fn a_header_clipped_within_the_tolerance_is_left_alone() {
+        // A few clipped pixels still leave the drag header grabbable.
+        assert_eq!(
+            placement(
+                widget_390x700(500, -HEADER_TOLERANCE),
+                &[primary()],
+                Some(primary())
+            ),
+            None
+        );
+        assert_eq!(
+            placement(
+                widget_390x700(500, -HEADER_TOLERANCE - 1),
+                &[primary()],
+                Some(primary())
+            ),
+            Some((765, 170))
+        );
+    }
+
+    #[test]
+    fn a_header_on_a_stacked_monitor_is_reachable() {
+        // Above the primary monitor is a valid placement when the top edge is
+        // inside that monitor; the header rule must not recenter it.
+        let upper = rect(0, -1080, 1920, 1080);
+        let lower = primary();
+        assert_eq!(
+            placement(widget_390x700(500, -100), &[upper, lower], Some(lower)),
             None
         );
     }

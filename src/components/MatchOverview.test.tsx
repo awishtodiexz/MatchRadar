@@ -56,3 +56,12 @@ it('shows the supplied match facts and explicitly marks missing fields',()=>{
  expect(screen.getByText('31,876')).toBeTruthy();expect(screen.getByText('31,629')).toBeTruthy();unmount();
  show(base,data);expect(screen.getAllByText('Not provided')).toHaveLength(4);
 });
+
+it('surfaces triple-hyphen VAR reviews without treating them as goals',()=>{
+ const {container}=show(base,{...data,events:[
+  {id:'var',teamId:base.away.id,minute:"23'",period:1,seconds:1380,kind:'var---referee-decision-cancelled',text:'VAR Decision: Card upgraded Igor Thiago (Brentford).',participants:['Igor Thiago']},
+ ]});
+ expect(container.querySelector('.match-events .event.goal')).toBeNull();
+ expect(screen.getByRole('img',{name:'VAR review · Referee decision cancelled'})).toBeTruthy();
+ expect(screen.getByText('Igor Thiago')).toBeTruthy();
+});

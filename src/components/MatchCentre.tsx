@@ -27,6 +27,8 @@ export function MatchCentre({match}:{match:Match}) {
   const sectionId=useId();
   const events=data?.events??[];
   const visibleEvents=events.filter(event=>(eventFilter==='all'||keyEvent(event.kind))&&(eventType==='all'||(eventType==='goals'?isGoal(event.kind):eventType==='cards'?isCard(event.kind):eventType==='substitutions'?event.kind==='substitution':eventType==='shots'?/shot|attempt|chance/i.test(event.kind):/var|delay|injury|review/i.test(event.kind))));
+  const filtered=visibleEvents.length!==events.length;
+  const resetFilters=()=>{setEventFilter('all');setEventType('all');};
   const teams=[match.home,match.away];
   const formTeams=teams.filter(team=>(data?.form?.[team.id]?.length??0)>0);
   const leaderTeams=teams.filter(team=>data?.leaders?.some(leader=>leader.teamId===team.id));
@@ -78,14 +80,14 @@ export function MatchCentre({match}:{match:Match}) {
     </>}
     {tab==='Commentary'&&<>
       <div className="timeline-toolbar">
-        <span>{newestFirst?'Latest first':'Oldest first'} · {visibleEvents.length} {visibleEvents.length===1?'event':'events'}</span>
+        <span>{newestFirst?'Latest first':'Oldest first'} · {filtered?`${visibleEvents.length} of ${events.length} events`:`${events.length} ${events.length===1?'event':'events'}`}</span>
         <div className="timeline-filter" role="group" aria-label="Commentary filter">
           <button aria-pressed={eventFilter==='all'&&eventType==='all'} onClick={()=>{setEventFilter('all');setEventType('all');}}>All</button>
           <button aria-pressed={eventFilter==='key'} onClick={()=>{setEventFilter('key');setEventType('all');}}>Key events</button>
         </div>
       </div>
       <div className="commentary-options"><select aria-label="Commentary event type" value={eventType} onChange={event=>{setEventType(event.target.value);setEventFilter('all');}}><option value="all">All event types</option><option value="goals">Goals</option><option value="cards">Cards</option><option value="substitutions">Substitutions</option><option value="shots">Shots &amp; chances</option><option value="stoppages">VAR &amp; stoppages</option></select><select aria-label="Commentary order" value={newestFirst?'newest':'oldest'} onChange={event=>setNewestFirst(event.target.value==='newest')}><option value="newest">Latest first</option><option value="oldest">Oldest first</option></select></div>
-      {visibleEvents.length?<MatchEvents match={match} events={visibleEvents} commentary newestFirst={newestFirst}/>:<p className="field-note">No events match this filter.</p>}
+      {visibleEvents.length?<MatchEvents match={match} events={visibleEvents} commentary newestFirst={newestFirst}/>:<p className="field-note commentary-empty">No events match this filter. <button type="button" className="text-button" onClick={resetFilters}>Clear filters</button></p>}
     </>}
     {tab==='Stats'&&data&&<>{data.statisticsNote&&<p className="field-note" role="status">{data.statisticsNote}</p>}<MatchStats match={match} statistics={data.statistics}/></>}
     {tab==='Lineups'&&data&&<MatchLineups match={match} players={data.players} substitutions={data.substitutions} formations={data.formations} coaches={data.coaches}/>}

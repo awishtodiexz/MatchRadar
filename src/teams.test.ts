@@ -22,6 +22,16 @@ describe('club crests', () => {
   ]);
   expect(crestCandidates({id:'custom', name:'Club', short:'CLB', logo:'https://evil.example/logo.png'})).toEqual([]);
  });
+ it('ignores a provider logo that belongs to another club', () => {
+  expect(crestCandidates({id:'370', name:'Fulham', short:'FUL', logo:'https://a.espncdn.com/i/teamlogos/soccer/500/371.png'})).toEqual([
+   combiner('/i/teamlogos/soccer/500/370.png'),
+   canonical('370')
+  ]);
+  expect(crestCandidates({id:'370', name:'Fulham', short:'FUL', logo:'https://a.espncdn.com/i/teamlogos/soccer/500/370.png'})).toEqual([
+   combiner('/i/teamlogos/soccer/500/370.png'),
+   canonical('370')
+  ]);
+ });
  it('takes the small dark crest before the light and raw fallbacks without duplicates', () => {
   expect(crestCandidates({id:'367', name:'Tottenham Hotspur', short:'TOT', logo:'https://a.espncdn.com/i/teamlogos/soccer/500/367.png'}, 'dark')).toEqual([
    combiner('/i/teamlogos/soccer/500-dark/367.png'),

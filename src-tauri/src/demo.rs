@@ -197,6 +197,8 @@ fn mock_at(now: DateTime<Utc>) -> Vec<Match> {
                 }
                 .into(),
                 competition: Competition::PremierLeague.name().into(),
+                leg: None,
+                aggregate: None,
                 league: Competition::PremierLeague,
             },
         )

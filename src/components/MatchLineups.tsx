@@ -92,9 +92,11 @@ export function MatchLineups({match,players,substitutions=[],formations={},coach
         aria-controls={sectionId+'-panel'} tabIndex={active.id===team.id?0:-1} className="lineup-tab"
         title={team.name} onClick={()=>setTeamId(team.id)}
         onKeyDown={event=>{
-          if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
+          if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
           event.preventDefault();
-          const next = teams[(teams.findIndex(team=>team.id===active.id)+(event.key==='ArrowRight'?1:teams.length-1))%teams.length];
+          const current=Math.max(0,teams.findIndex(team=>team.id===active.id));
+          const nextIndex=event.key==='Home'?0:event.key==='End'?teams.length-1:event.key==='ArrowRight'?(current+1)%teams.length:(current+teams.length-1)%teams.length;
+          const next=teams[nextIndex];
           setTeamId(next.id);
           document.getElementById(sectionId+'-tab-'+next.id)?.focus();
         }}>
@@ -105,6 +107,7 @@ export function MatchLineups({match,players,substitutions=[],formations={},coach
       <div className="lineup-heading"><h3>{active.name}</h3>{formation&&<span className="formation">{formation}</span>}</div>
       <div className="coach-row"><span>Coach</span><strong>{coaches.filter(coach=>coach.teamId===active.id).map(coach=>coach.name).join(', ')||'Not provided by ESPN'}</strong></div>
       {pitch&&<LineupPitch team={active} pitch={pitch}/>}
+      {!pitch&&starters.length===11&&<p className="field-note">Formation unavailable for this lineup.</p>}
       {!selected.length&&<p className="field-note">Lineup unavailable</p>}
       {starters.length>0&&<><h4>Starting XI <small className="kickoff-note">at kickoff</small></h4><PlayerList players={starters} substitutions={teamSubs}/></>}
       {starters.length===0&&selected.length>0&&<><h4>Squad</h4><PlayerList players={selected} substitutions={teamSubs}/></>}

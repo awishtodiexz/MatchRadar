@@ -78,6 +78,21 @@ async fn queries(
 fn field<'a>(v: &'a Value, key: &str) -> &'a str {
     v.get(key).and_then(Value::as_str).unwrap_or("")
 }
+/// Provider text that is safe to persist and send over IPC: trimmed, bounded,
+/// and free of control characters. Returns None for values that cannot be
+/// displayed as a single readable label.
+fn bounded(value: &str, limit: usize) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty() && !value.chars().any(char::is_control))
+        .then(|| value.chars().take(limit).collect())
+}
+/// Identity fields must not be truncated: two provider IDs sharing a prefix
+/// would collide. Reject them instead.
+fn identity(value: &str, limit: usize) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty() && value.len() <= limit && !value.chars().any(char::is_control))
+        .then(|| value.to_owned())
+}
 fn safe_crest(value: &str) -> Option<String> {
     let url = reqwest::Url::parse(value).ok()?;
     if url.scheme() != "https"
@@ -105,10 +120,23 @@ fn safe_crest(value: &str) -> Option<String> {
     }
     Some(url.to_string())
 }
+/// The crest filename must identify the same team. A malformed or shuffled
+/// response must never make one club wear another club's badge.
+fn crest_for(value: &str, id: &str) -> Option<String> {
+    let url = safe_crest(value)?;
+    let path = reqwest::Url::parse(&url).ok()?.path().to_owned();
+    let file = path.rsplit('/').next()?;
+    let stem = file.split('.').next()?;
+    let same_team = stem == id
+        || stem
+            .strip_prefix(id)
+            .is_some_and(|rest| rest.starts_with('-'));
+    same_team.then_some(url)
+}
 fn crest(team: &Value, id: &str) -> Option<String> {
     team.get("logo")
         .and_then(Value::as_str)
-        .and_then(safe_crest)
+        .and_then(|value| crest_for(value, id))
         .or_else(|| {
             team.get("logos")
                 .and_then(Value::as_array)?
@@ -116,7 +144,7 @@ fn crest(team: &Value, id: &str) -> Option<String> {
                 .filter_map(|logo| {
                     logo.get("href")
                         .and_then(Value::as_str)
-                        .and_then(safe_crest)
+                        .and_then(|value| crest_for(value, id))
                 })
                 .next()
         })
@@ -134,17 +162,51 @@ fn crest(team: &Value, id: &str) -> Option<String> {
 }
 fn team(side: &Value) -> Option<Team> {
     let t = side.get("team")?;
-    let id = field(t, "id");
-    let name = field(t, "displayName");
-    if id.is_empty() || name.is_empty() {
-        return None;
-    }
+    let id = identity(field(t, "id"), 128)?;
+    let name = bounded(field(t, "displayName"), 120)?;
+    let short = bounded(field(t, "abbreviation"), 16).unwrap_or_default();
     Some(Team {
-        id: id.into(),
-        name: name.into(),
-        short: field(t, "abbreviation").into(),
-        logo: crest(t, id),
+        id: id.clone(),
+        name,
+        short,
+        logo: crest(t, &id),
     })
+}
+/// UCL knockout fixtures carry their leg in a structured field plus a notes
+/// headline. Both are provider text, so they need the same bounds as names.
+fn leg_label(competition: &Value) -> Option<String> {
+    competition["leg"]["displayValue"]
+        .as_str()
+        .and_then(|value| bounded(value, 40))
+        .or_else(|| {
+            competition["notes"].as_array()?.iter().find_map(|note| {
+                let headline = note["headline"].as_str()?;
+                let lower = headline.to_ascii_lowercase();
+                if !(lower.starts_with("1st leg") || lower.starts_with("2nd leg")) {
+                    return None;
+                }
+                let label = headline.split(" - ").next().unwrap_or(headline);
+                bounded(label, 40)
+            })
+        })
+}
+/// A second leg's series scores are per club; convert them to a home-away
+/// aggregate such as "6-4" without inventing a value when either side is absent.
+fn aggregate_score(competition: &Value, home_id: &str, away_id: &str) -> Option<String> {
+    let rows = competition["series"]["competitors"].as_array()?;
+    let score = |id: &str| {
+        rows.iter()
+            .find(|row| field(row, "id") == id)
+            .and_then(|row| row["aggregateScore"].as_f64())
+            .filter(|value| {
+                value.is_finite()
+                    && *value >= 0.0
+                    && value.fract() == 0.0
+                    && *value <= u32::MAX as f64
+            })
+            .map(|value| value as u32)
+    };
+    Some(format!("{}-{}", score(home_id)?, score(away_id)?))
 }
 fn score(side: &Value) -> Option<u32> {
     side.get("score").and_then(|s| {
@@ -167,11 +229,8 @@ fn parse_kickoff(value: &str) -> Option<DateTime<Utc>> {
         .map(|date| date.with_timezone(&Utc))
 }
 fn normalize(event: &Value, league: Competition) -> Option<Match> {
-    let id = field(event, "id");
+    let id = identity(field(event, "id"), 128)?;
     let kickoff = parse_kickoff(field(event, "date"))?;
-    if id.is_empty() {
-        return None;
-    }
     let competition = event.get("competitions")?.as_array()?.first()?;
     let competitors = competition.get("competitors")?.as_array()?;
     let home = competitors
@@ -210,22 +269,29 @@ fn normalize(event: &Value, league: Competition) -> Option<Match> {
     } else {
         field(kind, "shortDetail")
     };
+    // ESPN puts "0" in both competitors for fixtures it has not played yet.
+    // Those are placeholders, not a 0-0 result: keep missing scores missing.
+    let played = matches!(mapped, "live" | "halftime" | "fulltime" | "suspended");
+    let home_score = played.then(|| score(home)).flatten();
+    let away_score = played.then(|| score(away)).flatten();
+    let home = team(home)?;
+    let away = team(away)?;
+    let leg = leg_label(competition);
+    let aggregate = aggregate_score(competition, &home.id, &away.id);
     Some(Match {
         score_stale: false,
         score_updated_at: None,
-        id: id.into(),
-        home: team(home)?,
-        away: team(away)?,
-        home_score: score(home),
-        away_score: score(away),
+        id,
+        home_score,
+        away_score,
+        home,
+        away,
         kickoff: kickoff.to_rfc3339(),
         status: mapped.into(),
-        detail: if detail.is_empty() {
-            mapped.into()
-        } else {
-            detail.into()
-        },
+        detail: bounded(&detail, 200).unwrap_or_else(|| mapped.into()),
         competition: league.name().into(),
+        leg,
+        aggregate,
         league,
     })
 }
@@ -433,20 +499,22 @@ pub fn recent_result(m: &Match, today: NaiveDate) -> bool {
                 && d.date_naive() <= today + Duration::days(1)
         })
 }
-pub async fn scores(
-    client: &reqwest::Client,
-    league: Competition,
+/// A long match can still be in progress after the UTC date rolls over. Query
+/// the previous day whenever any active game (including a suspended one that
+/// resumes) kicked off then; otherwise its score would never be confirmed.
+fn score_query_dates(
     today: NaiveDate,
+    local: NaiveDate,
     cached: &[Match],
-) -> FetchOutcome {
-    let local = Local::now().date_naive();
+    league: Competition,
+) -> Vec<String> {
     let mut dates = vec![today.format("%Y%m%d").to_string()];
     if local != today {
         dates.push(local.format("%Y%m%d").to_string());
     }
     if cached.iter().any(|m| {
         m.league == league
-            && (m.status == "live" || m.status == "halftime")
+            && matches!(m.status.as_str(), "live" | "halftime" | "suspended")
             && parse_kickoff(&m.kickoff)
                 .is_some_and(|d| d.date_naive() == today - Duration::days(1))
     }) {
@@ -454,6 +522,15 @@ pub async fn scores(
     }
     dates.sort();
     dates.dedup();
+    dates
+}
+pub async fn scores(
+    client: &reqwest::Client,
+    league: Competition,
+    today: NaiveDate,
+    cached: &[Match],
+) -> FetchOutcome {
+    let dates = score_query_dates(today, Local::now().date_naive(), cached, league);
     queries(client, league, &dates).await
 }
 #[cfg(test)]
@@ -529,6 +606,66 @@ mod response_tests {
         let merged = merge(vec![m], vec![update]);
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].status, "live");
+    }
+
+    #[test]
+    fn scheduled_provider_zeroes_are_missing_scores_not_a_result() {
+        // Captured from eng.1 scoreboard?dates=202611 (2026-11-21 Manchester
+        // City vs Fulham): ESPN sends score "0" for both sides before kick-off.
+        let matches = parse_response(
+            200,
+            None,
+            include_str!("../../tests/fixtures/scoreboard-scheduled.json"),
+            "202611",
+            Competition::PremierLeague,
+        )
+        .unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].status, "scheduled");
+        assert_eq!(matches[0].home.name, "Manchester City");
+        assert_eq!(matches[0].home_score, None);
+        assert_eq!(matches[0].away_score, None);
+    }
+
+    #[test]
+    fn played_states_keep_genuine_zero_zero_scores() {
+        for (name, state, expected) in [
+            ("STATUS_IN_PROGRESS", "in", Some(0)),
+            ("STATUS_HALFTIME", "in", Some(0)),
+            ("STATUS_FULL_TIME", "post", Some(0)),
+            ("STATUS_SUSPENDED", "in", Some(0)),
+            ("STATUS_POSTPONED", "pre", None),
+            ("STATUS_CANCELED", "post", None),
+            ("STATUS_SCHEDULED", "pre", None),
+        ] {
+            let mut v = event();
+            v["status"]["type"]["name"] = serde_json::json!(name);
+            v["status"]["type"]["state"] = serde_json::json!(state);
+            v["competitions"][0]["competitors"][0]["score"] = serde_json::json!("0");
+            v["competitions"][0]["competitors"][1]["score"] = serde_json::json!("0");
+            let m = normalize(&v, Competition::PremierLeague).unwrap();
+            assert_eq!(m.home_score, expected, "{name}");
+            assert_eq!(m.away_score, expected, "{name}");
+        }
+    }
+
+    #[test]
+    fn provider_identity_text_is_bounded_and_control_free() {
+        let mut v = event();
+        v["id"] = serde_json::json!("9".repeat(129));
+        assert!(normalize(&v, Competition::PremierLeague).is_none());
+
+        let mut v = event();
+        v["competitions"][0]["competitors"][0]["team"]["displayName"] =
+            serde_json::json!("Home\nName");
+        assert!(normalize(&v, Competition::PremierLeague).is_none());
+
+        let mut v = event();
+        let long = "Very long club name ".repeat(20);
+        v["competitions"][0]["competitors"][0]["team"]["displayName"] = serde_json::json!(long);
+        let m = normalize(&v, Competition::PremierLeague).unwrap();
+        assert_eq!(m.home.name.chars().count(), 120);
+        assert!(m.home.short.is_empty());
     }
 
     #[test]
@@ -609,6 +746,29 @@ mod crest_tests {
         }
     }
     #[test]
+    fn rejects_a_crest_that_belongs_to_another_team() {
+        let wrong = "https://a.espncdn.com/i/teamlogos/soccer/500/360.png";
+        let expected = "https://a.espncdn.com/i/teamlogos/soccer/500/359.png";
+        assert_eq!(
+            crest(&serde_json::json!({"logo": wrong}), "359").as_deref(),
+            Some(expected)
+        );
+        assert_eq!(crest(&serde_json::json!({"logo": wrong}), "custom"), None);
+        // Alternate dark/alternate files for the same id remain accepted.
+        for same in [
+            "https://a.espncdn.com/i/teamlogos/soccer/500-dark/359.png",
+            "https://a.espncdn.com/i/teamlogos/soccer/500/359-2.png",
+        ] {
+            assert_eq!(
+                crest(&serde_json::json!({"logo": same}), "359").as_deref(),
+                Some(same)
+            );
+        }
+        let alternate = serde_json::json!({"logos":[{"href":wrong},{"href":"https://a.espncdn.com/i/teamlogos/soccer/500/359.png"}]});
+        assert_eq!(crest(&alternate, "359").as_deref(), Some(expected));
+    }
+
+    #[test]
     fn falls_back_only_for_numeric_stable_ids_and_handles_malformed_values() {
         let expected = "https://a.espncdn.com/i/teamlogos/soccer/500/368.png";
         for malformed in [
@@ -679,6 +839,67 @@ mod history_query_tests {
         assert_eq!(
             recent_query_dates(NaiveDate::from_ymd_opt(2026, 1, 5).unwrap()),
             vec!["202512", "202601"]
+        );
+    }
+}
+
+#[cfg(test)]
+mod score_date_tests {
+    use super::*;
+
+    fn active(day: &str, status: &str, league: Competition) -> Match {
+        let mut m = crate::demo::mock().remove(0);
+        m.league = league;
+        m.status = status.into();
+        m.kickoff = format!("{day}T23:30:00Z");
+        m
+    }
+
+    #[test]
+    fn active_and_suspended_games_from_yesterday_query_that_day() {
+        let today = NaiveDate::from_ymd_opt(2026, 11, 10).unwrap();
+        for status in ["live", "halftime", "suspended"] {
+            let m = active("2026-11-09", status, Competition::PremierLeague);
+            assert_eq!(
+                score_query_dates(today, today, &[m], Competition::PremierLeague),
+                ["20261109", "20261110"],
+                "{status}"
+            );
+        }
+        for status in ["scheduled", "fulltime", "postponed", "cancelled", "unknown"] {
+            let m = active("2026-11-09", status, Competition::PremierLeague);
+            assert_eq!(
+                score_query_dates(today, today, &[m], Competition::PremierLeague),
+                ["20261110"],
+                "{status}"
+            );
+        }
+        // A live game from two days ago is outside the daily score window.
+        let m = active("2026-11-08", "live", Competition::PremierLeague);
+        assert_eq!(
+            score_query_dates(today, today, &[m], Competition::PremierLeague),
+            ["20261110"]
+        );
+        // Another competition must not add this competition's date.
+        let m = active("2026-11-09", "live", Competition::ChampionsLeague);
+        assert_eq!(
+            score_query_dates(today, today, &[m], Competition::PremierLeague),
+            ["20261110"]
+        );
+    }
+
+    #[test]
+    fn local_today_is_added_once_and_dates_stay_sorted() {
+        let today = NaiveDate::from_ymd_opt(2026, 12, 31).unwrap();
+        let local = NaiveDate::from_ymd_opt(2027, 1, 1).unwrap();
+        let m = active("2026-12-30", "suspended", Competition::PremierLeague);
+        assert_eq!(
+            score_query_dates(today, local, &[m], Competition::PremierLeague),
+            ["20261230", "20261231", "20270101"]
+        );
+        assert_eq!(
+            score_query_dates(today, today, &[], Competition::PremierLeague),
+            ["20261231"]
         );
     }
 }
@@ -755,6 +976,56 @@ mod competition_tests {
             ),
             ["202610", "202611"]
         );
+    }
+
+    #[test]
+    fn champions_league_knockout_leg_and_aggregate_are_preserved() {
+        // Captured from uefa.champions scoreboard?dates=202604: Bayern Munich at
+        // Real Madrid (1st leg) and Real Madrid at Bayern Munich (2nd leg).
+        let first = serde_json::json!({
+            "id":"401862886","date":"2026-04-07T19:00Z",
+            "status":{"type":{"state":"post","name":"STATUS_FULL_TIME","shortDetail":"FT"}},
+            "competitions":[{
+                "competitors":[
+                    {"homeAway":"home","score":"1","team":{"id":"86","displayName":"Real Madrid","abbreviation":"RMA"}},
+                    {"homeAway":"away","score":"2","team":{"id":"132","displayName":"Bayern Munich","abbreviation":"FCB"}}
+                ],
+                "leg":{"value":1,"displayValue":"1st Leg"},
+                "series":{"competitors":[{"id":"86","winner":false},{"id":"132","winner":false}],"completed":false,"title":"Quarterfinals","totalCompetitions":2},
+                "notes":[{"headline":"1st Leg","text":"1st Leg","type":"event"}]
+            }]
+        });
+        let m = normalize(&first, Competition::ChampionsLeague).unwrap();
+        assert_eq!(m.leg.as_deref(), Some("1st Leg"));
+        assert_eq!(m.aggregate, None);
+
+        let second = serde_json::json!({
+            "id":"401862891","date":"2026-04-15T19:00Z",
+            "status":{"type":{"state":"post","name":"STATUS_FULL_TIME","shortDetail":"FT"}},
+            "competitions":[{
+                "competitors":[
+                    {"homeAway":"home","score":"4","team":{"id":"132","displayName":"Bayern Munich","abbreviation":"FCB"}},
+                    {"homeAway":"away","score":"3","team":{"id":"86","displayName":"Real Madrid","abbreviation":"RMA"}}
+                ],
+                "leg":{"value":2,"displayValue":"2nd Leg"},
+                "series":{"competitors":[{"id":"132","winner":true,"aggregateScore":6.0},{"id":"86","winner":false,"aggregateScore":4.0}],"completed":true,"title":"Quarterfinals","totalCompetitions":2},
+                "notes":[{"headline":"2nd Leg - Bayern Munich advance 6-4 on aggregate","text":"2nd Leg - Bayern Munich advance 6-4 on aggregate","type":"event"}]
+            }]
+        });
+        let m = normalize(&second, Competition::ChampionsLeague).unwrap();
+        assert_eq!(m.status, "fulltime");
+        assert_eq!(m.home.name, "Bayern Munich");
+        assert_eq!(m.home_score, Some(4));
+        assert_eq!(m.away_score, Some(3));
+        assert_eq!(m.leg.as_deref(), Some("2nd Leg"));
+        assert_eq!(m.aggregate.as_deref(), Some("6-4"));
+        // The structured value wins over notes, and neither invents a value.
+        let mut malformed = second.clone();
+        malformed["competitions"][0]["series"]["competitors"][0]["aggregateScore"] =
+            serde_json::json!("6");
+        let m = normalize(&malformed, Competition::ChampionsLeague).unwrap();
+        assert_eq!(m.leg.as_deref(), Some("2nd Leg"));
+        assert_eq!(m.aggregate, None);
     }
 
     #[test]

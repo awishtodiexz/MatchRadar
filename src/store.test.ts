@@ -124,4 +124,19 @@ describe('native snapshot and preference ordering', () => {
     expect(writes[1].settings).toMatchObject({matchAlerts:{},opacity:70,compact:true});
     writes[1].task.resolve(writes[1].settings); await next;
   });
+
+  it('keeps a queued edit based on the first acknowledged write when a stale read lands between them', async () => {
+    const first = store.getState().save({opacity:80});
+    const second = store.getState().save({theme:'light'});
+    await vi.waitFor(() => expect(writes).toHaveLength(1));
+    const staleRead = store.getState().load();
+    // Rust normalizes the submitted opacity; the later edit must build on that value.
+    writes[0].task.resolve({...writes[0].settings,opacity:85}); await first;
+    reads[0].resolve(initial()); await staleRead;
+    await vi.waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes[1].settings).toMatchObject({opacity:85,theme:'light'});
+    writes[1].task.resolve(writes[1].settings); await second;
+    expect(store.getState().snapshot?.settings).toMatchObject({opacity:85,theme:'light'});
+    expect(store.getState().snapshot?.matches).toHaveLength(mockSnapshot.matches.length);
+  });
 });

@@ -37,7 +37,32 @@ describe('competition selector', () => {
     expect(screen.getByRole('button', { name: 'Match details: Real Madrid versus Bayern Munich' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Match details: Arsenal versus Chelsea' })).toBeNull();
     expect(useApp.getState().snapshot?.settings.competitionView).toBe('championsLeague');
+    expect(screen.getByLabelText(/Champions League: checking live status/)).toBeTruthy();
+    expect(screen.getByText('CHECKING LIVE',{exact:true})).toBeTruthy();
+    expect(screen.getByText('CONNECTING')).toBeTruthy();
+  });
+
+  it('keeps a failed Champions League score check unavailable instead of checking', async () => {
+    const base=structuredClone(mockSnapshotWithUcl);
+    await load({...base,leagueStatus:{'uefa.champions':{scoreError:'HTTP 503'}}});
+    render(<App />);
+    fireEvent.click(premierValue('Premier League'));
+    fireEvent.click(screen.getByRole('option', { name: /Champions League/ }));
     expect(screen.getByLabelText(/Champions League: live status unavailable/)).toBeTruthy();
+    expect(screen.queryByText('CHECKING LIVE')).toBeNull();
+    expect(screen.getByText(/UPDATE FAILED/)).toBeTruthy();
+  });
+
+  it('reports a confirmed quiet Champions League score check as no live matches', async () => {
+    const base=structuredClone(mockSnapshotWithUcl);
+    await load({...base,leagueStatus:{'uefa.champions':{updatedAt:'2026-10-29T12:00:00Z',fixtureUpdatedAt:'2026-10-29T11:00:00Z'}}});
+    render(<App />);
+    fireEvent.click(premierValue('Premier League'));
+    fireEvent.click(screen.getByRole('option', { name: /Champions League/ }));
+    expect(screen.getByLabelText(/Champions League: no confirmed live matches/)).toBeTruthy();
+    expect(screen.getByText('NO LIVE MATCHES',{exact:true})).toBeTruthy();
+    expect(screen.queryByText('CHECKING LIVE')).toBeNull();
+    expect(screen.getByText('SCORES CHECKED')).toBeTruthy();
   });
 
   it('shows both competitions chronologically with per-match competition tags', async () => {
@@ -51,6 +76,13 @@ describe('competition selector', () => {
     expect(screen.getAllByText('PL').length).toBeGreaterThan(0);
     const cards = [...document.querySelectorAll<HTMLElement>('[data-match-id]')].map(card => card.dataset.matchId);
     expect(cards).toContain(uclMatch.id);
+    // The visual PL/UCL tag is hidden from name computation, so the card
+    // description carries the competition and the article gets a matching name.
+    const uclCard = screen.getByRole('button', { name: 'Match details: Real Madrid versus Bayern Munich' });
+    expect(document.getElementById(uclCard.getAttribute('aria-describedby') ?? '')?.textContent).toContain('Champions League');
+    expect(uclCard.closest('article')?.getAttribute('aria-labelledby')).toBe(uclCard.id);
+    const plCard = screen.getByRole('button', { name: 'Match details: Arsenal versus Chelsea' });
+    expect(document.getElementById(plCard.getAttribute('aria-describedby') ?? '')?.textContent).toContain('Premier League');
     // Chronological/day ordering is covered deterministically in fixtures.test.ts.
   });
 
