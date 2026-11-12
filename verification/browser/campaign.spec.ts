@@ -47,7 +47,7 @@ test('explores filters, bells, search and details', async ({ page }) => {
   await page.getByRole('button',{name:'Back to matches'}).click();
   await page.getByRole('button',{name:'Upcoming',exact:true}).click();
   await page.getByRole('button',{name:'Match details: Manchester City versus Manchester United'}).click();
-  await expect(page.getByText('Lineups and match coverage will appear when available.')).toBeVisible();
+  await expect(page.getByText('Lineups and live coverage appear closer to kick-off.')).toBeVisible();
   await expect(page.getByRole('tab',{name:'Stats'})).toHaveCount(0);
 });
 

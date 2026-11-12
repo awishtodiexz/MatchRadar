@@ -71,7 +71,7 @@ test('theme changes and demo controls are absent from settings', async ({ page }
 test('upcoming match shows supplied venue and omits unavailable detail tabs', async ({ page }, info) => {
   await page.getByRole('button', { name: 'Upcoming', exact: true }).click();
   await page.getByRole('button', { name: 'Match details: Manchester City versus Manchester United' }).click();
-  await expect(page.getByText('Lineups and match coverage will appear when available.')).toBeVisible();
+  await expect(page.getByText('Lineups and live coverage appear closer to kick-off.')).toBeVisible();
   await expect(page.getByText('Test Stadium')).toBeVisible();
   await page.screenshot({path:info.outputPath('upcoming-details.png'),animations:'disabled'});
   await expect(page.getByRole('tab', { name: 'Stats', exact: true })).toHaveCount(0);

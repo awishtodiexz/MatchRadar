@@ -34,9 +34,10 @@ for(const [width,theme] of [[320,'light'],[390,'dark']] as const) test(`comprehe
  await expect(page.locator('.incident-score').last()).toHaveText('2–0');
  await page.screenshot({path:info.outputPath('overview-incidents.png')});
  await page.getByRole('heading',{name:'Match information'}).scrollIntoViewIfNeeded();
- await expect(page.getByText('American Express Stadium (Falmer)',{exact:true})).toBeVisible();
+ await expect(page.getByText('American Express Stadium',{exact:true})).toBeVisible();
+ await expect(page.getByText(/^Falmer/)).toBeVisible();
  await expect(page.getByText('31,629',{exact:true})).toBeVisible();
- await expect(page.getByText('Not provided',{exact:true})).toHaveCount(2);
+ await expect(page.getByText('Not provided',{exact:true})).toHaveCount(0);
  await page.screenshot({path:info.outputPath('match-information.png')});
  await page.getByRole('tab',{name:'Stats',exact:true}).click();
  await expect(page.getByRole('row',{name:/Expected goals \(xG\)/})).toContainText('2.20');
