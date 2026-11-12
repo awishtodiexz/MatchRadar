@@ -95,6 +95,14 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml
 
 Rust tests need the Visual Studio C++ environment. Run them from a Developer PowerShell, or use `.\scripts\build-local.ps1`, which loads it and builds the NSIS installer.
 
+### Automatic local rebuilds
+
+```powershell
+git config core.hooksPath .githooks   # once per clone
+```
+
+After every commit, merge or pull that changes app sources, `scripts/auto-build.ps1` rebuilds the app and installer in the background, closes the running local build and reopens the new one. Doc-only changes are skipped. Progress is logged to `src-tauri/target/auto-build/auto-build.log`.
+
 Tauri and Rust own the native window, networking, persistence, notifications and background refresh; React renders the interface. `npm run screenshots` rebuilds the banner and screenshots above.
 
 ## Contributing

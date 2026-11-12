@@ -31,7 +31,7 @@ $exe = Join-Path $root 'src-tauri\target\release\matchradar.exe'
 
 if ($Background) {
     $shell = (Get-Process -Id $PID).Path
-    $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
+    $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"")
     if ($Force) { $arguments += '-Force' }
     Start-Process -FilePath $shell -ArgumentList $arguments -WindowStyle Hidden | Out-Null
     exit 0
