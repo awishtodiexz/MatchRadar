@@ -1,0 +1,4 @@
+#!/bin/sh
+# Rebuild the local app in the background when app sources changed.
+# Enabled with: git config core.hooksPath .githooks
+pwsh -NoProfile -ExecutionPolicy Bypass -File "$(git rev-parse --show-toplevel)/scripts/auto-build.ps1" -Background >/dev/null 2>&1 || true
