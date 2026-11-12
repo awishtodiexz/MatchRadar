@@ -1,6 +1,14 @@
 # Changelog
 
-## 1.0.0 — 2026-11-09 (updated 2026-11-10)
+## 1.0.0 — 2026-11-09 (updated 2026-11-12)
+
+### Reliability update (2026-11-12)
+
+- Live polling: a match whose kickoff has passed while ESPN still lists it as scheduled is checked every minute, so the start alert and early goals are no longer missed during a 30-minute idle wait.
+- Match outcomes: abandoned matches are no longer shown as full time or counted as results; forfeits keep their awarded score as a result, are labelled as forfeits, and never trigger goal alerts.
+- Suspended matches appear with in-progress games and in the Live view, after matches being played, and are rechecked at the matchday rate.
+- Refresh feedback: while ESPN is rate limiting requests, the footer shows when updates resume instead of silently doing nothing.
+- Quitting from the tray saves the latest fixtures, alert baselines and freshness before exiting.
 
 ### Improved build (2026-11-10)
 

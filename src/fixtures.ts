@@ -1,6 +1,9 @@
 import type { Match } from './types';
 
 export const isLive = (match: Match) => match.status === 'live' || match.status === 'halftime';
+// Mirrors Rust's `active`: a suspended game is still in progress and can resume,
+// so it sits with live games even though it is not counted or styled as live.
+export const isInProgress = (match: Match) => isLive(match) || match.status === 'suspended';
 // A saved kickoff can be structurally valid JSON yet unparseable (damaged disk
 // write, legacy format). Keep that fixture visible under its own group instead
 // of letting Intl/fixture grouping throw and blank the widget.
@@ -15,6 +18,8 @@ export function groupFixtures(matches: Match[], favorites: string[], now = new D
   const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
   const followed = (m: Match) => favorites.includes(m.home.id) || favorites.includes(m.away.id);
   const ordered = matches.slice().sort((a, b) =>
+    Number(isInProgress(b)) - Number(isInProgress(a)) ||
+    // Within the in-progress group, games being played lead paused ones.
     Number(isLive(b)) - Number(isLive(a)) ||
     (dayKey(new Date(a.kickoff)) === dayKey(new Date(b.kickoff))
       ? Number(followed(b)) - Number(followed(a)) || kickoffTime(a.kickoff) - kickoffTime(b.kickoff)
@@ -23,8 +28,8 @@ export function groupFixtures(matches: Match[], favorites: string[], now = new D
   for (const match of ordered) {
     const date = new Date(match.kickoff);
     const valid = !Number.isNaN(date.getTime());
-    const key = isLive(match) ? 'live' : dayKey(date);
-    const label = isLive(match) ? 'LIVE NOW'
+    const key = isInProgress(match) ? 'live' : dayKey(date);
+    const label = isInProgress(match) ? 'LIVE NOW'
       : !valid ? 'DATE UNAVAILABLE'
       : dayKey(date) === dayKey(now) ? 'TODAY'
       : dayKey(date) === dayKey(tomorrow) ? 'TOMORROW'

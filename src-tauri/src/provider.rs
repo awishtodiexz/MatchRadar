@@ -228,6 +228,9 @@ fn parse_kickoff(value: &str) -> Option<DateTime<Utc>> {
         })
         .map(|date| date.with_timezone(&Utc))
 }
+/// Detail of a full-time result awarded by forfeit rather than played out.
+pub const FORFEIT_DETAIL: &str = "Forfeit";
+
 fn normalize(event: &Value, league: Competition) -> Option<Match> {
     let id = identity(field(event, "id"), 128)?;
     let kickoff = parse_kickoff(field(event, "date"))?;
@@ -243,10 +246,17 @@ fn normalize(event: &Value, league: Competition) -> Option<Match> {
     let kind = status.get("type")?;
     let name = field(kind, "name").to_ascii_lowercase();
     let state = field(kind, "state");
+    let abandoned = name.contains("abandon");
+    let forfeit = name.contains("forfeit");
     let mapped = if name.contains("postpon") {
         "postponed"
-    } else if name.contains("cancel") {
+    } else if name.contains("cancel") || abandoned {
+        // ESPN reports an abandoned game with state "post"; it is not a result.
         "cancelled"
+    } else if forfeit {
+        // A forfeit is a decided result: keep the awarded score as full time,
+        // whatever state ESPN reports alongside it.
+        "fulltime"
     } else if name.contains("suspend") {
         "suspended"
     } else if name.contains("halftime") || name.contains("half_time") {
@@ -259,7 +269,13 @@ fn normalize(event: &Value, league: Competition) -> Option<Match> {
             _ => "unknown",
         }
     };
-    let detail = if mapped == "live" {
+    // Canonical labels: the widget and alerts recognise these outcomes by detail,
+    // independent of ESPN's shortDetail wording.
+    let detail = if abandoned {
+        "Abandoned"
+    } else if forfeit {
+        FORFEIT_DETAIL
+    } else if mapped == "live" {
         let clock = field(status, "displayClock");
         if clock.is_empty() {
             field(kind, "shortDetail")
@@ -646,6 +662,39 @@ mod response_tests {
             let m = normalize(&v, Competition::PremierLeague).unwrap();
             assert_eq!(m.home_score, expected, "{name}");
             assert_eq!(m.away_score, expected, "{name}");
+        }
+    }
+
+    #[test]
+    fn abandoned_post_state_is_not_reported_as_full_time() {
+        let mut v = event();
+        v["status"]["type"]["name"] = serde_json::json!("STATUS_ABANDONED");
+        v["status"]["type"]["state"] = serde_json::json!("post");
+        v["status"]["type"]["shortDetail"] = serde_json::json!("Abandoned");
+        v["competitions"][0]["competitors"][0]["score"] = serde_json::json!("1");
+        v["competitions"][0]["competitors"][1]["score"] = serde_json::json!("0");
+        let m = normalize(&v, Competition::PremierLeague).unwrap();
+        assert_eq!(m.status, "cancelled");
+        assert_eq!(m.detail, "Abandoned");
+        assert_eq!((m.home_score, m.away_score), (None, None));
+        assert!(!recent_result(&m, chrono::Utc::now().date_naive()));
+    }
+
+    #[test]
+    fn forfeit_keeps_its_awarded_result_whatever_state_espn_reports() {
+        for state in ["post", "pre"] {
+            let mut v = event();
+            v["status"]["type"]["name"] = serde_json::json!("STATUS_FORFEIT");
+            v["status"]["type"]["state"] = serde_json::json!(state);
+            v["status"]["type"]["shortDetail"] = serde_json::json!("FF");
+            v["competitions"][0]["competitors"][0]["score"] = serde_json::json!("3");
+            v["competitions"][0]["competitors"][1]["score"] = serde_json::json!("0");
+            let m = normalize(&v, Competition::PremierLeague).unwrap();
+            assert_eq!(m.status, "fulltime", "{state}");
+            assert_eq!(m.detail, FORFEIT_DETAIL);
+            assert_eq!((m.home_score, m.away_score), (Some(3), Some(0)));
+            let kickoff = parse_kickoff(&m.kickoff).unwrap().date_naive();
+            assert!(recent_result(&m, kickoff));
         }
     }
 

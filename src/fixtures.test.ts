@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupFixtures } from './fixtures';
+import { groupFixtures, isInProgress, isLive } from './fixtures';
 import { mockMatches } from './test-fixtures/fixtures';
 import type { Match } from './types';
 
@@ -9,6 +9,17 @@ describe('local fixture dates', () => {
     const saved = {...fixture('live',28,12),status:'live' as const,scoreStale:true};
     expect(groupFixtures([saved],[])[0].label).toBe('SAVED LIVE SCORES');
     expect(groupFixtures([saved,{...saved,id:'fresh',scoreStale:false}],[])[0].label).toBe('LIVE NOW · SOME SAVED');
+  });
+  it('keeps a suspended game with in-progress matches, as the backend does, without calling it live', () => {
+    const suspended = {...fixture('suspended',27,20),status:'suspended' as const,detail:'Suspended'};
+    const groups = groupFixtures([fixture('later',30,12),suspended],[],new Date(2026,9,28));
+    expect(groups[0]).toMatchObject({key:'live',label:'LIVE NOW'});
+    expect(groups[0].matches.map(m=>m.id)).toEqual(['suspended']);
+    // A game being played still leads an earlier-kickoff suspended one.
+    const live = {...fixture('live',28,12),status:'live' as const};
+    expect(groupFixtures([suspended,live],[],new Date(2026,9,28))[0].matches.map(m=>m.id)).toEqual(['live','suspended']);
+    expect(isLive(suspended)).toBe(false);
+    expect(isInProgress(suspended)).toBe(true);
   });
   it('keeps earlier dates ahead of later followed fixtures and sorts each day', () => {
     const groups = groupFixtures([fixture('later', 31, 14, true), fixture('evening', 30, 20), fixture('morning', 30, 9)], ['followed'], new Date(2026, 9, 28));

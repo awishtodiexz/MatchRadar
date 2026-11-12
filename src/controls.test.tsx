@@ -47,10 +47,19 @@ describe('widget controls', () => {
   render(<MatchCard match={{...mockSnapshot.matches[0],status:'live',detail:"90'+2'",scoreStale:false}} settings={mockSnapshot.settings} onOpen={vi.fn()}/>);
   expect(screen.getByText("90+2'")).toBeTruthy();
  });
+ it('labels forfeit and abandoned cards by their real outcome', () => {
+  const {unmount}=render(<MatchCard match={{...mockSnapshot.matches[0],status:'fulltime',detail:'Forfeit',homeScore:3,awayScore:0}} settings={mockSnapshot.settings} onOpen={vi.fn()}/>);
+  expect(document.querySelector('.fixture-time')?.textContent).toBe('FF');
+  expect(document.querySelector('.match-card .sr-only')?.textContent).toContain('3 to 0, Forfeit');
+  unmount();
+  render(<MatchCard match={{...mockSnapshot.matches[0],status:'cancelled',detail:'Abandoned',homeScore:null,awayScore:null}} settings={mockSnapshot.settings} onOpen={vi.fn()}/>);
+  expect(document.querySelector('.fixture-time')?.textContent).toBe('Abandoned');
+  expect(screen.getByRole('button',{name:/^Match abandoned:/})).toBeTruthy();
+ });
 
  it('shows partial fixture success and saved live scores without claiming they were freshly confirmed', async () => {
   bridge.native=true;
-  const snapshot={...mockSnapshot,settings:{...mockSnapshot.settings},partial:true,error:'Scores: HTTP 500',scoreError:'HTTP 500',updatedAt:'2026-10-28T11:00:00Z',fixtureUpdatedAt:'2026-10-28T12:00:00Z',matches:mockSnapshot.matches.map(m=>({...m,scoreStale:m.status==='live'||m.status==='halftime'}))};
+  const snapshot={...mockSnapshot,settings:{...mockSnapshot.settings},partial:true,error:'Scores: HTTP 500',scoreError:'HTTP 500',updatedAt:'2026-10-28T11:00:00Z',fixtureUpdatedAt:'2026-10-28T12:00:00Z',matches:mockSnapshot.matches.map(m=>({...m,scoreStale:m.status==='live'||m.status==='halftime'||m.status==='suspended'}))};
   bridge.invoke.mockImplementation((command: string)=>Promise.resolve(command==='get_snapshot'?snapshot:undefined));
   render(<App/>);
   expect(await screen.findByText('Partial update · some data may be stale')).toBeTruthy();

@@ -65,3 +65,18 @@ it('surfaces triple-hyphen VAR reviews without treating them as goals',()=>{
  expect(screen.getByRole('img',{name:'VAR review · Referee decision cancelled'})).toBeTruthy();
  expect(screen.getByText('Igor Thiago')).toBeTruthy();
 });
+
+it('says an abandoned match was abandoned, not cancelled',()=>{
+ const {unmount}=show({...base,status:'cancelled',detail:'Abandoned',homeScore:null,awayScore:null});
+ expect(screen.getByText('This match was abandoned.')).toBeTruthy();
+ expect(screen.queryByText('This match was cancelled.')).toBeNull();unmount();
+ show({...base,status:'cancelled',detail:'Canceled',homeScore:null,awayScore:null});
+ expect(screen.getByText('This match was cancelled.')).toBeTruthy();
+});
+
+it('marks a forfeit as an awarded result without inventing goalscorers',()=>{
+ show({...base,status:'fulltime',detail:'Forfeit',homeScore:3,awayScore:0});
+ expect(screen.getByText(/Result awarded by forfeit/)).toBeTruthy();
+ expect(screen.queryByLabelText('Goalscorers')).toBeNull();
+ expect(screen.queryByText('Scorers unavailable')).toBeNull();
+});

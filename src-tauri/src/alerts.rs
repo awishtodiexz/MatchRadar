@@ -146,6 +146,8 @@ pub fn plan(snapshot: &mut Snapshot, now: DateTime<Utc>) -> Vec<(String, String)
                     // that marks full-time. Already-finished baselines stay excluded.
                     && matches!(m.status.as_str(), "live" | "halftime" | "fulltime")
                     && matches!(previous.status.as_str(), "live" | "halftime")
+                    // An awarded forfeit score is not a goal.
+                    && m.detail != crate::provider::FORFEIT_DETAIL
                 {
                     if let (Some(home), Some(away), Some(_), Some(_)) =
                         (m.home_score, m.away_score, previous.home, previous.away)
@@ -234,6 +236,26 @@ mod tests {
         s.settings.favorites.push(s.matches[0].home.id.clone());
         s.settings.goals = true;
         assert!(plan(&mut s, now() + Duration::minutes(22)).is_empty());
+    }
+    #[test]
+    fn an_awarded_forfeit_score_is_not_announced_as_a_goal() {
+        let mut s = fixture();
+        subscribe(&mut s, true);
+        s.matches[0].status = "live".into();
+        plan(&mut s, now() + Duration::minutes(20));
+        let at = now() + Duration::minutes(21);
+        let mut played = s.clone();
+        played.matches[0].status = "fulltime".into();
+        played.matches[0].home_score = Some(3);
+        assert_eq!(
+            plan(&mut played, at).len(),
+            1,
+            "a played late goal still alerts"
+        );
+        s.matches[0].status = "fulltime".into();
+        s.matches[0].detail = crate::provider::FORFEIT_DETAIL.into();
+        s.matches[0].home_score = Some(3);
+        assert!(plan(&mut s, at).is_empty());
     }
     #[test]
     fn a_rescheduled_match_can_remind_again_but_duplicate_kickoffs_do_not() {

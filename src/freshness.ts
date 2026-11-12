@@ -77,8 +77,18 @@ export function resultsStatus(results: { updatedAt?: string | null; error?: stri
   return { updatedAt, error };
 }
 
-export function updateStatus(snapshot: Snapshot | null, view: CompetitionView = 'premierLeague'): {label: string; timestamp?: string | null} {
+/** The host-wide ESPN rate-limit deadline while it is still in the future. */
+export function rateLimitedUntil(snapshot: Snapshot | null, now = Date.now()): string | null {
+  const until = snapshot?.rateLimitedUntil;
+  return until && Date.parse(until) > now ? until : null;
+}
+
+export function updateStatus(snapshot: Snapshot | null, view: CompetitionView = 'premierLeague', now = Date.now()): {label: string; timestamp?: string | null} {
   if (snapshot?.refreshing) return {label:'UPDATING'};
+  // A manual refresh cannot bypass the provider's cooldown; say so instead of
+  // flashing the spinner and silently leaving the data unchanged.
+  const limited = rateLimitedUntil(snapshot, now);
+  if (limited) return {label:'RATE LIMITED · RETRY AT', timestamp:limited};
   const status = competitionStatus(snapshot, view);
   if (status.error) {
     const suffix = status.updatedAt ? (status.scoreError ? 'SCORES SAVED' : 'SCORES CHECKED')

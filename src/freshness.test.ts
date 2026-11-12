@@ -17,6 +17,13 @@ describe('independent source freshness', () => {
     expect(updateStatus({...mockSnapshot,partial:false,error:'Both failed',scoreError:'HTTP 500',updatedAt:'old scores'}))
       .toEqual({label:'UPDATE FAILED · SCORES SAVED',timestamp:'old scores'});
   });
+  it('reports an active ESPN rate limit with its retry time, then reverts when it passes', () => {
+    const now = Date.parse('2026-11-12T12:00:00Z');
+    const limited = {...mockSnapshot,updatedAt:'old scores',rateLimitedUntil:'2026-11-12T12:10:00Z'};
+    expect(updateStatus(limited,'premierLeague',now)).toEqual({label:'RATE LIMITED · RETRY AT',timestamp:'2026-11-12T12:10:00Z'});
+    expect(updateStatus(limited,'premierLeague',Date.parse('2026-11-12T12:11:00Z')).label).not.toContain('RATE LIMITED');
+    expect(updateStatus({...limited,refreshing:true},'premierLeague',now)).toEqual({label:'UPDATING'});
+  });
   it('keeps ordinary success, loading and empty startup distinguishable', () => {
     expect(updateStatus({...mockSnapshot,updatedAt:'checked'})).toEqual({label:'SCORES CHECKED',timestamp:'checked'});
     expect(updateStatus({...mockSnapshot,refreshing:true})).toEqual({label:'UPDATING'});

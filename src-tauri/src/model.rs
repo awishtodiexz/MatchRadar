@@ -324,6 +324,9 @@ pub struct Snapshot {
     pub fixture_updated_at: Option<String>,
     pub error: Option<String>,
     pub refreshing: bool,
+    /// Host-wide ESPN rate-limit deadline (RFC 3339). Runtime only, never persisted.
+    #[serde(skip)]
+    pub rate_limited_until: Option<String>,
     pub settings: Settings,
     #[serde(deserialize_with = "bounded_sent_notifications")]
     pub sent_notifications: Vec<String>,
@@ -353,6 +356,7 @@ impl Default for Snapshot {
             fixture_updated_at: None,
             error: None,
             refreshing: false,
+            rate_limited_until: None,
             settings: Settings::default(),
             sent_notifications: Vec::new(),
             expanded_size: None,
@@ -375,6 +379,7 @@ pub struct WidgetSnapshot {
     pub error: Option<String>,
     pub partial: bool,
     pub refreshing: bool,
+    pub rate_limited_until: Option<String>,
     pub settings: Settings,
 }
 impl From<&Snapshot> for WidgetSnapshot {
@@ -389,6 +394,7 @@ impl From<&Snapshot> for WidgetSnapshot {
             error: snapshot.error.clone(),
             partial: snapshot.partial,
             refreshing: snapshot.refreshing,
+            rate_limited_until: snapshot.rate_limited_until.clone(),
             settings: snapshot.settings.clone(),
         }
     }

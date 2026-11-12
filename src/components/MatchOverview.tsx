@@ -3,6 +3,7 @@ import type { Match } from '../types';
 import type { MatchScorer, MatchSummary } from '../useMatchSummary';
 import { MatchEvents } from './MatchEvents';
 import { isGoal, isIncident } from './matchEventKinds';
+import { closedNote, isForfeit } from '../presentation';
 
 function goalScorers(data:MatchSummary|null):MatchScorer[] {
   const goals=data?.events.filter(event=>isGoal(event.kind))??[];
@@ -21,7 +22,8 @@ function goalScorers(data:MatchSummary|null):MatchScorer[] {
 
 export function MatchOverview({match,data}:{match:Match;data:MatchSummary|null}) {
   const scorers=goalScorers(data);
-  const playing=['live','halftime','fulltime','suspended'].includes(match.status);
+  // An awarded forfeit score has no goalscorers to report.
+  const playing=['live','halftime','fulltime','suspended'].includes(match.status)&&!isForfeit(match);
   const hasGoals=scorers.length>0||(match.homeScore??0)+(match.awayScore??0)>0;
   const incidents=(data?.events??[]).filter(event=>isIncident(event.kind));
   return <article className="overview-report" aria-label="Match overview">
@@ -47,7 +49,8 @@ export function MatchOverview({match,data}:{match:Match;data:MatchSummary|null})
     </dl></section>
     {match.status==='scheduled'&&<p className="field-note">Lineups and match coverage will appear when available.</p>}
     {match.status==='postponed'&&<p className="field-note">This match has been postponed.</p>}
-    {match.status==='cancelled'&&<p className="field-note">This match was cancelled.</p>}
+    {match.status==='cancelled'&&<p className="field-note">{closedNote(match)}</p>}
+    {isForfeit(match)&&<p className="field-note">Result awarded by forfeit; the match was not played to completion.</p>}
     {match.status==='unknown'&&<p className="field-note">Match status is unavailable. Check back for updates.</p>}
   </article>;
 }

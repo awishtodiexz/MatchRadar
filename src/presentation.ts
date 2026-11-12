@@ -1,3 +1,4 @@
+import type { Match } from './types';
 // Keep non-component helpers separate so component edits retain Vite Fast Refresh.
 // Formatters are immutable and locale-bound for the session; rebuilding one per
 // label cost ~55µs and happens dozens of times per poll.
@@ -18,4 +19,8 @@ export const timeLabel = (date: string) => {
   const value = parsed(date);
   return value ? time.format(value) : 'Time unavailable';
 };
+// Rust normalizes these outcomes to fixed details (provider.rs).
+export const isAbandoned = (match: Match) => match.status === 'cancelled' && match.detail === 'Abandoned';
+export const isForfeit = (match: Match) => match.status === 'fulltime' && match.detail === 'Forfeit';
+export const closedNote = (match: Match) => isAbandoned(match) ? 'This match was abandoned.' : 'This match was cancelled.';
 export const matchButtonId = (id:string) => 'match-open-'+encodeURIComponent(id);

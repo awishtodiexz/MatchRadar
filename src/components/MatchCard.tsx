@@ -4,7 +4,7 @@ import { useApp } from '../store';
 import { isLive } from '../fixtures';
 import type { Match, Settings } from '../types';
 import { Badge } from './WidgetUi';
-import { matchButtonId, timeLabel } from '../presentation';
+import { closedNote, isAbandoned, isForfeit, matchButtonId, timeLabel } from '../presentation';
 
 const clockText = (detail:string) => {
   const stoppage = detail.match(/^(\d+)'\+(\d+)'?$/);
@@ -29,7 +29,7 @@ function alertPresentation(settings:Settings, match:Match) {
     : 'Using your followed-team alert settings.';
   // A cancelled match has not "ended", and a postponed one can still alert later.
   const description = ended ? 'This match has ended.'
-    : cancelled ? 'This match was cancelled.'
+    : cancelled ? closedNote(match)
     : postponed ? 'This match is postponed; alerts resume if it is rescheduled.'
     : base;
   return {state, ended, cancelled, closed, postponed, description, enabled:state==='on', label:state==='on'?'All alerts on':state==='muted'?'Muted':'Team settings'};
@@ -54,7 +54,7 @@ export function MatchCard({match, settings, onOpen, showCompetition=false}: {mat
   return <article className="match-row match-card" data-match-id={match.id} aria-labelledby={matchButtonId(match.id)}>
     <button id={matchButtonId(match.id)} className="match-open" onClick={onOpen} aria-label={`Match details: ${name}`} aria-describedby={detailId} title={`View ${name}. ${cardDetail}`}>
       <div className={'fixture-time '+(isLive(match)&&!match.scoreStale?'is-live':'')} aria-hidden="true">
-        <span>{match.status==='scheduled'?timeLabel(match.kickoff):isLive(match)?match.status==='halftime'?'HT':clockText(match.detail||'LIVE'):match.status==='fulltime'?'FT':match.detail||match.status}</span>
+        <span>{match.status==='scheduled'?timeLabel(match.kickoff):isLive(match)?match.status==='halftime'?'HT':clockText(match.detail||'LIVE'):match.status==='fulltime'?(isForfeit(match)?'FF':'FT'):match.detail||match.status}</span>
         {match.scoreStale&&<small>Saved</small>}
         {showCompetition&&<small className="competition-tag">{match.league==='championsLeague'?'UCL':'PL'}</small>}
       </div>
@@ -69,7 +69,7 @@ export function MatchCard({match, settings, onOpen, showCompetition=false}: {mat
         </div>
       </div><span id={detailId} className="sr-only">{cardDetail}</span><ChevronRight size={13} className="row-arrow" aria-hidden="true"/>
     </button>
-    <button className="icon-button match-bell" data-alert-state={alerts.state} aria-label={alerts.ended?`Match ended: ${name}`:alerts.cancelled?`Match cancelled: ${name}`:`${action}: ${name}`} aria-pressed={alerts.enabled}
+    <button className="icon-button match-bell" data-alert-state={alerts.state} aria-label={alerts.ended?`Match ended: ${name}`:alerts.cancelled?`Match ${isAbandoned(match)?'abandoned':'cancelled'}: ${name}`:`${action}: ${name}`} aria-pressed={alerts.enabled}
       title={title} disabled={alerts.closed}
       onClick={()=>void save({matchAlerts:{...settings.matchAlerts,[match.id]:{enabled:!alerts.enabled,expiresAt:alertExpiry(match.kickoff)}}})}>
       {alerts.enabled?<BellRing size={16}/>:alerts.state==='muted'?<BellOff size={16}/>:<Bell size={16}/>}
@@ -94,7 +94,7 @@ export function MatchAlertsButton({match, settings}: {match:Match; settings:Sett
     return ()=>{document.removeEventListener('mousedown',close);document.removeEventListener('keydown',key);};
   },[open]);
   const change = (enabled:boolean) => {if(alerts.closed)heading.current?.focus();void save({matchAlerts:{...settings.matchAlerts,[match.id]:{enabled,expiresAt:alertExpiry(match.kickoff)}}});};
-  const closedText = alerts.ended ? 'This match has ended.' : 'This match was cancelled.';
+  const closedText = alerts.ended ? 'This match has ended.' : closedNote(match);
   const reset = () => { const next = {...settings.matchAlerts}; delete next[match.id]; heading.current?.focus(); void save({matchAlerts:next}); };
   return <div className="alert-control">
     <button ref={trigger} className="icon-button alert-trigger" data-alert-state={alerts.state}

@@ -4,7 +4,7 @@ import { MatchCentre } from './MatchCentre';
 import type { Match, Settings } from '../types';
 import { isLive } from '../fixtures';
 import { Badge, CompetitionMark } from './WidgetUi';
-import { dateLabel, timeLabel } from '../presentation';
+import { dateLabel, isForfeit, timeLabel } from '../presentation';
 import { MatchAlertsButton } from './MatchCard';
 
 export function MatchDetails({match, settings, back}: {match:Match; settings:Settings; back:()=>void}) {
@@ -13,7 +13,7 @@ export function MatchDetails({match, settings, back}: {match:Match; settings:Set
   const live = isLive(match);
   const status = live
     ? (match.status==='halftime'?'HALF-TIME':`LIVE ${match.detail || ''}`.trim())
-    : match.status==='fulltime'?'FULL-TIME':match.status==='scheduled'?'SCHEDULED':(match.detail||match.status).toUpperCase();
+    : match.status==='fulltime'?(isForfeit(match)?'FORFEIT':'FULL-TIME'):match.status==='scheduled'?'SCHEDULED':(match.detail||match.status).toUpperCase();
   const statusText = match.scoreStale ? `${status} · Saved` : status;
   const awaitingScore = match.homeScore==null&&match.awayScore==null;
   const showKickoff = match.status==='scheduled'||(awaitingScore&&(match.status==='postponed'||match.status==='cancelled'||match.status==='unknown'));

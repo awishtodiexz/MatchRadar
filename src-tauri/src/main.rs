@@ -587,24 +587,7 @@ async fn poll(app: tauri::AppHandle) {
         let _ = app.emit("snapshot-updated", ());
         let delay = {
             let s = snapshot_lock(&state);
-            let base = if s
-                .matches
-                .iter()
-                .any(|m| matches!(m.status.as_str(), "live" | "halftime"))
-            {
-                60u64
-            } else if s.matches.iter().any(|m| {
-                DateTime::parse_from_rfc3339(&m.kickoff)
-                    .ok()
-                    .is_some_and(|d| {
-                        let secs = (d.with_timezone(&Utc) - Utc::now()).num_seconds();
-                        secs > 0 && secs < 24 * 3600
-                    })
-            }) {
-                300
-            } else {
-                1800
-            };
+            let base = scheduling::base_poll_seconds(&s.matches, Utc::now());
             // Wake once a minute through the reminder window so a 5-minute reminder
             // is not missed between coarse fixtures.
             let reminder_window = i64::from(s.settings.reminder_minutes.min(120)) * 60;
@@ -645,13 +628,22 @@ async fn poll(app: tauri::AppHandle) {
             }
             delay
         };
-        if let Some(retry_after) = host_rate_limit {
-            gate.defer(
-                std::time::Instant::now(),
-                scheduling::failure_delay(1, Some(retry_after)),
-            );
+        let rate_limited_until = if let Some(retry_after) = host_rate_limit {
+            let seconds = scheduling::failure_delay(1, Some(retry_after));
+            gate.defer(std::time::Instant::now(), seconds);
+            Some((Utc::now() + chrono::Duration::seconds(seconds as i64)).to_rfc3339())
         } else {
             gate.clear();
+            None
+        };
+        let rate_limit_changed = {
+            let mut s = snapshot_lock(&state);
+            let changed = s.rate_limited_until != rate_limited_until;
+            s.rate_limited_until = rate_limited_until;
+            changed
+        };
+        if rate_limit_changed {
+            let _ = app.emit("snapshot-updated", ());
         }
         drop(_guard);
         tokio::select! { _=tokio::time::sleep(scheduling::sleep_chunk(Duration::from_secs(delay)))=>{}, _=state.wake.notified()=>{} }
@@ -920,7 +912,14 @@ fn main() {
                 .show_menu_on_left_click(false)
                 .tooltip("MatchRadar")
                 .on_menu_event(|app, event| match event.id.as_ref() {
-                    "quit" => app.exit(0),
+                    "quit" => {
+                        // Poll results are saved at most every five minutes; flush the
+                        // latest fixtures, alert baselines and freshness before exiting.
+                        if let Err(error) = persist(&app.state::<State>()) {
+                            eprintln!("MatchRadar persistence on quit: {error}");
+                        }
+                        app.exit(0)
+                    }
                     "show" => toggle_main_window(app),
                     "settings" => {
                         if let Some(w) = app.get_webview_window("main") {

@@ -1,7 +1,7 @@
 import { expect,it } from 'vitest';
 import { mergeResults, matchesView } from './matchViews';
 import { mockSnapshot } from './test-fixtures/fixtures';
-it('filters existing Premier League data without mutating or inventing fixtures',()=>{const m=mockSnapshot.matches;expect(matchesView(m,'All',[])).toEqual(m);expect(matchesView(m,'Following',[])).toEqual([]);expect(matchesView(m,'Live',[]).every(m=>['live','halftime'].includes(m.status))).toBe(true);expect(matchesView(m,'Upcoming',[]).every(m=>m.status==='scheduled')).toBe(true);expect(matchesView(m,'Results',[]).every(m=>m.status==='fulltime')).toBe(true);});
+it('filters existing Premier League data without mutating or inventing fixtures',()=>{const m=mockSnapshot.matches;expect(matchesView(m,'All',[])).toEqual(m);expect(matchesView(m,'Following',[])).toEqual([]);expect(matchesView(m,'Live',[]).every(m=>['live','halftime','suspended'].includes(m.status))).toBe(true);expect(matchesView(m,'Upcoming',[]).every(m=>m.status==='scheduled')).toBe(true);expect(matchesView(m,'Results',[]).every(m=>m.status==='fulltime')).toBe(true);});
 it('selects the exact fixtures for each view and followed club',()=>{
  const matches=mockSnapshot.matches.slice(0,5);
  const ids=(view:Parameters<typeof matchesView>[1],favorites:string[]=[])=>matchesView(matches,view,favorites).map(m=>m.id);
@@ -10,6 +10,13 @@ it('selects the exact fixtures for each view and followed club',()=>{
  expect(ids('Upcoming')).toEqual([matches[2].id,matches[3].id]);
  expect(ids('Results')).toEqual([matches[4].id]);
  expect(ids('All')).toEqual(matches.map(m=>m.id));
+});
+
+it('lists a suspended game in the Live view, not in Upcoming or Results',()=>{
+ const suspended={...mockSnapshot.matches[0],id:'suspended',status:'suspended' as const};
+ expect(matchesView([suspended],'Live',[]).map(m=>m.id)).toEqual(['suspended']);
+ expect(matchesView([suspended],'Upcoming',[])).toEqual([]);
+ expect(matchesView([suspended],'Results',[])).toEqual([]);
 });
 
 it('keeps corrected history scores unless the daily fixture was confirmed more recently',()=>{

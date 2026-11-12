@@ -15,4 +15,4 @@ export interface LeagueStatus {
 }
 export interface LeagueResults { updatedAt?: string | null; error?: string | null }
 export interface Settings { matchAlerts: Record<string, MatchAlert>; favorites: string[]; followedOnly: boolean; compact: boolean; alwaysOnTop: boolean; startHidden: boolean; reducedMotion: boolean; opacity: number; theme: 'dark' | 'light'; competitionView: CompetitionView; reminders: boolean; reminderMinutes: number; starts: boolean; goals: boolean }
-export interface Snapshot { matches: Match[]; leagueStatus?: Record<string, LeagueStatus>; updatedAt?: string | null; fixtureUpdatedAt?: string | null; fixtureError?: string | null; scoreError?: string | null; error?: string | null; partial?: boolean; refreshing?: boolean; settings: Settings }
+export interface Snapshot { matches: Match[]; leagueStatus?: Record<string, LeagueStatus>; updatedAt?: string | null; fixtureUpdatedAt?: string | null; fixtureError?: string | null; scoreError?: string | null; error?: string | null; partial?: boolean; refreshing?: boolean; rateLimitedUntil?: string | null; settings: Settings }

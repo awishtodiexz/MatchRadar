@@ -5,8 +5,8 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ListFilter, Minus, Pin, Radio, RefreshCw, Settings2, X } from 'lucide-react';
 import logo from './assets/logo.png';
-import { groupFixtures, isLive } from './fixtures';
-import { competitionLeagues, competitionName, competitionSlug, competitionStatus, resultsStatus, updateStatus } from './freshness';
+import { groupFixtures, isInProgress, isLive } from './fixtures';
+import { competitionLeagues, competitionName, competitionSlug, competitionStatus, rateLimitedUntil, resultsStatus, updateStatus } from './freshness';
 import { useApp } from './store';
 import { useLocalDay } from './useLocalDay';
 import { useNotificationNavigation } from './useNotificationNavigation';
@@ -84,7 +84,7 @@ export default function App() {
     setSelected(current=>{
       if(!current)return current;
       const fresh=allMatches?.find(m=>m.id===current.id);
-      return fresh??(isLive(current)&&!current.scoreStale?{...current,scoreStale:true}:current);
+      return fresh??(isInProgress(current)&&!current.scoreStale?{...current,scoreStale:true}:current);
     });
   },[allMatches]);
   useEffect(()=>{
@@ -173,6 +173,7 @@ export default function App() {
   const waiting = historyView?recent.loading&&!matches.length:!allMatches?.length&&(loading||!!snapshot?.refreshing&&!viewStatus.updatedAt&&!viewStatus.fixtureUpdatedAt&&!viewStatus.error);
   const busy = refreshing||!!snapshot?.refreshing;
   const status = updateStatus(snapshot,competitionView);
+  const limitedUntil = rateLimitedUntil(snapshot);
   const statusLabel = feedUnavailable?'NOT CONNECTED':status.label;
   const statusTime = status.timestamp?`${dateLabel(status.timestamp)} ${timeLabel(status.timestamp)}`:undefined;
   const doRefresh = async () => {setRefreshing(true);try{await refresh();}finally{setRefreshing(false);}};
@@ -234,7 +235,7 @@ export default function App() {
         <button id="settings-control" className="icon-button" title={view==='settings'?'Return to matches (Esc)':'Open Settings'} onClick={()=>view==='settings'?back():openSettings()} aria-label="Settings" aria-pressed={view==='settings'}><Settings2 size={16}/></button>
         <button className="icon-button" title={settings?.alwaysOnTop?'Always on top is on · unpin widget':'Always on top is off · keep widget above other windows'} disabled={!settings} onClick={()=>settings&&void save({alwaysOnTop:!settings.alwaysOnTop})} aria-label="Always on top" aria-pressed={!!settings?.alwaysOnTop}><Pin size={16}/></button>
         <button className="icon-button" title={settings?.followedOnly?'Following only is on · show all matches':'Showing all matches · filter to followed clubs'} disabled={!settings} onClick={()=>settings&&void save({followedOnly:!settings.followedOnly})} aria-label="Following only" aria-pressed={!!settings?.followedOnly}><ListFilter size={16}/>{settings?.followedOnly&&<span className="filter-dot"/>}</button>
-        <button className="icon-button" title={busy?'Updating fixtures…':'Refresh fixtures and scores'} onClick={()=>void doRefresh()} disabled={busy} aria-label="Refresh" aria-busy={busy}><RefreshCw size={16} className={busy?'spin':''}/></button>
+        <button className="icon-button" title={busy?'Updating fixtures…':limitedUntil?`ESPN is rate limiting requests · updates resume automatically at ${timeLabel(limitedUntil)}`:'Refresh fixtures and scores'} onClick={()=>void doRefresh()} disabled={busy} aria-label="Refresh" aria-busy={busy}><RefreshCw size={16} className={busy?'spin':''}/></button>
       </div>
     </footer>
   </main>;
