@@ -3,12 +3,23 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/awishtodiexz/MatchRadar/actions/workflows/windows.yml"><img src="https://github.com/awishtodiexz/MatchRadar/actions/workflows/windows.yml/badge.svg" alt="Windows validation"></a>
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows&logoColor=white" alt="Windows 10 and 11">
   <img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Tauri 2">
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=06202a" alt="React 19">
   <img src="https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white" alt="Rust">
 </p>
+
+<p align="center">
+  <a href="https://github.com/awishtodiexz/MatchRadar/releases/latest"><strong>Download for Windows 10/11 →</strong></a>
+</p>
+
+<p align="center">
+  <sub><a href="#screenshots">Screenshots</a> &nbsp;·&nbsp; <a href="#features">Features</a> &nbsp;·&nbsp; <a href="#development">Build from source</a></sub>
+</p>
+
+MatchRadar keeps scores, fixtures and the clubs you follow in a small window that stays with you while you work. Open any match for a Match Centre built around one scoreboard: a compact incident timeline, match statistics, lineups and full commentary. Preferences and cached data stay on your device, and there is no account to create.
+
+## Screenshots
 
 <p align="center">
   <picture>
@@ -27,12 +38,6 @@
   <sub><strong>Widget</strong> · scores at a glance &nbsp;·&nbsp; <strong>Match Centre</strong> · the full story</sub><br>
   <sub>Screenshots use sample match data.</sub>
 </p>
-
-MatchRadar keeps scores, fixtures and the clubs you follow in a small window that stays with you while you work. Open any match for a Match Centre built around one scoreboard: a compact incident timeline, match statistics, lineups and full commentary. Preferences and cached data stay on your device, and there is no account to create.
-
-| **Platform** | **Competitions** | **Built with** | **Privacy** |
-| :---: | :---: | :---: | :---: |
-| Windows 10/11 (64-bit) | Premier League · Champions League | Tauri 2 · Rust · React | Local cache · no account · no telemetry |
 
 ## Features
 
@@ -59,21 +64,27 @@ MatchRadar keeps scores, fixtures and the clubs you follow in a small window tha
 
 **Windows 10/11 (64-bit)** with the [WebView2 runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
 
-1. Download the latest installer from [Releases](https://github.com/awishtodiexz/MatchRadar/releases/latest).
+1. [Download the latest installer](https://github.com/awishtodiexz/MatchRadar/releases/latest).
 2. Quit any running MatchRadar instance from the tray.
 3. Run the installer and launch MatchRadar.
 
-The installer is unsigned, so Windows may show a SmartScreen warning. If it does, choose **More info → Run anyway**. The release page includes the installer's SHA-256 checksum. There is no auto-updater yet; future versions install over the current one.
+The installer is unsigned, so Windows may show a SmartScreen warning. If it does, choose **More info → Run anyway**. The release notes include the installer's SHA-256 checksum. There is no auto-updater yet; future versions install over the current one.
+
+MatchRadar lives in the tray: both window controls hide it, and you can click the tray icon or press `Ctrl+Shift+M` to bring it back. Choose **Quit** in the tray menu to exit fully.
 
 ## Development
 
 You will need Node.js 22, stable Rust with the MSVC toolchain, the Visual Studio C++ build tools, WebView2, and Microsoft Edge for the Playwright checks. See the [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/) for details.
+
+### Run locally
 
 ```powershell
 npm ci
 npm run tauri dev        # native app
 npm run dev              # frontend shell; native data is desktop-only
 ```
+
+### Checks
 
 ```powershell
 npm run verify:fast      # version check, lint, frontend tests and production build
@@ -82,11 +93,13 @@ cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 ```
 
-Rust tests need the Visual Studio C++ environment; run them from a Developer PowerShell, or use `.\scripts\build-local.ps1`, which loads it and builds the NSIS installer. Tauri and Rust own the native window, networking, persistence, notifications and background refresh; React renders the interface. `npm run screenshots` rebuilds the banner and images above.
+Rust tests need the Visual Studio C++ environment. Run them from a Developer PowerShell, or use `.\scripts\build-local.ps1`, which loads it and builds the NSIS installer.
+
+Tauri and Rust own the native window, networking, persistence, notifications and background refresh; React renders the interface. `npm run screenshots` rebuilds the banner and screenshots above.
 
 ## Contributing
 
-Found a bug or have an idea? [Open an issue](https://github.com/awishtodiexz/MatchRadar/issues). Code changes are welcome — run the commands under Development, including the Rust checks, before opening a pull request.
+Found a bug or have an idea? [Open an issue](https://github.com/awishtodiexz/MatchRadar/issues). Code changes are welcome — run the checks under Development, including the Rust ones, before opening a pull request.
 
 For security reports, follow [SECURITY.md](.github/SECURITY.md) instead of opening a public issue.
 
@@ -99,5 +112,5 @@ MatchRadar is not affiliated with ESPN, the Premier League or UEFA. Club crests 
 ---
 
 <p align="center">
-  <sub><a href="CHANGELOG.md">Changelog</a> · <a href="https://github.com/awishtodiexz/MatchRadar/releases">Releases</a> · <a href="https://github.com/awishtodiexz/MatchRadar/issues">Issues</a></sub>
+  <sub><a href="CHANGELOG.md">Changelog</a> · <a href="https://github.com/awishtodiexz/MatchRadar/releases">Releases</a> · <a href="https://github.com/awishtodiexz/MatchRadar/issues">Issues</a> · <a href=".github/SECURITY.md">Security</a></sub>
 </p>
