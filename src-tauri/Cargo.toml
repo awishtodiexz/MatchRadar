@@ -4,6 +4,7 @@ version = "1.0.0"
 edition = "2021"
 description = "A compact Premier League and Champions League widget for Windows."
 repository = "https://github.com/awishtodiexz/MatchRadar"
+license = "MIT"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

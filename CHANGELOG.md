@@ -1,55 +1,38 @@
 # Changelog
 
-## 1.0.0 — 2026-11-09 (updated 2026-11-12)
+## 1.0.0 — 2026-11-12
 
-### Match Centre redesign (2026-11-12)
+Initial public release.
 
-- New match header: crests on soft rings, a dominant score or kick-off time with a status chip (`Kick-off · Today`, live, full-time, postponed), and the beaten side dimmed after full-time.
-- Overview rebuilt as quiet cards: match information lists only the facts ESPN supplied, form shows one row per team with the latest result outlined and a W/D/L record, and team leaders read as a head-to-head per category with the higher figure highlighted.
-- Leader values such as `Matches: 10, Goals: 9` are reduced to the stat itself, with appearances shown as context.
-
-### Reliability update (2026-11-12)
-
-- Live polling: a match whose kickoff has passed while ESPN still lists it as scheduled is checked every minute, so the start alert and early goals are no longer missed during a 30-minute idle wait.
-- Match outcomes: abandoned matches are no longer shown as full time or counted as results; forfeits keep their awarded score as a result, are labelled as forfeits, and never trigger goal alerts.
-- Suspended matches appear with in-progress games and in the Live view, after matches being played, and are rechecked at the matchday rate.
-- Refresh feedback: while ESPN is rate limiting requests, the footer shows when updates resume instead of silently doing nothing.
-- Quitting from the tray saves the latest fixtures, alert baselines and freshness before exiting.
-
-### Improved build (2026-11-10)
-
-### App
-
-- Match Centre improvements: stoppage-time event ordering, VAR/key-event labels, accessible sticky statistics headers, clearer commentary counts and empty-filter recovery, lineup keyboard navigation, and explicit postponed/cancelled/unknown states.
-- Widget and status polish: correct `CHECKING LIVE` state for unchecked competitions, honest failed-first-load recovery, scroll reset when changing views, clearer Both-competitions card descriptions, and one-line 12-hour kickoff times.
-- Champions League knockout context: optional leg and aggregate fields, surfaced in match details.
-
-### Data and reliability
-
-- ESPN robustness: unplayed fixtures no longer report 0–0, shootout/disallowed goals are excluded from scorers, suspended previous-day matches are refreshed, provider identities and text are bounded, and crest URLs must match the club.
-- Notifications: reminders survive provider outages, are re-planned after preference changes, newer goals supersede older pending scores, and delayed kickoffs get a bounded start-alert grace period.
-- Native Windows: improved hidden-window recovery, restored-size handling, start-in-tray semantics, sleep/resume placement recovery, and bounded shortcut retry.
-- QA: new reliability journeys, damaged-timestamp resilience, corrected Results pending state, and CI failure-artifact upload.
-
-### Initial release (2026-11-09)
-
-Initial release.
-
-### App
+### Widget
 
 - Frameless, always-on-top Windows widget with compact and expanded views, dark and light themes, adjustable opacity, and tray-first controls.
-- Premier League, Champions League, and combined fixture lists with live scores, kick-off times, and a persisted competition choice.
-- Follow clubs across both competitions, with reminders, match-start alerts, optional goal alerts, per-match mute, and notification click-through.
-- Match Centre with an Overview timeline, match information, statistics, formation lineups, and filtered commentary.
+- Premier League, Champions League, and combined fixture lists with live scores, one-line 12-hour kick-off times, and a persisted competition choice.
 - Recent results covering the previous 14 days, with independent per-competition fetches and caches.
+- Honest status: a `CHECKING LIVE` state for competitions not yet checked, recovery from a failed first load, and a footer that shows when updates resume while ESPN is rate limiting requests.
+
+### Match Centre
+
+- A match header with crests on soft rings, a dominant score or kick-off time with a status chip (`Kick-off · Today`, live, full-time, postponed), and the beaten side dimmed after full-time.
+- Overview: a compact incident timeline by half with stoppage-time ordering and VAR/key-event labels; match information listing only the facts ESPN supplied; form as one row per team with a W/D/L record; team leaders as a head-to-head per category.
+- Statistics with comparison bars and accessible sticky headers, formation lineups with keyboard navigation, and filtered commentary with clear counts and empty-filter recovery.
+- Explicit postponed, cancelled, suspended, abandoned, forfeit and unknown states. Champions League knockout ties show leg and aggregate.
+
+### Following and alerts
+
+- Follow clubs across both competitions, with reminders, match-start alerts, optional goal alerts, per-match mute, and notification click-through.
+- Reminders survive provider outages and are re-planned after preference changes; newer goals supersede older pending scores; delayed kick-offs get a bounded start-alert grace period, and matches past kick-off but still listed as scheduled are checked every minute.
+- Forfeits and abandoned matches never trigger goal alerts.
 
 ### Reliability
 
-- Independent fixture and score refreshes and failure backoff; one failed source does not erase the other competition or block the other source.
-- Atomic local persistence with validated backup recovery, corruption handling, and a durable notification retry queue.
-- Reschedule-aware reminder deduplication, bounded provider response reads, and off-screen window recovery with sleep/resume refresh.
+- Independent fixture and score refreshes with failure backoff; one failed source does not erase the other competition or block the other source.
+- Defensive ESPN parsing: unplayed fixtures never report 0–0, shootout and disallowed goals are excluded from scorers, suspended matches are rechecked, provider text and response sizes are bounded, and crest URLs must match the club.
+- Atomic local persistence with validated backup recovery, corruption handling, and a durable notification retry queue. Quitting from the tray saves fixtures, alert baselines and freshness first.
+- Off-screen and hidden-window recovery, restored-size handling, sleep/resume refresh and placement recovery, and bounded global-shortcut retry.
 
 ### Platform
 
 - Tauri 2, Rust, React and TypeScript. Settings and cache stay on your device; live scores and match details are fetched from ESPN. No account, API key, analytics or telemetry.
 - Windows 10/11 x64 NSIS installer. Unsigned; no auto-updater.
+- MIT licensed.

@@ -7,6 +7,7 @@
   <img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Tauri 2">
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=06202a" alt="React 19">
   <img src="https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white" alt="Rust">
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license">
 </p>
 
 <p align="center">
@@ -117,8 +118,12 @@ Fixtures, scores and match details come from ESPN's **unofficial, undocumented**
 
 MatchRadar is not affiliated with ESPN, the Premier League or UEFA. Club crests and competition badges load from ESPN's CDN, with initials as an offline fallback.
 
+## License
+
+MatchRadar is released under the [MIT License](LICENSE). Match data, club crests and competition badges belong to their respective owners and are not covered by this license.
+
 ---
 
 <p align="center">
-  <sub><a href="CHANGELOG.md">Changelog</a> · <a href="https://github.com/awishtodiexz/MatchRadar/releases">Releases</a> · <a href="https://github.com/awishtodiexz/MatchRadar/issues">Issues</a> · <a href=".github/SECURITY.md">Security</a></sub>
+  <sub><a href="CHANGELOG.md">Changelog</a> · <a href="https://github.com/awishtodiexz/MatchRadar/releases">Releases</a> · <a href="https://github.com/awishtodiexz/MatchRadar/issues">Issues</a> · <a href=".github/SECURITY.md">Security</a> · <a href="LICENSE">License</a></sub>
 </p>

@@ -2,6 +2,7 @@
   "name": "matchradar",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "description": "A compact Premier League and Champions League widget for Windows.",
   "repository": {
     "type": "git",
