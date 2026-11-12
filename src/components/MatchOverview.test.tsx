@@ -50,11 +50,11 @@ it('includes red cards as compact incidents rather than commentary paragraphs',(
   expect(screen.queryByText('Second yellow card.')).toBeNull();
 });
 
-it('shows the supplied match facts and explicitly marks missing fields',()=>{
+it('shows the supplied match facts and omits missing fields',()=>{
  const {unmount}=show(base,{...data,referee:'Referee Name',venue:'Test Stadium',venueCity:'Test City',capacity:31876,attendance:31629});
- expect(screen.getByText('Referee Name')).toBeTruthy();expect(screen.getByText('Test Stadium (Test City)')).toBeTruthy();
- expect(screen.getByText('31,876')).toBeTruthy();expect(screen.getByText('31,629')).toBeTruthy();unmount();
- show(base,data);expect(screen.getAllByText('Not provided')).toHaveLength(4);
+ expect(screen.getByText('Referee Name')).toBeTruthy();expect(screen.getByText('Test Stadium')).toBeTruthy();expect(screen.getByText('Test City · Capacity 31,876')).toBeTruthy();
+ expect(screen.getByText('31,629')).toBeTruthy();unmount();
+ show(base,data);expect(screen.queryByText('Not provided')).toBeNull();expect(screen.getByText(/have not been announced/)).toBeTruthy();
 });
 
 it('surfaces triple-hyphen VAR reviews without treating them as goals',()=>{
@@ -79,4 +79,12 @@ it('marks a forfeit as an awarded result without inventing goalscorers',()=>{
  expect(screen.getByText(/Result awarded by forfeit/)).toBeTruthy();
  expect(screen.queryByLabelText('Goalscorers')).toBeNull();
  expect(screen.queryByText('Scorers unavailable')).toBeNull();
+});
+
+it('reduces ESPN leader strings to the category figure with appearances as context',async()=>{
+ const {leaderStat}=await import('./MatchPreview');
+ expect(leaderStat('Goals','Matches: 10, Goals: 9')).toEqual({main:'9',apps:'10'});
+ expect(leaderStat('Assists','Matches: 10, Assists: 3')).toEqual({main:'3',apps:'10'});
+ expect(leaderStat('Shots','38')).toEqual({main:'38'});
+ expect(leaderStat('Rating','n/a')).toEqual({main:'n/a'});
 });

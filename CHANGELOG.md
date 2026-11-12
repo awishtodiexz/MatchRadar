@@ -2,6 +2,12 @@
 
 ## 1.0.0 — 2026-11-09 (updated 2026-11-12)
 
+### Match Centre redesign (2026-11-12)
+
+- New match header: crests on soft rings, a dominant score or kick-off time with a status chip (`Kick-off · Today`, live, full-time, postponed), and the beaten side dimmed after full-time.
+- Overview rebuilt as quiet cards: match information lists only the facts ESPN supplied, form shows one row per team with the latest result outlined and a W/D/L record, and team leaders read as a head-to-head per category with the higher figure highlighted.
+- Leader values such as `Matches: 10, Goals: 9` are reduced to the stat itself, with appearances shown as context.
+
 ### Reliability update (2026-11-12)
 
 - Live polling: a match whose kickoff has passed while ESPN still lists it as scheduled is checked every minute, so the start alert and early goals are no longer missed during a 30-minute idle wait.

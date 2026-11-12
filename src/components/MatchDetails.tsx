@@ -4,20 +4,25 @@ import { MatchCentre } from './MatchCentre';
 import type { Match, Settings } from '../types';
 import { isLive } from '../fixtures';
 import { Badge, CompetitionMark } from './WidgetUi';
-import { dateLabel, isForfeit, timeLabel } from '../presentation';
+import { dateLabel, isForfeit, relativeDay, timeLabel, timeParts } from '../presentation';
 import { MatchAlertsButton } from './MatchCard';
 
 export function MatchDetails({match, settings, back}: {match:Match; settings:Settings; back:()=>void}) {
   const [collapsed,setCollapsed] = useState(false);
   const hero = useRef<HTMLDivElement>(null);
   const live = isLive(match);
+  const scheduled = match.status==='scheduled';
   const status = live
     ? (match.status==='halftime'?'HALF-TIME':`LIVE ${match.detail || ''}`.trim())
-    : match.status==='fulltime'?(isForfeit(match)?'FORFEIT':'FULL-TIME'):match.status==='scheduled'?'SCHEDULED':(match.detail||match.status).toUpperCase();
+    : match.status==='fulltime'?(isForfeit(match)?'FORFEIT':'FULL-TIME'):scheduled?`Kick-off · ${relativeDay(match.kickoff)}`:(match.detail||match.status).toUpperCase();
   const statusText = match.scoreStale ? `${status} · Saved` : status;
   const awaitingScore = match.homeScore==null&&match.awayScore==null;
-  const showKickoff = match.status==='scheduled'||(awaitingScore&&(match.status==='postponed'||match.status==='cancelled'||match.status==='unknown'));
+  const showKickoff = scheduled||(awaitingScore&&(match.status==='postponed'||match.status==='cancelled'||match.status==='unknown'));
   const score = showKickoff?timeLabel(match.kickoff):`${match.homeScore ?? '–'} – ${match.awayScore ?? '–'}`;
+  const [clock,meridiem] = timeParts(score);
+  const context = [match.leg,match.aggregate&&`Aggregate ${match.aggregate}`].filter(Boolean).join(' · ');
+  const winner = match.status==='fulltime'&&match.homeScore!=null&&match.awayScore!=null&&match.homeScore!==match.awayScore
+    ? (match.homeScore>match.awayScore?'home':'away') : null;
   return <>
     <div className="detail-route">
       <button className="back-link" onClick={back} aria-label="Back to matches" title="Back to matches (Esc)"><ArrowLeft size={16}/>Matches</button>
@@ -26,16 +31,16 @@ export function MatchDetails({match, settings, back}: {match:Match; settings:Set
       <MatchAlertsButton match={match} settings={settings}/>
     </div>
     <div className="detail-body" onScroll={event=>setCollapsed(event.currentTarget.scrollTop >= (hero.current?.offsetHeight??180)-24)}>
-      <div className="detail-hero" ref={hero}>
-      <p className="detail-date"><time dateTime={match.kickoff}>{dateLabel(match.kickoff)} · {timeLabel(match.kickoff)}</time> local time{match.leg?` · ${match.leg}`:''}{match.aggregate?` · Aggregate ${match.aggregate}`:''}</p>
+      <div className={'detail-hero'+(live?' is-live':'')} ref={hero}>
       <div className="versus">
-        <div><Badge team={match.home}/><b title={match.home.name}>{match.home.name}</b></div>
+        <div className={winner==='away'?'is-beaten':undefined}><span className="crest-ring"><Badge team={match.home}/></span><b title={match.home.name}>{match.home.name}</b><small>Home</small></div>
         <div className="detail-score">
-          <span>{score}</span>
+          <span className={showKickoff?'is-time':undefined}>{clock}{meridiem&&<small>{meridiem}</small>}</span>
           <small className={'detail-status '+match.status+(match.scoreStale?' saved':'')}>{live&&!match.scoreStale&&<i className="dot"/>}{statusText}</small>
         </div>
-        <div><Badge team={match.away}/><b title={match.away.name}>{match.away.name}</b></div>
+        <div className={winner==='home'?'is-beaten':undefined}><span className="crest-ring"><Badge team={match.away}/></span><b title={match.away.name}>{match.away.name}</b><small>Away</small></div>
       </div>
+      <p className="detail-date"><time dateTime={match.kickoff}>{dateLabel(match.kickoff)}{showKickoff?'':` · ${timeLabel(match.kickoff)}`}</time>{context&&<> · {context}</>}</p>
       </div>
       <MatchCentre key={match.id} match={match}/>
     </div>

@@ -1,4 +1,5 @@
-import { MapPin, Users, Landmark, Flag } from 'lucide-react';
+import { MapPin, Users, Flag, Clock } from 'lucide-react';
+import type { ReactNode } from 'react';
 import type { Match } from '../types';
 import type { MatchScorer, MatchSummary } from '../useMatchSummary';
 import { MatchEvents } from './MatchEvents';
@@ -20,15 +21,34 @@ function goalScorers(data:MatchSummary|null):MatchScorer[] {
   return [...unique.values()];
 }
 
+/** A titled surface shared by every Overview section. */
+export function OverviewCard({title,note,label,children,className=''}:{title:ReactNode;note?:ReactNode;label:string;children:ReactNode;className?:string}) {
+  return <section className={'ov-card '+className} aria-label={label}>
+    <header className="ov-card-head"><h3>{title}</h3>{note&&<span className="ov-card-note">{note}</span>}</header>
+    {children}
+  </section>;
+}
+
 export function MatchOverview({match,data}:{match:Match;data:MatchSummary|null}) {
   const scorers=goalScorers(data);
   // An awarded forfeit score has no goalscorers to report.
   const playing=['live','halftime','fulltime','suspended'].includes(match.status)&&!isForfeit(match);
   const hasGoals=scorers.length>0||(match.homeScore??0)+(match.awayScore??0)>0;
   const incidents=(data?.events??[]).filter(event=>isIncident(event.kind));
+  // Only show facts the provider supplied; a column of "Not provided" is noise.
+  const facts=[
+    data?.venue&&{key:'venue',icon:<MapPin size={14}/>,label:'Stadium',value:data.venue,sub:[data.venueCity,data.capacity&&`Capacity ${data.capacity.toLocaleString()}`].filter(Boolean).join(' · ')},
+    data?.referee&&{key:'referee',icon:<Flag size={14}/>,label:'Referee',value:data.referee},
+    data?.attendance!=null&&{key:'attendance',icon:<Users size={14}/>,label:'Attendance',value:data.attendance.toLocaleString()},
+  ].filter(Boolean) as Array<{key:string;icon:ReactNode;label:string;value:string;sub?:string}>;
+  const note=match.status==='scheduled'?'Lineups and live coverage appear closer to kick-off.'
+    :match.status==='postponed'?'This match has been postponed.'
+    :match.status==='cancelled'?closedNote(match)
+    :isForfeit(match)?'Result awarded by forfeit; the match was not played to completion.'
+    :match.status==='unknown'?'Match status is unavailable. Check back for updates.':null;
   return <article className="overview-report" aria-label="Match overview">
-    {!!incidents.length&&<MatchEvents match={match} events={incidents}/>}
-    {playing&&!incidents.some(event=>isGoal(event.kind))&&(hasGoals?<div className="overview-scorers" aria-label="Goalscorers">{[match.home,match.away].map((team,index)=>{
+    {!!incidents.length&&<OverviewCard title="Key moments" label="Key moments" className="ov-moments"><MatchEvents match={match} events={incidents}/></OverviewCard>}
+    {playing&&!incidents.some(event=>isGoal(event.kind))&&<OverviewCard title="Goals" label="Goals">{hasGoals?<div className="overview-scorers" aria-label="Goalscorers">{[match.home,match.away].map((team,index)=>{
       const grouped=new Map<string,string[]>();
       for(const scorer of scorers.filter(scorer=>scorer.teamId===team.id)) {
         const minutes=grouped.get(scorer.name)??[];
@@ -40,17 +60,13 @@ export function MatchOverview({match,data}:{match:Match;data:MatchSummary|null})
       return <section key={team.id} aria-label={`${team.name} scorers`}><span className="overview-team" title={team.name}>{team.short}</span>
         {grouped.size?<ul>{[...grouped].map(([name,minutes])=><li key={name}><strong>{name}</strong><span>{minutes.join(', ')}</span></li>)}</ul>:<p>{score===0?'No goals':'Scorers unavailable'}</p>}
       </section>;
-    })}</div>:<p className="overview-goalless">{match.status==='fulltime'?'No goals in this match.':'No goals yet.'}</p>)}
-    <section className="match-information" aria-label="Match information"><h3>Match information</h3><dl>
-      <div><dt><Flag size={13} aria-hidden="true"/>Referee</dt><dd>{data?.referee||'Not provided'}</dd></div>
-      <div><dt><MapPin size={13} aria-hidden="true"/>Stadium</dt><dd>{data?.venue?`${data.venue}${data.venueCity?` (${data.venueCity})`:''}`:'Not provided'}</dd></div>
-      <div><dt><Landmark size={13} aria-hidden="true"/>Capacity</dt><dd>{data?.capacity?.toLocaleString()??'Not provided'}</dd></div>
-      <div><dt><Users size={13} aria-hidden="true"/>Attendance</dt><dd>{data?.attendance?.toLocaleString()??'Not provided'}</dd></div>
-    </dl></section>
-    {match.status==='scheduled'&&<p className="field-note">Lineups and match coverage will appear when available.</p>}
-    {match.status==='postponed'&&<p className="field-note">This match has been postponed.</p>}
-    {match.status==='cancelled'&&<p className="field-note">{closedNote(match)}</p>}
-    {isForfeit(match)&&<p className="field-note">Result awarded by forfeit; the match was not played to completion.</p>}
-    {match.status==='unknown'&&<p className="field-note">Match status is unavailable. Check back for updates.</p>}
+    })}</div>:<p className="overview-goalless">{match.status==='fulltime'?'No goals in this match.':'No goals yet.'}</p>}</OverviewCard>}
+    {note&&<p className={'ov-hint'+(match.status==='scheduled'?'':' is-warning')}><Clock size={14} aria-hidden="true"/><span>{note}</span></p>}
+    <OverviewCard title="Match information" label="Match information" className="match-information">
+      {facts.length?<dl>{facts.map(fact=><div key={fact.key}>
+        <dt><span className="ov-icon" aria-hidden="true">{fact.icon}</span>{fact.label}</dt>
+        <dd><strong>{fact.value}</strong>{fact.sub&&<small>{fact.sub}</small>}</dd>
+      </div>)}</dl>:<p className="ov-empty">Venue and officials have not been announced yet.</p>}
+    </OverviewCard>
   </article>;
 }

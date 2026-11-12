@@ -4,16 +4,11 @@ import { isLive } from '../fixtures';
 import { useMatchSummary } from '../useMatchSummary';
 import { MatchStats } from './MatchStats';
 import { MatchLineups } from './MatchLineups';
-import { Badge } from './WidgetUi';
+import { MatchPreview } from './MatchPreview';
 import { MatchEvents, keyEvent } from './MatchEvents';
 import { MatchOverview } from './MatchOverview';
 import { isCard, isGoal } from './matchEventKinds';
 
-const formScore = (score:string, atHome:boolean) => {
-  const parts=score.split('-').map(Number);
-  if(parts.length!==2||parts.some(n=>!Number.isFinite(n))) return score;
-  return atHome?`${parts[0]}–${parts[1]}`:`${parts[1]}–${parts[0]}`;
-};
 export function MatchCentre({match}:{match:Match}) {
   const summary = useMatchSummary(match.id,isLive(match),match.status==='fulltime');
   const {loading,error,retry}=summary;
@@ -29,9 +24,6 @@ export function MatchCentre({match}:{match:Match}) {
   const visibleEvents=events.filter(event=>(eventFilter==='all'||keyEvent(event.kind))&&(eventType==='all'||(eventType==='goals'?isGoal(event.kind):eventType==='cards'?isCard(event.kind):eventType==='substitutions'?event.kind==='substitution':eventType==='shots'?/shot|attempt|chance/i.test(event.kind):/var|delay|injury|review/i.test(event.kind))));
   const filtered=visibleEvents.length!==events.length;
   const resetFilters=()=>{setEventFilter('all');setEventType('all');};
-  const teams=[match.home,match.away];
-  const formTeams=teams.filter(team=>(data?.form?.[team.id]?.length??0)>0);
-  const leaderTeams=teams.filter(team=>data?.leaders?.some(leader=>leader.teamId===team.id));
   const select=(name:string)=>{
     setSelected(name);
     requestAnimationFrame(()=>document.querySelector<HTMLElement>('.detail-body')?.scrollTo({top:0}));
@@ -47,35 +39,7 @@ export function MatchCentre({match}:{match:Match}) {
 
     {tab==='Overview'&&(!loading||data)&&<>
       <MatchOverview match={match} data={data}/>
-      {(!!formTeams.length||!!leaderTeams.length)&&<details className="match-background" open={match.status==='scheduled'}><summary>Form &amp; team leaders</summary>
-      {!!formTeams.length&&<>
-        <h3>Form <small className="section-note">last five</small></h3>
-        <div className="form-grid">{formTeams.map(team=>{
-          const games=data?.form?.[team.id]??[];
-          const latest=games[games.length-1];
-          return <div className="form-team" key={team.id}>
-            <div className="form-head"><Badge team={team}/><span title={team.name}>{team.short}</span><small>{team.name}</small></div>
-            <div className="form-pills">{games.map((game,index)=><span key={`${game.opponentId}-${index}`} role="img"
-              className={'form-pill '+game.result.toLowerCase()}
-              title={`${game.atHome?'vs':'@'} ${game.opponent} · ${formScore(game.score,game.atHome)}`}
-              aria-label={`${game.result==='W'?'Win':game.result==='L'?'Loss':'Draw'} ${game.atHome?'against':'at'} ${game.opponent}, ${formScore(game.score,game.atHome)}`}>{game.result}</span>)}</div>
-            {latest&&<small className="form-last">{latest.atHome?'vs':'@'} {latest.opponent} · {formScore(latest.score,latest.atHome)}</small>}
-          </div>;
-        })}</div>
-      </>}
-      {!!leaderTeams.length&&<>
-        <h3>Team leaders</h3>
-        <div className="leaders-grid">{leaderTeams.map(team=>{
-          const rows=data?.leaders?.filter(leader=>leader.teamId===team.id).slice(0,3)??[];
-          return <div className="leader-team" key={team.id}>
-            <div className="leader-head"><Badge team={team}/><span title={team.name}>{team.short}</span></div>
-            <ul className="leader-list">{rows.map(leader=><li key={`${leader.category}-${leader.name}`}>
-              <div><span>{leader.category}</span><strong title={leader.name}>{leader.jersey?`#${leader.jersey} `:''}{leader.name}</strong></div><b>{leader.value}</b>
-            </li>)}</ul>
-          </div>;
-        })}</div>
-      </>}
-      </details>}
+      <MatchPreview match={match} data={data}/>
       {data&&<p className="overview-freshness">{data.stale?'Saved details':'Details checked'} · {data.stale?new Date(data.updatedAt).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):new Date(data.updatedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>}
     </>}
     {tab==='Commentary'&&<>

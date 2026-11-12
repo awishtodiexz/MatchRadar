@@ -18,7 +18,7 @@ for (const [width,theme,compact] of [[320,'light',true],[390,'dark',false]] as c
     await page.getByRole('button',{name:'Back to matches'}).click();
     for(const [name,status] of [
       ['Arsenal versus Chelsea','LIVE'],['Liverpool versus Newcastle United','HALF-TIME'],
-      ['Manchester City versus Manchester United','SCHEDULED'],['Brighton & Hove Albion versus Everton','FULL-TIME']
+      ['Manchester City versus Manchester United','Kick-off'],['Brighton & Hove Albion versus Everton','FULL-TIME']
     ]) {
       const card=page.getByRole('button',{name:`Match details: ${name}`});
       await card.scrollIntoViewIfNeeded();await card.click();

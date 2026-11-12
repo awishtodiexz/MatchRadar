@@ -33,7 +33,7 @@ it('retains visible detail content without inserting a skeleton during a refresh
 it('shows a supplied venue and clear pre-match copy without empty tabs',()=>{
  const old=state.data;state.data={...old,venue:'Villa Park',events:[],statistics:[],players:[]};
  render(<MatchCentre match={{...mockSnapshot.matches[0],status:'scheduled'}}/>);
- expect(screen.getByText('Villa Park')).toBeTruthy();expect(screen.getByText('Lineups and match coverage will appear when available.')).toBeTruthy();
+ expect(screen.getByText('Villa Park')).toBeTruthy();expect(screen.getByText('Lineups and live coverage appear closer to kick-off.')).toBeTruthy();
  expect(screen.queryByRole('tab',{name:'Commentary'})).toBeNull();state.data=old;
 });
 

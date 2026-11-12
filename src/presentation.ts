@@ -24,3 +24,16 @@ export const isAbandoned = (match: Match) => match.status === 'cancelled' && mat
 export const isForfeit = (match: Match) => match.status === 'fulltime' && match.detail === 'Forfeit';
 export const closedNote = (match: Match) => isAbandoned(match) ? 'This match was abandoned.' : 'This match was cancelled.';
 export const matchButtonId = (id:string) => 'match-open-'+encodeURIComponent(id);
+// "Today"/"Tomorrow"/"Yesterday" reads faster than a date for nearby kick-offs.
+export const relativeDay = (date: string, now = new Date()) => {
+  const value = parsed(date);
+  if (!value) return 'Date unavailable';
+  const day = (d: Date) => Math.round(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 86_400_000);
+  const diff = day(value) - day(now);
+  return diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : diff === -1 ? 'Yesterday' : dayMonth.format(value);
+};
+// Split "02:30 PM" so the meridiem can be set smaller than the digits.
+export const timeParts = (label: string) => {
+  const match = label.match(/^(.*?)(\s*[AaPp]\.?\s?[Mm]\.?)$/);
+  return match ? [match[1], match[2]] as const : [label, ''] as const;
+};
