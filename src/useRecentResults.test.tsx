@@ -5,6 +5,19 @@ import { useRecentResults } from './useRecentResults';
 import type { CompetitionView } from './types';
 const bridge=vi.hoisted(()=>({invoke:vi.fn()}));vi.mock('@tauri-apps/api/core',()=>({invoke:bridge.invoke}));afterEach(()=>{cleanup();vi.resetAllMocks();});
 it('requests only when Results opens, retaining data after an error',async()=>{bridge.invoke.mockResolvedValueOnce({matches:[],updatedAt:'2026-10-29T00:00:00Z',error:null}).mockRejectedValueOnce(new Error('offline'));const {result,rerender}=renderHook(({enabled})=>useRecentResults(enabled),{initialProps:{enabled:false}});expect(bridge.invoke).not.toHaveBeenCalled();rerender({enabled:true});await waitFor(()=>expect(result.current.data.updatedAt).toBeTruthy());act(()=>result.current.retry());await waitFor(()=>expect(result.current.data.error).toBeTruthy());expect(result.current.data.updatedAt).toBe('2026-10-29T00:00:00Z');});
+it('shows loading while a manual retry is pending',async()=>{
+ bridge.invoke.mockResolvedValueOnce({matches:[],updatedAt:'first',error:null});
+ const {result}=renderHook(()=>useRecentResults(true));
+ await waitFor(()=>expect(result.current.data.updatedAt).toBe('first'));
+ let resolve!:(x:unknown)=>void;
+ bridge.invoke.mockImplementation(()=>new Promise(r=>resolve=r));
+ act(()=>result.current.retry());
+ expect(result.current.loading).toBe(true);
+ await waitFor(()=>expect(bridge.invoke).toHaveBeenCalledTimes(2));
+ await act(async()=>resolve({matches:[],updatedAt:'second',error:null}));
+ expect(result.current.loading).toBe(false);
+ expect(result.current.data.updatedAt).toBe('second');
+});
 it('ignores results completing after the view closes',async()=>{let resolve!:(x:unknown)=>void;bridge.invoke.mockImplementation(()=>new Promise(r=>resolve=r));const {result,rerender}=renderHook(({enabled})=>useRecentResults(enabled),{initialProps:{enabled:true}});rerender({enabled:false});await act(async()=>resolve({matches:[],updatedAt:'late',error:null}));expect(result.current.data.updatedAt).toBeNull();});
 it('shows loading while a slow initial request is pending and resolves a genuine empty response',async()=>{
  let resolve!:(x:unknown)=>void;bridge.invoke.mockImplementation(()=>new Promise(r=>resolve=r));

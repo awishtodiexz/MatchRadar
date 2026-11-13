@@ -29,8 +29,9 @@ function Countdown({kickoff}:{kickoff:string}) {
 function TablePill({team, standings, current}:{team:Team; standings?:MatchSummary['standings']; current:boolean}) {
   const row = standings?.find(s=>s.teamId===team.id);
   if(!row||!Number.isInteger(row.rank)||row.rank<1||!Number.isInteger(row.points)) return null;
-  const played = row.played!=null&&Number.isInteger(row.played)?` from ${row.played} matches`:'';
-  return <span className="table-pill" title={`${ordinal(row.rank)} in the ${current?'current ':''}table · ${row.points} points${played}`}>{current&&'Now '}{ordinal(row.rank)} · {row.points} pts</span>;
+  const played = row.played!=null&&Number.isInteger(row.played)?` from ${row.played} ${row.played===1?'match':'matches'}`:'';
+  const points = `${row.points} ${row.points===1?'point':'points'}`;
+  return <span className="table-pill" title={`${ordinal(row.rank)} in the ${current?'current ':''}table · ${points}${played}`}>{current&&'Now '}{ordinal(row.rank)} · {row.points} {row.points===1?'pt':'pts'}</span>;
 }
 
 export function MatchDetails({match, settings, back}: {match:Match; settings:Settings; back:()=>void}) {

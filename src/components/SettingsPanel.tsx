@@ -168,13 +168,13 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
       </>}
       {section==='Alerts'&&<>
         <div className="section-intro"><h3>Followed-team alerts</h3><p>These settings apply to clubs you follow. A match bell turns on all alerts for that game.</p></div>
-        <Toggle label="Kickoff reminders" value={settings.reminders} onChange={reminders=>update({reminders})}/>
+        <Toggle label="Kick-off reminders" value={settings.reminders} onChange={reminders=>update({reminders})}/>
         <label className="select-row">Remind me<select aria-label="Reminder time" aria-describedby="reminder-help" disabled={!settings.reminders&&!Object.values(settings.matchAlerts).some(alert=>alert.enabled)} value={settings.reminderMinutes} onChange={e=>update({reminderMinutes:Number(e.target.value)})}><option value="5">5 minutes before</option><option value="15">15 minutes before</option><option value="30">30 minutes before</option><option value="60">1 hour before</option></select></label>
-        <p id="reminder-help" className="field-note">{!settings.reminders&&!Object.values(settings.matchAlerts).some(alert=>alert.enabled)?'Turn on kickoff reminders or a match bell to change the reminder time.':'The reminder time also applies to match bells.'}</p>
+        <p id="reminder-help" className="field-note">{!settings.reminders&&!Object.values(settings.matchAlerts).some(alert=>alert.enabled)?'Turn on kick-off reminders or a match bell to change the reminder time.':'The reminder time also applies to match bells.'}</p>
         <Toggle label="Match starting" value={settings.starts} onChange={starts=>update({starts})}/>
         <Toggle label="Goals" description="For followed clubs; match bells can enable goals separately" value={settings.goals} onChange={goals=>update({goals})}/>
         <button className="outline-button" onClick={()=>void test()} disabled={testing} aria-busy={testing}><Bell size={15}/>{testing?'Requesting notification…':'Send test notification'}</button>
-        <p className="field-note">Open match details to mute a game or use team settings again.</p>
+        <p className="field-note">Open match details to mute a game or return to team defaults.</p>
         {!!Object.keys(settings.matchAlerts).length&&(confirmReset?<div role="group" aria-label="Confirm reset match bells"><p>Reset all match bells to team defaults?</p><button ref={resetConfirmation} className="text-button" onClick={()=>{setConfirmReset(false);panel.current?.focus();update({matchAlerts:{}});}}>Confirm reset</button><button className="text-button" onClick={()=>{setConfirmReset(false);requestAnimationFrame(()=>resetTrigger.current?.focus());}}>Cancel</button></div>:<button ref={resetTrigger} className="text-button reset-all" onClick={()=>setConfirmReset(true)}>Reset match bells to team defaults</button>)}
       </>}
       {section==='App'&&<>

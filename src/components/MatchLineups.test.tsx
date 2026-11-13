@@ -89,6 +89,11 @@ it.each(['formation','slots','partial'] as const)('keeps a readable list when %s
   expect(screen.getByText('Maxim De Cuyper')).toBeTruthy();
 });
 
+it('uses a singular player count on a team tab',()=>{
+ renderLineups({players:[{teamId:match.home.id,name:'Solo Player',position:'GK',starter:true}],formations:{}});
+ expect(screen.getByRole('tab',{name:/Brighton & Hove Albion 1 player$/})).toBeTruthy();
+});
+
 it('explains an unavailable squad without inventing players or a formation',()=>{
   const {container}=renderLineups({players:[],formations:{}});
   expect(screen.getByText('Lineup unavailable')).toBeTruthy();

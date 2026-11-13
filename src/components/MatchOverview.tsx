@@ -45,7 +45,7 @@ export function MatchOverview({match,data}:{match:Match;data:MatchSummary|null})
   const broadcasts=(data?.broadcasts??[]).map(text).filter(Boolean);
   const celsius=typeof data?.weather?.temperatureF==='number'&&Number.isFinite(data.weather.temperatureF)?Math.round((data.weather.temperatureF-32)*5/9):null;
   const condition=text(data?.weather?.condition);
-  const weatherRules:Array<[RegExp,ReactNode]>=[[/rain|shower|drizzle/i,<CloudRain size={14}/>],[/snow|sleet/i,<CloudSnow size={14}/>],[/storm|thunder/i,<CloudLightning size={14}/>],[/cloud|overcast/i,<Cloud size={14}/>],[/fog|mist|haze/i,<CloudFog size={14}/>],[/sun|clear/i,<Sun size={14}/>]];
+  const weatherRules:Array<[RegExp,ReactNode]>=[[/storm|thunder/i,<CloudLightning size={14}/>],[/snow|sleet/i,<CloudSnow size={14}/>],[/rain|shower|drizzle/i,<CloudRain size={14}/>],[/fog|mist|haze/i,<CloudFog size={14}/>],[/cloud|overcast/i,<Cloud size={14}/>],[/sun|clear/i,<Sun size={14}/>]];
   const weatherIcon=weatherRules.find(([pattern])=>pattern.test(condition))?.[1]??<Thermometer size={14}/>;
   const referee=text(data?.referee);
   const facts=[

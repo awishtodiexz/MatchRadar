@@ -25,7 +25,7 @@ function alertPresentation(settings:Settings, match:Match) {
   const cancelled = match.status === 'cancelled';
   const postponed = match.status === 'postponed';
   const closed = ended || cancelled;
-  const base = state === 'on' ? 'Reminders, match start and goals are on for this match.'
+  const base = state === 'on' ? 'Kick-off reminders, match start and goal alerts are on for this match.'
     : state === 'muted' ? 'No alerts for this match, even for followed clubs.'
     : 'Using your followed-team alert settings.';
   // A cancelled match has not "ended", and a postponed one can still alert later.
@@ -96,10 +96,12 @@ export function MatchAlertsButton({match, settings, list=false}: {match:Match; s
     if(!open) return;
     heading.current?.focus({preventScroll:true});
     const close = (event:MouseEvent) => {if(!(event.target instanceof Node)||!trigger.current?.parentElement?.contains(event.target))setOpen(false);};
+    const focus = (event:FocusEvent) => {if(!(event.target instanceof Node)||!trigger.current?.parentElement?.contains(event.target))setOpen(false);};
     const key = (event:KeyboardEvent) => {if(event.key==='Escape'){event.preventDefault();setOpen(false);trigger.current?.focus();}};
     document.addEventListener('mousedown',close);
+    document.addEventListener('focusin',focus);
     document.addEventListener('keydown',key);
-    return ()=>{document.removeEventListener('mousedown',close);document.removeEventListener('keydown',key);};
+    return ()=>{document.removeEventListener('mousedown',close);document.removeEventListener('focusin',focus);document.removeEventListener('keydown',key);};
   },[open]);
   const persist = async (matchAlerts:Settings['matchAlerts'], label:string) => {
     setFeedback('Saving alert preference…');

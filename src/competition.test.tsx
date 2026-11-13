@@ -109,7 +109,7 @@ describe('competition selector', () => {
     expect(screen.getByLabelText(/Premier League: 2 live matches/)).toBeTruthy();
     fireEvent.click(premierValue('Premier League'));
     fireEvent.click(screen.getByRole('option', { name: /^Champions League/ }));
-    await waitFor(() => expect(screen.getByLabelText(/Champions League: 1 live matches/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText(/Champions League: 1 live match/)).toBeTruthy());
     fireEvent.click(premierValue('Champions League'));
     fireEvent.click(screen.getByRole('option', { name: /Both competitions/ }));
     await waitFor(() => expect(screen.getByLabelText(/Both competitions: 3 live matches/)).toBeTruthy());

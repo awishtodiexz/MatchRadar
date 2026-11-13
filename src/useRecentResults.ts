@@ -24,7 +24,8 @@ export function useRecentResults(enabled:boolean, view:CompetitionView='premierL
    const load=(initial:boolean)=>{
      if(disposed||inFlight)return;
       if(document.visibilityState==='hidden'){
-        if(initial&&!attemptedRef.current){attemptedRef.current=true;setAttempted(true);setLoading(false);}
+        if(initial&&!attemptedRef.current){attemptedRef.current=true;setAttempted(true);}
+        setLoading(false);
         return;
       }
      inFlight=true;
@@ -36,8 +37,8 @@ export function useRecentResults(enabled:boolean, view:CompetitionView='premierL
        .finally(()=>{
          inFlight=false;
          if(disposed)return;
-         if(initial&&!attemptedRef.current){attemptedRef.current=true;setAttempted(true);setLoading(false);}
          if(!attemptedRef.current){attemptedRef.current=true;setAttempted(true);}
+         setLoading(false);
        });
    };
    const visible=()=>{if(document.visibilityState!=='hidden'&&enabled)load(false);};
@@ -49,5 +50,5 @@ export function useRecentResults(enabled:boolean, view:CompetitionView='premierL
    return()=>{disposed=true;if(timer)clearInterval(timer);document.removeEventListener('visibilitychange',visible);};
  },[enabled,revision,view]);
  const pendingView=requestedView!==null&&requestedView!==view;
- return {data:enabled?data:empty,loading:enabled&&(loading||!attempted||pendingView),retry:()=>setRevision(n=>n+1)};
+ return {data:enabled?data:empty,loading:enabled&&(loading||!attempted||pendingView),retry:()=>{if(enabled)setLoading(true);setRevision(n=>n+1);}};
 }

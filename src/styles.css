@@ -364,7 +364,6 @@ footer {min-height:44px;display:flex;align-items:center;justify-content:space-be
 .footer-actions .icon-button[aria-pressed=true] {background:var(--accent-soft);color:var(--accent);}
 .filter-dot {position:absolute;right:3px;top:3px;width:4px;height:4px;border-radius:50%;background:var(--accent);}
 .compact-view {--row-space:9px;}
-.compact-view .match-card {height:62px;}
 .compact-view .detail-hero {padding-bottom:14px;}
 .compact-view .versus {margin-top:4px;}
 .compact-view .crest-ring {width:46px;height:46px;}
@@ -380,7 +379,7 @@ footer {min-height:44px;display:flex;align-items:center;justify-content:space-be
  .live-pill {font-size:9px;}
  .competition-long {display:none;}
  .competition-short {display:inline;}
- .match-open {grid-template-columns:44px minmax(0,1fr) 20px;gap:6px;}
+ .match-open {grid-template-columns:52px minmax(0,1fr) 20px;gap:6px;}
  .team-line {gap:5px;}
  .match-bell {width:24px;}
  .centre-tabs button {font-size:var(--font-sm);}
@@ -394,7 +393,7 @@ footer {min-height:44px;display:flex;align-items:center;justify-content:space-be
 @media(prefers-reduced-motion:reduce) {* {animation:none!important;transition:none!important;}}
 .pitch-shirt {width:28px;height:28px;padding:0;font-size:var(--font-body);border-radius:8px;}
 .coach-row {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 0 10px;font-size:var(--font-sm);color:var(--muted);}
-.coach-row strong {font-weight:500;text-align:right;color:var(--text);}
+.coach-row strong {font-weight:500;text-align:right;color:var(--text);overflow-wrap:anywhere;}
 
 
 .match-events .sub-on {color:var(--accent);text-transform:none;font-size:var(--font-xs);font-weight:650;margin-right:3px;}

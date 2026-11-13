@@ -97,6 +97,12 @@ describe('focused usability refinements',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Unfollow unavailable club 999'}));
     await waitFor(()=>expect(useApp.getState().snapshot?.settings.favorites).not.toContain('999'));
   });
+  it('closes the match alert menu when keyboard focus leaves it',()=>{
+    render(<App/>);fireEvent.click(screen.getByRole('button',{name:inheritName}));
+    expect(screen.getByRole('dialog',{name:'Match alerts'})).toBeTruthy();
+    fireEvent.focusIn(screen.getByRole('button',{name:'Settings'}));
+    expect(screen.queryByRole('dialog',{name:'Match alerts'})).toBeNull();
+  });
   it('suppresses surface context menus on cards, icons, details and settings',()=>{
     render(<App/>);
     expect(fireEvent.contextMenu(screen.getByRole('navigation',{name:'Fixture views'}))).toBe(false);

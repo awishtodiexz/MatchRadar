@@ -88,6 +88,14 @@ it('shows league position and points under each club when the summary has standi
  expect(screen.getByText('12th · 14 pts').parentElement?.querySelector('b')?.textContent).toBe(match.away.name);
 });
 
+it('uses singular units for a one-match standing row',()=>{
+ const match=mockMatches[2];
+ summary.data=summaryWith(match.id,[{teamId:match.home.id,rank:1,points:1,played:1}]);
+ render(<MatchDetails match={match} settings={defaults} back={()=>{}}/>);
+ const pill=screen.getByText('1st · 1 pt');
+ expect(pill.getAttribute('title')).toBe('1st in the table · 1 point from 1 match');
+});
+
 it('renders no standings pill when the summary has no standings or only invalid rows',()=>{
  const match=mockMatches[2];
  summary.data=summaryWith(match.id);

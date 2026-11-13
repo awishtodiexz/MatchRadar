@@ -173,7 +173,8 @@ export function MatchLineups({match,players,substitutions=[],formations={},coach
   // ESPN sometimes omits the team on a substitution; infer it from the players
   // instead of showing the same substitution under both teams.
   const teamSubs = substitutions.filter(sub => (sub.teamId || playerTeam(sub.playerIn) || playerTeam(sub.playerOut)) === active.id);
-  const coachNames=coaches.filter(coach=>coach.teamId===active.id&&coach.name.trim()).map(coach=>coach.name).join(', ');
+  const coachNames=coaches.filter(coach=>coach.teamId===active.id&&coach.name.trim()).map(coach=>coach.name);
+  const lineupCount=(id:string) => totals[id]?`${totals[id]} ${totals[id]===1?'player':'players'}`:'No lineup';
   const bench=benchRows(substitutes,teamSubs,selected);
   const usedBench=bench.filter(row=>row.used);
   const unusedBench=bench.filter(row=>!row.used);
@@ -192,7 +193,7 @@ export function MatchLineups({match,players,substitutions=[],formations={},coach
     <div className="lineup-tabs" role="tablist" aria-label="Lineups by team">
       {teams.map(team=><button key={team.id} role="tab" id={sectionId+'-tab-'+team.id} aria-selected={active.id===team.id}
         aria-controls={sectionId+'-panel'} tabIndex={active.id===team.id?0:-1} className="lineup-tab"
-        title={`${team.name} · ${totals[team.id]?`${totals[team.id]} players`:'No lineup'}`} onClick={()=>selectTeam(team.id)}
+        title={`${team.name} · ${lineupCount(team.id)}`} onClick={()=>selectTeam(team.id)}
         onKeyDown={event=>{
           if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
           event.preventDefault();
@@ -202,12 +203,12 @@ export function MatchLineups({match,players,substitutions=[],formations={},coach
           selectTeam(next.id);
           document.getElementById(sectionId+'-tab-'+next.id)?.focus();
         }}>
-        <Badge team={team}/><span className="lineup-team-name">{team.name}</span><small className={totals[team.id]?'sr-only':undefined}>{totals[team.id]?`${totals[team.id]} players`:'No lineup'}</small>
+        <Badge team={team}/><span className="lineup-team-name">{team.name}</span><small className={totals[team.id]?'sr-only':undefined}>{lineupCount(team.id)}</small>
       </button>)}
     </div>
     <div role="tabpanel" id={sectionId+'-panel'} aria-labelledby={sectionId+'-tab-'+active.id} tabIndex={0}>
       <div className="lineup-heading"><h3>{pitch?'Starting XI':active.name}</h3>{pitch&&<small className="kickoff-note">at kickoff</small>}{formation&&<span className="formation">{formation}</span>}</div>
-      {coachNames&&<div className="coach-row"><span>Coach</span><strong>{coachNames}</strong></div>}
+      {coachNames.length>0&&<div className="coach-row"><span>{coachNames.length===1?'Coach':'Coaches'}</span><strong>{coachNames.join(', ')}</strong></div>}
       {pitch&&<><LineupPitch key={active.id} team={active} pitch={pitch} marksFor={marksFor}/><details className="lineup-help"><summary>About this lineup</summary><p>Starting positions, not a live tactical view. Tap or focus a player for details.</p><p>Ball = goal · cards = bookings · down arrow = substituted off</p></details></>}
       {!pitch&&starters.length===11&&<p className="field-note">Formation unavailable for this lineup.</p>}
       {!selected.length&&<p className="field-note">Lineup unavailable</p>}

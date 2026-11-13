@@ -55,13 +55,13 @@ export function MatchCentreView({match,summary,onSectionChange}:{match:Match;sum
       <MatchOverview match={match} data={data}/>
       <MatchPreview match={match} data={data}/>
     </>}
-    {tab==='Commentary'&&(!loading||data)&&<>
+    {tab==='Commentary'&&(!loading||data)&&(events.length?<>
       <div className="timeline-toolbar">
         <span>{newestFirst?'Latest first':'Oldest first'} · {filtered?`${visibleEvents.length} of ${events.length} events`:`${events.length} ${events.length===1?'event':'events'}`}</span>
       </div>
       <div className="commentary-options"><select aria-label="Commentary event type" value={eventType} onChange={event=>setEventType(event.target.value)}><option value="all">All event types</option><option value="key">Key events</option><option value="goals">Goals</option><option value="cards">Cards</option><option value="substitutions">Substitutions</option><option value="shots">Shots &amp; chances</option><option value="stoppages">VAR &amp; stoppages</option></select><select aria-label="Commentary order" value={newestFirst?'newest':'oldest'} onChange={event=>setNewestFirst(event.target.value==='newest')}><option value="newest">Latest first</option><option value="oldest">Oldest first</option></select></div>
       {visibleEvents.length?<MatchEvents match={match} events={visibleEvents} commentary newestFirst={newestFirst}/>:<p className="field-note commentary-empty">No events match this filter. <button type="button" className="text-button" onClick={resetFilters}>Clear filters</button></p>}
-    </>}
+    </>:<p className="field-note">No commentary is available for this match.</p>)}
     {tab==='Stats'&&data&&<>{data.statisticsNote&&<p className="field-note" role="status">{data.statisticsNote}</p>}<MatchStats match={match} statistics={data.statistics}/></>}
     {tab==='Lineups'&&data&&<MatchLineups match={match} players={data.players} substitutions={data.substitutions} formations={data.formations} coaches={data.coaches} events={data.events}/>}
     {(tab==='Stats'||tab==='Lineups')&&!data&&!loading&&<p className="field-note">{tab} are not available for this match.</p>}

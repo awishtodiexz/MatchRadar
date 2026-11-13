@@ -62,6 +62,22 @@ test('startup says live status is being checked rather than unavailable', async 
   await expect(page.locator('footer')).toContainText('CONNECTING');
 });
 
+test('compact cards grow for long statuses instead of clipping them', async ({ page }) => {
+  await page.setViewportSize({width:320,height:460});
+  await page.clock.install({time:new Date('2026-10-29T12:00:00Z')});
+  await page.route('https://**/*', route => route.abort());
+  const match = {...mockSnapshot.matches[0], id:'compact-tall', league:'championsLeague' as const,
+    competition:'Champions League', status:'unknown' as const, detail:'Status unavailable', scoreStale:true,
+    home:{id:'380',name:'Wolverhampton Wanderers',short:'WOL'}, away:{id:'331',name:'Brighton & Hove Albion',short:'BHA'}};
+  await installBridge(page,{snapshot:{...mockSnapshot,settings:{...mockSnapshot.settings,compact:true,competitionView:'both'},matches:[match]}});
+  await page.goto('/');
+  const open = page.locator('.match-card .match-open').first();
+  await expect(open).toBeVisible();
+  expect(await open.evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
+  const status = page.locator('.match-card .fixture-time span').first();
+  expect(await status.evaluate(element => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
+});
+
 test('a failed first load offers an error state and retry', async ({ page }) => {
   await page.setViewportSize({width: 320, height: 460});
   await page.route('https://**/*', route => route.abort());

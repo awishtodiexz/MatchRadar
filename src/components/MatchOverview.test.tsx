@@ -83,6 +83,12 @@ it('shows only competition and stadium when only the venue is supplied, with no 
  unmount();
 });
 
+it('chooses a snow icon for snow showers instead of a rain icon',()=>{
+ const {container}=show(base,{...data,weather:{temperatureF:34,condition:'Light snow showers'}});
+ expect(container.querySelector('.lucide-cloud-snow')).toBeTruthy();
+ expect(container.querySelector('.lucide-cloud-rain')).toBeNull();
+});
+
 it('falls back to the season years when the matchweek is absent',()=>{
  show({...base,competition:'Premier League'},{...data,seasonName:'2026-27 English Premier League',matchweek:null});
  expect(screen.getByText('Season 2026-27')).toBeTruthy();

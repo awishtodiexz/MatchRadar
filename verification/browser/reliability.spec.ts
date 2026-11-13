@@ -229,7 +229,7 @@ test('a results refresh failure retains cached results and its Retry recovers', 
 
   await setFailures(page,{results:1});
   await page.getByRole('button',{name:'Results',exact:true}).click();
-  await expect(offlineBanner(page)).toContainText('Results update failed - cached results retained');
+  await expect(offlineBanner(page)).toContainText('Results update failed · cached results retained');
   await expect(resultCard).toBeVisible();
 
   await offlineBanner(page).getByRole('button',{name:'Retry',exact:true}).click();

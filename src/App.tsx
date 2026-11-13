@@ -192,6 +192,11 @@ export default function App() {
   const scoresUnconfirmed = !viewStatus.updatedAt&&!viewStatus.error&&!viewStatus.scoreError;
   const liveChecking = !feedUnavailable&&!live&&!savedLive&&scoresUnconfirmed;
   const liveUnknown = !live&&!savedLive&&!liveChecking&&(!!viewStatus.scoreError||unchecked);
+  const liveAriaLabel = live
+    ? savedLive
+      ? `${live} in-progress ${live===1?'match':'matches'}, including saved scores awaiting confirmation`
+      : `${live} live ${live===1?'match':'matches'}`
+    : savedLive?'saved scores, awaiting live update':liveChecking?'checking live status':liveUnknown?'live status unavailable':'no confirmed live matches';
   const viewEmpty = viewMatches.length===0;
   const followingEmpty = matchView==='Following' && viewEmpty;
   const upcomingEmpty = matchView==='Upcoming' && viewEmpty;
@@ -227,7 +232,7 @@ export default function App() {
   // A rate-limit deadline is in the future, so it keeps its clock time.
   const statusTime = status.timestamp?(limitedUntil?timeLabel(status.timestamp):relativeAge(status.timestamp,now.getTime())):undefined;
   const doRefresh = async () => {setRefreshing(true);try{await refresh();}finally{setRefreshing(false);}};
-  const retryFeed = () => {recoveryFocus.current=true;if(historyView) recent.retry();else void doRefresh();};
+  const retryFeed = () => {recoveryFocus.current=true;if(feedUnavailable){void doRefresh();return;}if(historyView) recent.retry();else void doRefresh();};
   // The control that triggered recovery disappears once content returns. Put
   // keyboard focus on the recovered list (or the active view tab if it is
   // still empty) instead of dropping it onto the document body.
@@ -302,11 +307,11 @@ export default function App() {
       :view==='settings'&&settings?<SettingsPanel settings={settings} matches={allMatches??[]} save={save} back={back} refresh={()=>void doRefresh()} refreshing={busy}/>
       :view==='detail'&&selected&&settings?<MatchDetails key={`${selected.id}:${notificationRequest}`} match={detailMatch??selected} settings={settings} back={back}/>
       :<>
-        <div className="summary"><CompetitionPicker value={competitionView} onChange={value=>void save({competitionView:value})} disabled={!settings}/><span className={'live-pill '+(!live?'quiet':'')} aria-label={`${competitionTitle}: ${live?`${live} ${savedLive?'in-progress matches, including saved scores awaiting confirmation':'live matches'}`:savedLive?'saved scores, awaiting live update':liveChecking?'checking live status':liveUnknown?'live status unavailable':'no confirmed live matches'}`} title="In-progress matches, including half-time and suspended games."><i className="dot"/>{live?`${live} ${savedLive?'LIVE · SAVED':'LIVE'}`:savedLive?'SAVED LIVE':liveChecking?'CHECKING LIVE':liveUnknown?'LIVE UNAVAILABLE':'NO LIVE MATCHES'}</span></div>
+        <div className="summary"><CompetitionPicker value={competitionView} onChange={value=>void save({competitionView:value})} disabled={!settings}/><span className={'live-pill '+(!live?'quiet':'')} aria-label={`${competitionTitle}: ${liveAriaLabel}`} title="In-progress matches, including half-time and suspended games."><i className="dot"/>{live?`${live} ${savedLive?'LIVE · SAVED':'LIVE'}`:savedLive?'SAVED LIVE':liveChecking?'CHECKING LIVE':liveUnknown?'LIVE UNAVAILABLE':'NO LIVE MATCHES'}</span></div>
         <div className="match-list">
           <nav className="centre-tabs" aria-label="Fixture views">{VIEWS.map(name=>{const count=viewCounts[name];return <button key={name} aria-pressed={matchView===name} className={count===0?'is-empty':undefined} title={count===undefined?undefined:`${count} ${count===1?'match':'matches'}`} onClick={()=>selectMatchView(name)}>{name}{count!==undefined&&<span className="tab-count" aria-hidden="true">{count}</span>}</button>;})}</nav>
           <div className="schedule-context"><time dateTime={day.toISOString()}>{dateLabel(day.toISOString())}</time><p className="schedule-note">{historyView?'Results · latest first':`Next ${windowLabel} days`}</p></div>
-          {listError&&!!sourceMatches?.length&&<div className="offline-banner" role="status" title={listError}><span>{historyView?'Results update failed - cached results retained':viewStatus.partial?'Partial update · some data may be stale':'Update failed · saved data is unchanged'}</span><button onClick={retryFeed} disabled={historyView?recent.loading:busy}>Retry</button></div>}
+          {listError&&!!sourceMatches?.length&&<div className="offline-banner" role="status" title={listError}><span>{historyView?'Results update failed · cached results retained':viewStatus.partial?'Partial update · some data may be stale':'Update failed · saved data is unchanged'}</span><button onClick={retryFeed} disabled={historyView?recent.loading:busy}>Retry</button></div>}
           {historyView&&viewResults.updatedAt&&<p className="field-note">Results checked {`${dateLabel(viewResults.updatedAt)} ${timeLabel(viewResults.updatedAt)}`}</p>}
           {waiting?<div className="skeletons" role="status" aria-label="Loading fixtures"><div/><div/><div/></div>
             :!matches.length?<div className="empty" role={feedUnavailable?'alert':undefined}><Radio size={25}/><h2>{emptyTitle}</h2>

@@ -30,7 +30,7 @@ it('uses the existing tabs to access Stats and Commentary without repeated Overv
  fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getByRole('table',{name:'Team statistics'})).toBeTruthy();
  fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));expect(screen.getByText('Verified provider goal')).toBeTruthy();
 });
-it('keeps sections available when their data is empty',()=>{const old=state.data;state.data={...old,events:[],statistics:[],players:[]};render(<MatchCentre match={mockSnapshot.matches[0]}/>);expect(screen.getByRole('tab',{name:'Commentary'})).toBeTruthy();expect(screen.getByRole('region',{name:'Match information'})).toBeTruthy();state.data=old;});
+it('keeps sections available when their data is empty',()=>{const old=state.data;state.data={...old,events:[],statistics:[],players:[]};render(<MatchCentre match={mockSnapshot.matches[0]}/>);expect(screen.getByRole('tab',{name:'Commentary'})).toBeTruthy();expect(screen.getByRole('region',{name:'Match information'})).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));expect(screen.getByText('No commentary is available for this match.')).toBeTruthy();expect(screen.queryByRole('combobox',{name:'Commentary event type'})).toBeNull();state.data=old;});
 it('retains visible detail content without inserting a skeleton during a refresh',()=>{
  state.loading=true;render(<MatchCentre match={mockSnapshot.matches[0]}/>);
  expect(screen.queryByLabelText('Loading match details')).toBeNull();
@@ -330,6 +330,10 @@ it('hides the Coach row when no coach is supplied and shows it when there is one
  state.data={...state.data,coaches:[{teamId:'359',name:'Mikel Arteta'}]};
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);openTab('Lineups');
  expect(screen.getByText('Coach').closest('.coach-row')?.textContent).toContain('Mikel Arteta');
+ cleanup();
+ state.data={...state.data,coaches:[{teamId:'359',name:'Mikel Arteta'},{teamId:'359',name:'Albert Stuivenberg'}]};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);openTab('Lineups');
+ expect(screen.getByText('Coaches').closest('.coach-row')?.textContent).toContain('Mikel Arteta, Albert Stuivenberg');
 });
 it('merges substitutions into the bench: used subs first by minute with who they replaced, unused dimmed by number, no SUB label',()=>{
  const sub=(name:string,jersey:string,extra={})=>({teamId:'359',name,position:'SUB',starter:false,jersey,...extra});
