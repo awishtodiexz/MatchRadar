@@ -71,6 +71,8 @@ MatchRadar keeps scores, fixtures and the clubs you follow in a small window tha
 
 The installer is unsigned, so Windows may show a SmartScreen warning. If it does, choose **More info → Run anyway**. The release notes include the installer's SHA-256 checksum. There is no auto-updater yet; future versions install over the current one.
 
+The installer corresponds to its release tag; `main` may contain changes not yet included in a release.
+
 MatchRadar lives in the tray: the close control hides it, and you can click the tray icon or press `Ctrl+Shift+M` to bring it back. Choose **Quit** in the tray menu to exit fully.
 
 ## Development
@@ -106,6 +108,8 @@ After every commit, merge or pull that changes app sources, `scripts/auto-build.
 
 Tauri and Rust own the native window, networking, persistence, notifications and background refresh; React renders the interface. `npm run screenshots` rebuilds the banner and screenshots above.
 
+The frontend lives in `src/`, the desktop backend in `src-tauri/`, and browser checks and fixtures in `verification/` and `tests/`. Release and local build helpers are in `scripts/`.
+
 ## Contributing
 
 Found a bug or have an idea? [Open an issue](https://github.com/awishtodiexz/MatchRadar/issues). Code changes are welcome — run the checks under Development, including the Rust ones, before opening a pull request.
@@ -115,6 +119,8 @@ For security reports, follow [SECURITY.md](.github/SECURITY.md) instead of openi
 ## Data
 
 Fixtures, scores and match details come from ESPN's **unofficial, undocumented** public JSON endpoints. Availability, accuracy and usage rights are not guaranteed.
+
+Requests for match data and images connect to ESPN services, which can see your IP address and normal request metadata. Preferences, cached match data and diagnostic logs are stored locally.
 
 MatchRadar is not affiliated with ESPN, the Premier League or UEFA. Club crests and competition badges load from ESPN's CDN, with initials as an offline fallback.
 
