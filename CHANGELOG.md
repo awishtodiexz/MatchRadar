@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 — 2026-11-13
+
+Initial public release.
 
 ### UI and UX polish
 
@@ -9,10 +11,6 @@
 - The global-shortcut conflict notice is shown once and dismisses itself.
 - Match centre: one proportional bar per statistic with a key-stats default; a merged bench list with substitution minutes, dimmed unused subs and pitch badges; one commentary filter with distinct event icons and team crests; labelled VAR moments; a clear red-card colour.
 - Unambiguous team codes (MUN / MCI), "This match" vs "This season" team leaders, "Now" on current-table pills for past matches, themed dropdowns and sentence-case micro-labels.
-
-## 1.0.0 — 2026-11-12
-
-Initial public release.
 
 ### Widget
 
