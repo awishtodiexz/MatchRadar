@@ -429,9 +429,14 @@ async fn optional_statistics_failure_keeps_saved_extras_and_current_summary_coun
         value: "1.23".into(),
     });
     cache
-        .get_with(Competition::PremierLeague, id, Phase::Live, now, || async {
-            Ok(saved)
-        })
+        .get_with(
+            Competition::PremierLeague,
+            id,
+            Phase::Live,
+            false,
+            now,
+            || async { Ok(saved) },
+        )
         .await
         .unwrap();
     let mut current = example();
@@ -447,6 +452,7 @@ async fn optional_statistics_failure_keeps_saved_extras_and_current_summary_coun
             Competition::PremierLeague,
             id,
             Phase::Live,
+            false,
             now + chrono::Duration::seconds(121),
             || async { Ok(current) },
         )
@@ -474,9 +480,14 @@ async fn cache_hit_failure_cooldown_and_recovery() {
     let cache = Cache::default();
     let id = "401879268";
     cache
-        .get_with(Competition::PremierLeague, id, Phase::Live, now, || async {
-            Ok(example())
-        })
+        .get_with(
+            Competition::PremierLeague,
+            id,
+            Phase::Live,
+            false,
+            now,
+            || async { Ok(example()) },
+        )
         .await
         .unwrap();
     let hit = cache
@@ -484,6 +495,7 @@ async fn cache_hit_failure_cooldown_and_recovery() {
             Competition::PremierLeague,
             id,
             Phase::Live,
+            false,
             now + chrono::Duration::seconds(59),
             || async { panic!("fresh cache must not fetch") },
         )
@@ -495,6 +507,7 @@ async fn cache_hit_failure_cooldown_and_recovery() {
             Competition::PremierLeague,
             id,
             Phase::Live,
+            false,
             now + chrono::Duration::seconds(60),
             || async { Ok(example()) },
         )
@@ -509,6 +522,7 @@ async fn cache_hit_failure_cooldown_and_recovery() {
             Competition::PremierLeague,
             id,
             Phase::Live,
+            false,
             now + chrono::Duration::seconds(121),
             || async { Err(Failure::temporary("timeout")) },
         )
@@ -522,6 +536,7 @@ async fn cache_hit_failure_cooldown_and_recovery() {
             Competition::PremierLeague,
             id,
             Phase::Live,
+            false,
             now + chrono::Duration::seconds(150),
             || async { panic!("cooldown must not fetch") },
         )
@@ -533,6 +548,7 @@ async fn cache_hit_failure_cooldown_and_recovery() {
             Competition::PremierLeague,
             id,
             Phase::Live,
+            false,
             now + chrono::Duration::seconds(220),
             || async { Ok(example()) },
         )
@@ -548,9 +564,14 @@ async fn oversized_summary_is_rejected_instead_of_cached() {
     let id = "401879268";
     let valid = example();
     cache
-        .get_with(Competition::PremierLeague, id, Phase::Live, now, || async {
-            Ok(valid)
-        })
+        .get_with(
+            Competition::PremierLeague,
+            id,
+            Phase::Live,
+            false,
+            now,
+            || async { Ok(valid) },
+        )
         .await
         .unwrap();
     let mut invalid = example();
@@ -567,6 +588,7 @@ async fn oversized_summary_is_rejected_instead_of_cached() {
             Competition::PremierLeague,
             id,
             Phase::Live,
+            false,
             now + chrono::Duration::seconds(121),
             || async { Ok(invalid) },
         )
@@ -596,9 +618,14 @@ async fn oversized_summary_is_rejected_instead_of_cached() {
         })
         .collect();
     assert!(empty
-        .get_with(Competition::PremierLeague, id, Phase::Live, now, || async {
-            Ok(invalid)
-        })
+        .get_with(
+            Competition::PremierLeague,
+            id,
+            Phase::Live,
+            false,
+            now,
+            || async { Ok(invalid) }
+        )
         .await
         .is_err());
 }
@@ -615,6 +642,7 @@ async fn restart_offline_and_future_timestamps() {
             Competition::PremierLeague,
             "401879268",
             Phase::Other,
+            false,
             now,
             || async { Err(Failure::temporary("offline")) },
         )
@@ -632,6 +660,7 @@ async fn restart_offline_and_future_timestamps() {
                 Competition::PremierLeague,
                 "401879268",
                 Phase::Live,
+                false,
                 now,
                 || async { Err(Failure::temporary("clock changed")) }
             )
@@ -649,6 +678,7 @@ async fn rate_limit_deadline_and_empty_cache_errors() {
             Competition::PremierLeague,
             "1",
             Phase::Live,
+            false,
             now,
             || async {
                 Err(Failure {
@@ -670,6 +700,7 @@ async fn rate_limit_deadline_and_empty_cache_errors() {
             Competition::PremierLeague,
             "1",
             Phase::Live,
+            false,
             now + chrono::Duration::seconds(3599),
             || async { panic!("must respect Retry-After") }
         )
@@ -680,6 +711,7 @@ async fn rate_limit_deadline_and_empty_cache_errors() {
             Competition::PremierLeague,
             "1",
             Phase::Live,
+            false,
             now + chrono::Duration::seconds(3600),
             || async {
                 let mut detail = example();
@@ -700,6 +732,7 @@ async fn summary_cooldown_is_per_match() {
             Competition::PremierLeague,
             "1",
             Phase::Live,
+            false,
             now,
             || async { Err(Failure::temporary("boom")) }
         )
@@ -711,6 +744,7 @@ async fn summary_cooldown_is_per_match() {
             Competition::PremierLeague,
             "2",
             Phase::Live,
+            false,
             now,
             || async {
                 let mut detail = example();
@@ -747,6 +781,7 @@ async fn serialized_simultaneous_requests_reuse_one_result() {
             Competition::PremierLeague,
             "401879268",
             Phase::Live,
+            false,
             clock(),
             || async {
                 calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -771,6 +806,7 @@ async fn bounded_cache_and_invalid_persisted_entries() {
                 Competition::PremierLeague,
                 &id,
                 Phase::Other,
+                false,
                 clock() + chrono::Duration::seconds(i),
                 || async {
                     let mut d = example();
@@ -1012,6 +1048,7 @@ async fn final_phase_bypasses_live_pregame_and_legacy_cache_until_provider_confi
                 Competition::PremierLeague,
                 &id,
                 Phase::Other,
+                false,
                 clock(),
                 || async { Ok(saved) },
             )
@@ -1024,6 +1061,7 @@ async fn final_phase_bypasses_live_pregame_and_legacy_cache_until_provider_confi
                 Competition::PremierLeague,
                 &id,
                 Phase::Final,
+                false,
                 clock() + chrono::Duration::seconds(1),
                 || async { Ok(still_live) },
             )
@@ -1037,6 +1075,7 @@ async fn final_phase_bypasses_live_pregame_and_legacy_cache_until_provider_confi
                 Competition::PremierLeague,
                 &id,
                 Phase::Final,
+                false,
                 clock() + chrono::Duration::seconds(61),
                 || async { Ok(final_data) },
             )
@@ -1048,6 +1087,7 @@ async fn final_phase_bypasses_live_pregame_and_legacy_cache_until_provider_confi
                 Competition::PremierLeague,
                 &id,
                 Phase::Final,
+                false,
                 clock() + chrono::Duration::seconds(122),
                 || async { panic!("final cache should stay fresh for 15 minutes") },
             )
@@ -1065,4 +1105,380 @@ fn recorded_summary_exposes_final_provider_phase_and_rejects_invalid_cached_phas
     assert!(!valid_cached(&d));
     d.match_state = None;
     assert!(valid_cached(&d));
+}
+
+/// Minimal pre-match summary: just enough header for `normalize` to accept it.
+fn pregame() -> Value {
+    serde_json::json!({
+        "header": {
+            "id": "1",
+            "season": {"name": "2026-27 English Premier League"},
+            "competitions": [{
+                "status": {"type": {"state": "pre"}},
+                "competitors": [
+                    {"id": "10", "team": {"id": "10", "displayName": "Home FC"}},
+                    {"id": "20", "team": {"id": "20", "displayName": "Away FC"}}
+                ]
+            }]
+        }
+    })
+}
+
+#[test]
+fn broadcasts_are_deduplicated_from_both_espn_sources() {
+    let mut v = pregame();
+    v["header"]["competitions"][0]["broadcasts"] = serde_json::json!([
+        {"type": {"shortName": "TV"}, "media": {"shortName": "USA Net"}},
+        {"type": {"shortName": "STREAMING"}, "media": {"shortName": "sky sports"}},
+        {"media": {"shortName": "   "}}
+    ]);
+    v["broadcasts"] = serde_json::json!([
+        {"media": {"shortName": "usa net"}},
+        {"media": {"name": "Peacock"}},
+        {"names": ["BBC iPlayer"]},
+        {"media": {"shortName": "Sky Sports"}}
+    ]);
+    let d = normalize(&v, "1", Competition::PremierLeague).unwrap();
+    assert_eq!(
+        d.broadcasts,
+        ["USA Net", "sky sports", "Peacock", "BBC iPlayer"]
+    );
+    v["broadcasts"] = Value::Array(
+        (1..=8)
+            .map(|n| serde_json::json!({"media": {"shortName": format!("Net {n}")}}))
+            .collect(),
+    );
+    let capped = normalize(&v, "1", Competition::PremierLeague).unwrap();
+    assert_eq!(capped.broadcasts.len(), 6);
+    assert_eq!(capped.broadcasts.last().map(String::as_str), Some("Net 4"));
+}
+
+#[test]
+fn weather_accepts_numeric_and_string_temperatures_and_drops_absent_data() {
+    let mut v = pregame();
+    assert!(normalize(&v, "1", Competition::PremierLeague)
+        .unwrap()
+        .weather
+        .is_none());
+    v["gameInfo"] = serde_json::json!({"weather": {
+        "temperature": 61,
+        "highTemperature": 61,
+        "conditionId": "3",
+        "displayValue": "Partly Cloudy"
+    }});
+    let weather = normalize(&v, "1", Competition::PremierLeague)
+        .unwrap()
+        .weather
+        .unwrap();
+    assert_eq!(weather.temperature_f, Some(61));
+    assert_eq!(weather.condition.as_deref(), Some("Partly Cloudy"));
+    v["gameInfo"]["weather"]["temperature"] = serde_json::json!("58");
+    let weather = normalize(&v, "1", Competition::PremierLeague)
+        .unwrap()
+        .weather
+        .unwrap();
+    assert_eq!(weather.temperature_f, Some(58));
+    // An out-of-range temperature is dropped but the condition survives.
+    v["gameInfo"]["weather"]["temperature"] = serde_json::json!(500);
+    let weather = normalize(&v, "1", Competition::PremierLeague)
+        .unwrap()
+        .weather
+        .unwrap();
+    assert_eq!(weather.temperature_f, None);
+    assert_eq!(weather.condition.as_deref(), Some("Partly Cloudy"));
+    v["gameInfo"] = serde_json::json!({"weather": {"temperature": "hot"}});
+    assert!(normalize(&v, "1", Competition::PremierLeague)
+        .unwrap()
+        .weather
+        .is_none());
+}
+
+#[test]
+fn predictor_prefers_espn_projection_and_normalises_to_one_hundred() {
+    let mut v = pregame();
+    v["predictor"] = serde_json::json!({
+        "homeTeam": {"gameProjection": "50", "teamChanceTie": "25"},
+        "awayTeam": {"gameProjection": 25}
+    });
+    let p = normalize(&v, "1", Competition::PremierLeague)
+        .unwrap()
+        .predictor
+        .unwrap();
+    assert_eq!((p.home, p.draw, p.away), (50.0, 25.0, 25.0));
+    assert_eq!(p.source, "espn");
+    assert!(p.provider.is_none());
+    // Without a tie figure, the draw is what remains of 100.
+    v["predictor"] = serde_json::json!({
+        "homeTeam": {"gameProjection": 40},
+        "awayTeam": {"gameProjection": 35}
+    });
+    let p = normalize(&v, "1", Competition::PremierLeague)
+        .unwrap()
+        .predictor
+        .unwrap();
+    assert_eq!((p.home, p.draw, p.away), (40.0, 25.0, 35.0));
+    // Projections that cannot leave a non-negative draw are rejected.
+    v["predictor"] = serde_json::json!({
+        "homeTeam": {"gameProjection": 80},
+        "awayTeam": {"gameProjection": 60}
+    });
+    assert!(normalize(&v, "1", Competition::PremierLeague)
+        .unwrap()
+        .predictor
+        .is_none());
+}
+
+#[test]
+fn predictor_falls_back_to_bookmaker_moneylines() {
+    let mut v = pregame();
+    v["odds"] = serde_json::json!([{
+        "provider": {"name": "DraftKings"},
+        "homeTeamOdds": {"moneyLine": -240},
+        "awayTeamOdds": {"moneyLine": 500},
+        "drawOdds": {"moneyLine": 390}
+    }]);
+    let p = normalize(&v, "1", Competition::PremierLeague)
+        .unwrap()
+        .predictor
+        .unwrap();
+    assert_eq!(p.source, "odds");
+    assert_eq!(p.provider.as_deref(), Some("DraftKings"));
+    // Implied 70.6 / 20.4 / 16.7 before normalising (raw sum 107.7).
+    assert!((p.home - 65.6).abs() < 0.2, "{p:?}");
+    assert!((p.draw - 19.0).abs() < 0.2, "{p:?}");
+    assert!((p.away - 15.5).abs() < 0.2, "{p:?}");
+    assert!((p.home + p.draw + p.away - 100.0).abs() < 0.2, "{p:?}");
+}
+
+#[test]
+fn predictor_is_absent_without_all_three_usable_moneylines() {
+    let mut v = pregame();
+    v["odds"] = serde_json::json!([{
+        "homeTeamOdds": {"moneyLine": -240},
+        "awayTeamOdds": {"moneyLine": 500}
+    }]);
+    assert!(normalize(&v, "1", Competition::PremierLeague)
+        .unwrap()
+        .predictor
+        .is_none());
+    // A price inside (-100, 100) is not a valid American moneyline.
+    v["odds"] = serde_json::json!([{
+        "homeTeamOdds": {"moneyLine": -240},
+        "awayTeamOdds": {"moneyLine": 50},
+        "drawOdds": {"moneyLine": 390}
+    }]);
+    assert!(normalize(&v, "1", Competition::PremierLeague)
+        .unwrap()
+        .predictor
+        .is_none());
+}
+
+#[test]
+fn standings_keep_only_the_two_clubs_across_every_group() {
+    let mut v = pregame();
+    v["standings"] = serde_json::json!({"groups": [
+        {"standings": {"entries": [
+            // Missing points: this row must be skipped in favour of a later one.
+            {"id": "20", "stats": [{"name": "rank", "value": 4}]},
+            {"id": "30", "stats": [{"name": "rank", "value": 1}, {"name": "points", "value": 30}]}
+        ]}},
+        {"standings": {"entries": [
+            {"id": "99", "stats": [{"name": "rank", "value": 2}, {"name": "points", "value": 40}]},
+            {"id": "10", "stats": [
+                {"name": "rank", "value": 27},
+                {"name": "points", "value": 27},
+                {"name": "gamesPlayed", "value": 10}
+            ]}
+        ]}},
+        {"standings": {"entries": [
+            {"id": "20", "stats": [
+                {"name": "rank", "value": 4},
+                {"name": "points", "value": 12}
+            ]}
+        ]}}
+    ]});
+    let d = normalize(&v, "1", Competition::PremierLeague).unwrap();
+    let rows: Vec<(String, u32, u32, Option<u32>)> = d
+        .standings
+        .iter()
+        .map(|row| (row.team_id.clone(), row.rank, row.points, row.played))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            ("10".to_owned(), 27, 27, Some(10)),
+            ("20".to_owned(), 4, 12, None)
+        ]
+    );
+}
+
+#[test]
+fn form_keeps_valid_game_dates_and_drops_malformed_ones() {
+    let mut v = pregame();
+    v["lastFiveGames"] = serde_json::json!([{
+        "team": {"id": "10"},
+        "events": [
+            {"opponent": {"id": "1", "displayName": "Alpha"}, "gameResult": "W", "score": "2-1", "atVs": "vs", "gameDate": "2026-10-24T11:30Z"},
+            {"opponent": {"id": "2", "displayName": "Beta"}, "gameResult": "D", "score": "0-0", "atVs": "@", "gameDate": "not a date"},
+            {"opponent": {"id": "3", "displayName": "Gamma"}, "gameResult": "L", "score": "0-1", "atVs": "@", "gameDate": "2026-10-17T14:00:00Z"},
+            {"opponent": {"id": "4", "displayName": "Delta"}, "gameResult": "W", "score": "3-0", "atVs": "vs", "gameDate": "2026-10-10T11:30Z\u{0007}"}
+        ]
+    }]);
+    let d = normalize(&v, "1", Competition::PremierLeague).unwrap();
+    let games = &d.form["10"];
+    assert_eq!(games[0].date.as_deref(), Some("2026-10-24T11:30Z"));
+    assert_eq!(games[1].date, None);
+    assert_eq!(games[2].date.as_deref(), Some("2026-10-17T14:00:00Z"));
+    assert_eq!(games[3].date, None);
+}
+
+#[test]
+fn leaders_carry_athlete_id_and_appearances_only_when_valid() {
+    let mut v = pregame();
+    v["leaders"] = serde_json::json!([{
+        "team": {"id": "10"},
+        "leaders": [
+            {"displayName": "Goals", "leaders": [{
+                "displayValue": "9",
+                "athlete": {"id": "4567", "displayName": "Striker One", "jersey": "9", "position": {"abbreviation": "F"}},
+                "statistics": [{"name": "appearances", "value": 28}]
+            }]},
+            {"displayName": "Total Shots", "leaders": [{
+                "displayValue": "31",
+                "athlete": {"id": "778", "displayName": "Winger Two", "position": {"abbreviation": "M"}}
+            }]},
+            {"displayName": "Clean Sheets", "leaders": [{
+                "displayValue": "5",
+                "athlete": {"id": "12ab", "displayName": "Keeper Three"},
+                "statistics": [{"name": "appearances", "value": 300}]
+            }]}
+        ]
+    }]);
+    let d = normalize(&v, "1", Competition::PremierLeague).unwrap();
+    let goals = d.leaders.iter().find(|l| l.category == "Goals").unwrap();
+    assert_eq!(goals.athlete_id.as_deref(), Some("4567"));
+    assert_eq!(goals.apps, Some(28));
+    // Shots carry no statistics block, so apps stays absent.
+    let shots = d.leaders.iter().find(|l| l.category == "Shots").unwrap();
+    assert_eq!(shots.athlete_id.as_deref(), Some("778"));
+    assert_eq!(shots.apps, None);
+    // A non-numeric id and an out-of-range appearance count are both dropped.
+    let keeper = d.leaders.iter().find(|l| l.name == "Keeper Three").unwrap();
+    assert_eq!(keeper.athlete_id, None);
+    assert_eq!(keeper.apps, None);
+}
+
+#[test]
+fn cache_written_before_new_fields_still_deserializes() {
+    let mut legacy = serde_json::to_value(example()).unwrap();
+    let object = legacy.as_object_mut().unwrap();
+    for key in [
+        "seasonName",
+        "matchweek",
+        "broadcasts",
+        "weather",
+        "predictor",
+        "standings",
+    ] {
+        object.remove(key);
+    }
+    for games in legacy["form"].as_object_mut().unwrap().values_mut() {
+        for game in games.as_array_mut().unwrap() {
+            game.as_object_mut().unwrap().remove("date");
+        }
+    }
+    for leader in legacy["leaders"].as_array_mut().unwrap() {
+        let leader = leader.as_object_mut().unwrap();
+        leader.remove("athleteId");
+        leader.remove("apps");
+    }
+    let restored: Details = serde_json::from_value(legacy).unwrap();
+    assert!(valid_cached(&restored));
+    assert!(restored.season_name.is_none());
+    assert!(restored.broadcasts.is_empty());
+    assert!(restored.predictor.is_none());
+    assert!(restored.standings.is_empty());
+}
+
+#[tokio::test]
+async fn forced_refresh_bypasses_only_entries_at_least_thirty_seconds_old() {
+    let now = clock();
+    let cache = Cache::default();
+    let id = "401879268";
+    cache
+        .get_with(
+            Competition::PremierLeague,
+            id,
+            Phase::Live,
+            false,
+            now,
+            || async { Ok(example()) },
+        )
+        .await
+        .unwrap();
+    // 29s old: a forced request is still served from the cache.
+    cache
+        .get_with(
+            Competition::PremierLeague,
+            id,
+            Phase::Live,
+            true,
+            now + chrono::Duration::seconds(29),
+            || async { panic!("forced refresh under 30s must reuse the cache") },
+        )
+        .await
+        .unwrap();
+    // 45s old, inside the live TTL: a forced request refetches.
+    let refreshed = cache
+        .get_with(
+            Competition::PremierLeague,
+            id,
+            Phase::Live,
+            true,
+            now + chrono::Duration::seconds(45),
+            || async { Ok(example()) },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        refreshed.updated_at,
+        (now + chrono::Duration::seconds(45)).to_rfc3339()
+    );
+    // Unforced requests still honour the TTL.
+    cache
+        .get_with(
+            Competition::PremierLeague,
+            id,
+            Phase::Live,
+            false,
+            now + chrono::Duration::seconds(50),
+            || async { panic!("unforced fresh cache must not fetch") },
+        )
+        .await
+        .unwrap();
+    // A failed forced refresh starts the usual cooldown, which forced requests respect.
+    let failed = cache
+        .get_with(
+            Competition::PremierLeague,
+            id,
+            Phase::Live,
+            true,
+            now + chrono::Duration::seconds(100),
+            || async { Err(Failure::temporary("timeout")) },
+        )
+        .await
+        .unwrap();
+    assert!(failed.stale);
+    let cooled = cache
+        .get_with(
+            Competition::PremierLeague,
+            id,
+            Phase::Live,
+            true,
+            now + chrono::Duration::seconds(120),
+            || async { panic!("cooldown must still apply to forced refresh") },
+        )
+        .await
+        .unwrap();
+    assert!(cooled.stale);
 }

@@ -1,6 +1,6 @@
 //! On-demand match summary data for supported competitions; never an authority for scores.
 use crate::model::Competition;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::{
@@ -88,6 +88,9 @@ pub struct FormGame {
     result: String,
     score: String,
     at_home: bool,
+    /// ESPN gameDate as received, e.g. "2026-10-24T11:30Z".
+    #[serde(default)]
+    date: Option<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -99,6 +102,38 @@ pub struct TeamLeader {
     jersey: Option<String>,
     position: String,
     value: String,
+    #[serde(default)]
+    athlete_id: Option<String>,
+    #[serde(default)]
+    apps: Option<u32>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Weather {
+    #[serde(default)]
+    pub temperature_f: Option<i32>,
+    #[serde(default)]
+    pub condition: Option<String>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Predictor {
+    pub home: f64,
+    pub draw: f64,
+    pub away: f64,
+    /// "espn" for ESPN's own projection, "odds" when implied from moneylines.
+    pub source: String,
+    #[serde(default)]
+    pub provider: Option<String>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Standing {
+    pub team_id: String,
+    pub rank: u32,
+    pub points: u32,
+    #[serde(default)]
+    pub played: Option<u32>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -125,6 +160,22 @@ pub struct Details {
     pub form: HashMap<String, Vec<FormGame>>,
     #[serde(default)]
     pub leaders: Vec<TeamLeader>,
+    /// ESPN header.season.name, e.g. "2026-27 English Premier League".
+    #[serde(default)]
+    pub season_name: Option<String>,
+    /// Only when ESPN supplies a week number; soccer summaries usually do not.
+    #[serde(default)]
+    pub matchweek: Option<u32>,
+    /// Deduplicated TV/streaming network names.
+    #[serde(default)]
+    pub broadcasts: Vec<String>,
+    #[serde(default)]
+    pub weather: Option<Weather>,
+    #[serde(default)]
+    pub predictor: Option<Predictor>,
+    /// Table rows for the two clubs in this match only.
+    #[serde(default)]
+    pub standings: Vec<Standing>,
     pub events: Vec<Event>,
     pub statistics: Vec<Statistic>,
     pub players: Vec<Player>,
@@ -176,6 +227,183 @@ fn referee(v: &Value) -> Option<String> {
                 })
             })
         })
+}
+fn finite_number(v: &Value) -> Option<f64> {
+    v.as_f64()
+        .or_else(|| v.as_str().and_then(|s| s.trim().parse::<f64>().ok()))
+        .filter(|n| n.is_finite())
+}
+/// A whole number in `min..=max`, from a JSON number or a numeric string.
+fn whole_in(v: &Value, min: f64, max: f64) -> Option<u32> {
+    finite_number(v)
+        .filter(|n| n.fract() == 0.0 && (min..=max).contains(n))
+        .map(|n| n as u32)
+}
+fn id_text(v: &Value) -> Option<String> {
+    v.as_str()
+        .map(|s| s.trim().to_owned())
+        .or_else(|| v.as_u64().map(|n| n.to_string()))
+        .filter(|s| !s.is_empty() && s.len() <= 128 && !s.chars().any(char::is_control))
+}
+fn game_date_is_valid(value: &str) -> bool {
+    DateTime::parse_from_rfc3339(value).is_ok()
+        || NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%MZ").is_ok()
+}
+fn season_name(v: &Value) -> Option<String> {
+    clean_text(&v["header"]["season"]["name"], 80)
+}
+fn matchweek(v: &Value) -> Option<u32> {
+    [
+        &v["header"]["week"]["number"],
+        &v["header"]["competitions"][0]["week"]["number"],
+    ]
+    .into_iter()
+    .find_map(|number| {
+        number
+            .as_u64()
+            .filter(|n| (1..=60).contains(n))
+            .map(|n| n as u32)
+    })
+}
+fn broadcasts(v: &Value) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    let items = array(&v["header"]["competitions"][0]["broadcasts"])
+        .iter()
+        .chain(array(&v["broadcasts"]).iter());
+    for item in items.take(40) {
+        let Some(name) = clean_text(&item["media"]["shortName"], 60)
+            .or_else(|| clean_text(&item["media"]["name"], 60))
+            .or_else(|| clean_text(&item["names"][0], 60))
+            .or_else(|| clean_text(&item["media"]["names"][0], 60))
+        else {
+            continue;
+        };
+        let lower = name.to_lowercase();
+        if names.iter().any(|known| known.to_lowercase() == lower) {
+            continue;
+        }
+        names.push(name);
+        if names.len() == 6 {
+            break;
+        }
+    }
+    names
+}
+fn weather(v: &Value) -> Option<Weather> {
+    let info = &v["gameInfo"]["weather"];
+    let temperature_f = finite_number(&info["temperature"])
+        .filter(|n| (-60.0..=140.0).contains(n))
+        .map(|n| n.round() as i32);
+    let condition = clean_text(&info["displayValue"], 60);
+    (temperature_f.is_some() || condition.is_some()).then_some(Weather {
+        temperature_f,
+        condition,
+    })
+}
+/// Rescales three non-negative weights to percentages that sum to 100, one decimal each.
+fn normalized_predictor(
+    home: f64,
+    draw: f64,
+    away: f64,
+    source: &str,
+    provider: Option<String>,
+) -> Option<Predictor> {
+    let raw = [home, draw, away];
+    if raw.iter().any(|n| !n.is_finite() || *n < 0.0) {
+        return None;
+    }
+    let total: f64 = raw.iter().sum();
+    if total <= 0.0 {
+        return None;
+    }
+    let scale = |n: f64| (n * 100.0 / total * 10.0).round() / 10.0;
+    Some(Predictor {
+        home: scale(home),
+        draw: scale(draw),
+        away: scale(away),
+        source: source.to_owned(),
+        provider,
+    })
+}
+fn espn_predictor(v: &Value) -> Option<Predictor> {
+    let home_side = &v["predictor"]["homeTeam"];
+    let away_side = &v["predictor"]["awayTeam"];
+    let home = finite_number(&home_side["gameProjection"]).filter(|n| (0.0..=100.0).contains(n))?;
+    let away = finite_number(&away_side["gameProjection"]).filter(|n| (0.0..=100.0).contains(n))?;
+    let draw = finite_number(&home_side["teamChanceTie"])
+        .or_else(|| finite_number(&away_side["teamChanceTie"]))
+        .unwrap_or(100.0 - home - away);
+    if !(0.0..=100.0).contains(&draw) {
+        return None;
+    }
+    normalized_predictor(home, draw, away, "espn", None)
+}
+fn odds_predictor(v: &Value) -> Option<Predictor> {
+    let line = array(&v["odds"])
+        .first()
+        .or_else(|| array(&v["pickcenter"]).first())?;
+    let money_line =
+        |side: &Value| finite_number(&side["moneyLine"]).filter(|ml| ml.abs() >= 100.0);
+    let home = money_line(&line["homeTeamOdds"])?;
+    let away = money_line(&line["awayTeamOdds"])?;
+    let draw = money_line(&line["drawOdds"])?;
+    let implied = |ml: f64| {
+        let probability = if ml < 0.0 {
+            -ml / (100.0 - ml)
+        } else {
+            100.0 / (ml + 100.0)
+        };
+        probability * 100.0
+    };
+    normalized_predictor(
+        implied(home),
+        implied(draw),
+        implied(away),
+        "odds",
+        clean_text(&line["provider"]["name"], 40),
+    )
+}
+fn predictor(v: &Value) -> Option<Predictor> {
+    espn_predictor(v).or_else(|| odds_predictor(v))
+}
+/// Keeps only the table rows of the match's own clubs, in home-then-away order.
+fn standing_rows(v: &Value, team_ids: &[String]) -> Vec<Standing> {
+    let mut rows = Vec::new();
+    let mut seen = HashSet::new();
+    for team_id in team_ids
+        .iter()
+        .take(2)
+        .filter(|id| seen.insert(id.as_str()))
+    {
+        let row = array(&v["standings"]["groups"])
+            .iter()
+            .take(64)
+            .find_map(|group| {
+                array(&group["standings"]["entries"])
+                    .iter()
+                    .take(200)
+                    .find_map(|entry| {
+                        if id_text(&entry["id"]).as_deref() != Some(team_id.as_str()) {
+                            return None;
+                        }
+                        let stat = |name: &str| {
+                            array(&entry["stats"])
+                                .iter()
+                                .find(|item| item["name"].as_str() == Some(name))
+                                .map(|item| &item["value"])
+                        };
+                        Some(Standing {
+                            team_id: team_id.clone(),
+                            rank: whole_in(stat("rank")?, 1.0, 100.0)?,
+                            points: whole_in(stat("points")?, 0.0, 500.0)?,
+                            played: stat("gamesPlayed")
+                                .and_then(|value| whole_in(value, 0.0, 200.0)),
+                        })
+                    })
+            });
+        rows.extend(row);
+    }
+    rows
 }
 fn commentary_kind(body: &str) -> &'static str {
     let text = body.to_ascii_lowercase();
@@ -904,6 +1132,14 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
                     result,
                     score: text(game, "score").chars().take(20).collect(),
                     at_home: text(game, "atVs") == "vs",
+                    date: game["gameDate"]
+                        .as_str()
+                        .filter(|raw| {
+                            raw.chars().count() <= 40
+                                && !raw.chars().any(char::is_control)
+                                && game_date_is_valid(raw.trim())
+                        })
+                        .map(str::to_owned),
                 })
             })
             .collect::<Vec<_>>();
@@ -956,12 +1192,28 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
                     .take(50)
                     .collect(),
                 value: value.chars().take(40).collect(),
+                athlete_id: entry["athlete"]["id"]
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|id| {
+                        !id.is_empty() && id.len() <= 20 && id.bytes().all(|b| b.is_ascii_digit())
+                    })
+                    .map(str::to_owned),
+                apps: array(&entry["statistics"])
+                    .iter()
+                    .find(|item| item["name"].as_str() == Some("appearances"))
+                    .and_then(|item| whole_in(&item["value"], 0.0, 200.0)),
             });
             if leaders.len() >= 16 {
                 break;
             }
         }
     }
+    let team_ids: Vec<String> = array(&v["header"]["competitions"][0]["competitors"])
+        .iter()
+        .take(2)
+        .filter_map(|side| id_text(&side["team"]["id"]).or_else(|| id_text(&side["id"])))
+        .collect();
     Ok(Details {
         match_id: id.into(),
         match_state: v["header"]["competitions"][0]["status"]["type"]["state"]
@@ -984,6 +1236,12 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
         attendance,
         form,
         leaders,
+        season_name: season_name(v),
+        matchweek: matchweek(v),
+        broadcasts: broadcasts(v),
+        weather: weather(v),
+        predictor: predictor(v),
+        standings: standing_rows(v, &team_ids),
         events,
         statistics,
         players,
@@ -1049,6 +1307,7 @@ fn valid_cached(d: &Details) -> bool {
                         && bounded(&game.opponent_id, 128)
                         && matches!(game.result.as_str(), "W" | "D" | "L")
                         && bounded(&game.score, 20)
+                        && game.date.as_ref().is_none_or(|date| bounded(date, 40))
                 })
         })
         && d.leaders.len() <= 16
@@ -1061,6 +1320,41 @@ fn valid_cached(d: &Details) -> bool {
                 && leader.jersey.as_ref().is_none_or(|value| {
                     value.len() <= 4 && value.bytes().all(|b| b.is_ascii_digit())
                 })
+                && leader
+                    .athlete_id
+                    .as_ref()
+                    .is_none_or(|id| id.len() <= 20 && id.bytes().all(|b| b.is_ascii_digit()))
+                && leader.apps.is_none_or(|apps| apps <= 200)
+        })
+        && d.season_name.as_ref().is_none_or(|name| bounded(name, 80))
+        && d.matchweek.is_none_or(|week| (1..=60).contains(&week))
+        && d.broadcasts.len() <= 6
+        && d.broadcasts.iter().all(|name| bounded(name, 60))
+        && d.weather.as_ref().is_none_or(|weather| {
+            weather
+                .temperature_f
+                .is_none_or(|temperature| (-60..=140).contains(&temperature))
+                && weather
+                    .condition
+                    .as_ref()
+                    .is_none_or(|text| bounded(text, 60))
+        })
+        && d.predictor.as_ref().is_none_or(|predictor| {
+            [predictor.home, predictor.draw, predictor.away]
+                .iter()
+                .all(|n| n.is_finite() && (0.0..=100.0).contains(n))
+                && matches!(predictor.source.as_str(), "espn" | "odds")
+                && predictor
+                    .provider
+                    .as_ref()
+                    .is_none_or(|provider| bounded(provider, 40))
+        })
+        && d.standings.len() <= 2
+        && d.standings.iter().all(|row| {
+            bounded(&row.team_id, 128)
+                && (1..=100).contains(&row.rank)
+                && row.points <= 500
+                && row.played.is_none_or(|played| played <= 200)
         })
         && DateTime::parse_from_rfc3339(&d.updated_at).is_ok()
         && d.events.iter().all(|e| {
@@ -1150,12 +1444,13 @@ impl Cache {
         league: Competition,
         id: &str,
         phase: Phase,
+        force: bool,
     ) -> Result<Details, String> {
         let client = self
             .client
             .get_or_init(|| crate::provider::client().ok())
             .clone();
-        self.get_with(league, id, phase, Utc::now(), || async move {
+        self.get_with(league, id, phase, force, Utc::now(), || async move {
             let client =
                 client.ok_or_else(|| Failure::temporary("Could not create summary client"))?;
             fetch(&client, league, id).await
@@ -1169,6 +1464,7 @@ impl Cache {
         league: Competition,
         id: &str,
         phase: Phase,
+        force: bool,
         now: DateTime<Utc>,
         fetch: F,
     ) -> Result<Details, String>
@@ -1188,8 +1484,14 @@ impl Cache {
                 .map(|t| now.timestamp() - t.timestamp())
                 .unwrap_or(i64::MAX)
         };
+        // A forced refresh bypasses a fresh entry only once it is at least 30s old,
+        // so repeated forced requests cannot hammer ESPN. The back-off still applies.
+        let reusable = |d: &Details| {
+            let age = fresh(d);
+            phase_matches(d) && (0..ttl).contains(&age) && !(force && age >= 30)
+        };
         if let Some(d) = lock(&self.entries).get(&key) {
-            if phase_matches(d) && (0..ttl).contains(&fresh(d)) {
+            if reusable(d) {
                 return Ok(d.clone());
             }
         }
@@ -1202,7 +1504,7 @@ impl Cache {
         let _guard = key_lock.lock().await;
         let old = lock(&self.entries).get(&key).cloned();
         if let Some(d) = &old {
-            if phase_matches(d) && (0..ttl).contains(&fresh(d)) {
+            if reusable(d) {
                 return Ok(d.clone());
             }
         }

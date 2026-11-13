@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { LogicalSize } from '@tauri-apps/api/dpi';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { ListFilter, Minus, Pin, Radio, RefreshCw, Settings2, X } from 'lucide-react';
+import { ListFilter, Maximize2, Minimize2, Minus, Pin, Radio, RefreshCw, Settings2, X } from 'lucide-react';
 import logo from './assets/logo.png';
 import { groupFixtures, isInProgress, isLive } from './fixtures';
 import { competitionLeagues, competitionName, competitionSlug, competitionStatus, rateLimitedUntil, resultsStatus, updateStatus } from './freshness';
@@ -20,6 +21,7 @@ import { MatchCard } from './components/MatchCard';
 import { MatchDetails } from './components/MatchDetails';
 import { SettingsPanel } from './components/SettingsPanel';
 import { CompetitionPicker } from './components/CompetitionPicker';
+import { TickerView } from './components/TickerView';
 
 export default function App() {
   const {snapshot,loading,load,refresh,save,error,opacityPreview} = useApp();
@@ -29,6 +31,9 @@ export default function App() {
   const [selected,setSelected] = useState<Match|null>(null);
   const [notificationRequest,setNotificationRequest] = useState(0);
   const [refreshing,setRefreshing] = useState(false);
+  // Session-only slim mode; the widget's full size is remembered so it can be restored.
+  const [ticker,setTicker] = useState(false);
+  const tickerRestoreSize = useRef<{width:number;height:number}|null>(null);
   const root = useRef<HTMLElement>(null);
   const restoreFocus = useRef('settings-control');
   const homeScroll = useRef(0);
@@ -58,6 +63,13 @@ export default function App() {
     return base.filter(m=>included.includes(m.league??'premierLeague'));
   },[historyView,recent.data.matches,allMatches,competitionView]);
   const listError=historyView?viewResults.error:viewStatus.error;
+  const detailMatch = selected ? mergeResults([selected],mergeResults(recent.data.matches,allMatches??[])).find(m=>m.id===selected.id)??selected : null;
+  // Ticker shows the match in front of the user: the open detail, else the first confirmed live match, else the next kick-off.
+  const tickerMatch = (view==='detail'&&detailMatch)
+    ? detailMatch
+    : competitionMatches.find(m=>isLive(m)&&!m.scoreStale)
+      ?? [...competitionMatches].filter(m=>m.status==='scheduled'&&Date.parse(m.kickoff)>Date.now()).sort((a,b)=>Date.parse(a.kickoff)-Date.parse(b.kickoff))[0]
+      ?? null;
   const rememberHome = () => { homeScroll.current=root.current?.querySelector('.match-list')?.scrollTop??0; };
   const back = () => setView('home');
   const openSettings = () => {
@@ -190,6 +202,39 @@ export default function App() {
       : !feedUnavailable&&!listError ? list?.querySelector<HTMLElement>('.centre-tabs button[aria-pressed="true"]') : null;
     if(target){recoveryFocus.current=false;target.focus({preventScroll:true});}
   },[busy,matches.length,matchView,view,listError,error,historyView,recent.loading,feedUnavailable]);
+  const toggleAlwaysOnTop = async () => {
+    if(!settings) return;
+    const next = !settings.alwaysOnTop;
+    if(native) {
+      try{await getCurrentWindow().setAlwaysOnTop(next);}
+      catch{useApp.setState({error:'Could not change always-on-top.'});return;}
+    }
+    void save({alwaysOnTop:next});
+  };
+  const toggleTicker = async () => {
+    const next = !ticker;
+    if(native) {
+      const win = getCurrentWindow();
+      try{
+        if(next) {
+          const size = (await win.innerSize()).toLogical(await win.scaleFactor());
+          tickerRestoreSize.current = {width:size.width,height:size.height};
+          await win.setMinSize(new LogicalSize(320,112));
+          await win.setSize(new LogicalSize(Math.max(320,Math.min(size.width,420)),112));
+        } else {
+          const saved = tickerRestoreSize.current ?? {width:390,height:700};
+          await win.setSize(new LogicalSize(saved.width,saved.height));
+          await win.setMinSize(new LogicalSize(320,460));
+        }
+      } catch {
+        // Best effort: never leave the window stuck at the ticker's minimum height.
+        if(next) void win.setMinSize(new LogicalSize(320,460)).catch(()=>{});
+        useApp.setState({error:'Could not resize the widget.'});
+        return;
+      }
+    }
+    setTicker(next);
+  };
   const contextMenu = (event:MouseEvent) => {
     const target = event.target;
     if (target instanceof Element) {
@@ -200,18 +245,24 @@ export default function App() {
     event.preventDefault();
   };
   const keyDown = (event:KeyboardEvent) => {
-    if(event.key==='Escape'&&!event.defaultPrevented&&view!=='home'&&!(event.target instanceof HTMLSelectElement)) {event.preventDefault();back();}
+    if(event.key==='Escape'&&!event.defaultPrevented&&!(event.target instanceof HTMLSelectElement)) {
+      if(ticker) {event.preventDefault();void toggleTicker();}
+      else if(view!=='home') {event.preventDefault();back();}
+    }
   };
-  return <main ref={root} onKeyDown={keyDown} onContextMenu={contextMenu} className={'shell theme-'+(settings?.theme??themeHint)+' '+(panelOpacity<85?'transparent-panel ':'')+(settings?.compact?'compact-view ':'')+(settings?.reducedMotion?'reduced':'')} style={{'--panel-opacity':panelOpacity/100} as CSSProperties}>
+  return <main ref={root} onKeyDown={keyDown} onContextMenu={contextMenu} className={'shell theme-'+(settings?.theme??themeHint)+' '+(panelOpacity<85?'transparent-panel ':'')+(settings?.compact?'compact-view ':'')+(settings?.reducedMotion?'reduced ':'')+(ticker?'ticker-mode':'')} style={{'--panel-opacity':panelOpacity/100} as CSSProperties}>
     <header className="header" data-tauri-drag-region>
       <div className="brand" data-tauri-drag-region><span className="brand-icon"><img src={logo} alt=""/></span><div data-tauri-drag-region><h1>match<span>radar</span><i>®</i></h1></div></div>
       <div className="header-actions">
+        <button className="icon-button" title={settings?.alwaysOnTop?'Always on top is on · unpin widget':'Always on top is off · keep widget above other windows'} disabled={!settings} onClick={()=>void toggleAlwaysOnTop()} aria-label="Always on top" aria-pressed={!!settings?.alwaysOnTop}><Pin size={15} fill={settings?.alwaysOnTop?'currentColor':'none'}/></button>
+        <button className="icon-button" title={ticker?'Expand the full widget':'Collapse to a slim match ticker'} onClick={()=>void toggleTicker()} aria-label="Ticker mode" aria-pressed={ticker}>{ticker?<Maximize2 size={15}/>:<Minimize2 size={15}/>}</button>
         <button className="icon-button" title={native?'Hide to system tray':'Hide is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().hide().catch(()=>useApp.setState({error:'Could not hide the widget.'}))} aria-label="Minimize widget"><Minus size={17}/></button>
         <button className="icon-button close" title={native?'Hide to system tray':'Hide is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().hide().catch(()=>useApp.setState({error:'Could not hide the widget.'}))} aria-label="Hide widget"><X size={16}/></button>
       </div>
     </header>
-    {view==='settings'&&settings?<SettingsPanel settings={settings} matches={allMatches??[]} save={save} back={back} refresh={()=>void doRefresh()} refreshing={busy}/>
-      :view==='detail'&&selected&&settings?<MatchDetails key={`${selected.id}:${notificationRequest}`} match={mergeResults([selected],mergeResults(recent.data.matches,allMatches??[])).find(m=>m.id===selected.id)??selected} settings={settings} back={back}/>
+    {ticker?<TickerView match={tickerMatch} onExpand={()=>void toggleTicker()}/>
+      :view==='settings'&&settings?<SettingsPanel settings={settings} matches={allMatches??[]} save={save} back={back} refresh={()=>void doRefresh()} refreshing={busy}/>
+      :view==='detail'&&selected&&settings?<MatchDetails key={`${selected.id}:${notificationRequest}`} match={detailMatch??selected} settings={settings} back={back}/>
       :<>
         <div className="hero"><div><h2>Matchday</h2><p>Fixtures, scores and the clubs you follow</p></div><time>{dateLabel(new Date().toISOString())}</time></div>
         <div className="summary"><CompetitionPicker value={competitionView} onChange={value=>void save({competitionView:value})} disabled={!settings}/><span className={'live-pill '+(!live?'quiet':'')} aria-label={`${competitionTitle}: ${live?`${live} live matches`:savedLive?'saved scores, awaiting live update':liveChecking?'checking live status':liveUnknown?'live status unavailable':'no confirmed live matches'}`} title="Competition status, including matches hidden by your filter. Live scores refresh about every 60 seconds."><i className="dot"/>{live?`${live} LIVE`:savedLive?'SAVED LIVE':liveChecking?'CHECKING LIVE':liveUnknown?'LIVE UNAVAILABLE':'NO LIVE MATCHES'}</span></div>
@@ -229,14 +280,13 @@ export default function App() {
         </div>
       </>}
     {error&&!feedUnavailable&&<div className="error-banner" role="alert"><span data-copyable>{error}</span><button className="icon-button" aria-label="Dismiss message" title="Dismiss message" onClick={()=>useApp.setState({error:null})}><X size={14}/></button></div>}
-    <footer>
+    {!ticker&&<footer>
       <div className="connection-info" role="status" title={[statusLabel,statusTime,'Live scores refresh about every 60 seconds'].filter(Boolean).join(' · ')}><span className={'connection '+(viewStatus.error||feedUnavailable?'error':'')} aria-hidden="true"/><div className="status-copy"><span>{statusLabel}</span>{statusTime&&<time dateTime={status.timestamp??undefined}>{statusTime}</time>}</div></div>
       <div className="footer-actions">
         <button id="settings-control" className="icon-button" title={view==='settings'?'Return to matches (Esc)':'Open Settings'} onClick={()=>view==='settings'?back():openSettings()} aria-label="Settings" aria-pressed={view==='settings'}><Settings2 size={16}/></button>
-        <button className="icon-button" title={settings?.alwaysOnTop?'Always on top is on · unpin widget':'Always on top is off · keep widget above other windows'} disabled={!settings} onClick={()=>settings&&void save({alwaysOnTop:!settings.alwaysOnTop})} aria-label="Always on top" aria-pressed={!!settings?.alwaysOnTop}><Pin size={16}/></button>
         <button className="icon-button" title={settings?.followedOnly?'Following only is on · show all matches':'Showing all matches · filter to followed clubs'} disabled={!settings} onClick={()=>settings&&void save({followedOnly:!settings.followedOnly})} aria-label="Following only" aria-pressed={!!settings?.followedOnly}><ListFilter size={16}/>{settings?.followedOnly&&<span className="filter-dot"/>}</button>
         <button className="icon-button" title={busy?'Updating fixtures…':limitedUntil?`ESPN is rate limiting requests · updates resume automatically at ${timeLabel(limitedUntil)}`:'Refresh fixtures and scores'} onClick={()=>void doRefresh()} disabled={busy} aria-label="Refresh" aria-busy={busy}><RefreshCw size={16} className={busy?'spin':''}/></button>
       </div>
-    </footer>
+    </footer>}
   </main>;
 }

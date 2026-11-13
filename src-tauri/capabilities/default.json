@@ -1,1 +1,1 @@
-{"identifier":"default","description":"Widget window permissions","windows":["main"],"permissions":["core:default","core:window:allow-hide","core:window:allow-start-dragging","autostart:default"]}
+{"identifier":"default","description":"Widget window permissions","windows":["main"],"permissions":["core:default","core:window:allow-hide","core:window:allow-start-dragging","core:window:allow-set-always-on-top","core:window:allow-set-size","core:window:allow-set-min-size","autostart:default"]}

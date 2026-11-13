@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
-import { cleanup,fireEvent,render,screen } from '@testing-library/react';
+import { cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react';
 import { afterEach,expect,it,vi } from 'vitest';
 import { MatchCentre } from './MatchCentre';
 import { positionGroup } from './MatchLineups';
 import { formatStatisticValue } from './MatchStats';
 import { mockSnapshot } from '../test-fixtures/fixtures';
 import type { MatchSummary } from '../useMatchSummary';
-const state=vi.hoisted(()=>({data:{matchId:'1',updatedAt:'2026-10-29T12:00:00Z',error:null,stale:false,venue:null as string|null,events:[{id:'e',minute:"45+2'",period:1,seconds:2820,kind:'goal',text:'Verified provider goal',teamId:'359'}],statistics:[{teamId:'359',name:'redCards',label:'Red cards',value:'0'}],players:[{teamId:'359',name:'A long player name',position:'G',starter:true}]} as MatchSummary,loading:false,error:null,retry:vi.fn()}));
-vi.mock('../useMatchSummary',()=>({useMatchSummary:()=>state}));
+const state=vi.hoisted(()=>({data:{matchId:'1',updatedAt:'2026-10-29T12:00:00Z',error:null,stale:false,venue:null as string|null,events:[{id:'e',minute:"45+2'",period:1,seconds:2820,kind:'goal',text:'Verified provider goal',teamId:'359'}],statistics:[{teamId:'359',name:'redCards',label:'Red cards',value:'0'}],players:[{teamId:'359',name:'A long player name',position:'G',starter:true}]} as MatchSummary,loading:false,error:null,retry:vi.fn(),refresh:vi.fn(),refreshing:false,real:false}));
+const bridge=vi.hoisted(()=>({invoke:vi.fn()}));
+vi.mock('@tauri-apps/api/core',()=>({isTauri:()=>state.real,invoke:bridge.invoke}));
+// Most tests use the fixed state above; only the refresh test runs the real hook over the mocked invoke.
+vi.mock('../useMatchSummary',async(importOriginal)=>{const actual=await importOriginal<typeof import('../useMatchSummary')>();return {useMatchSummary:(...args:Parameters<typeof actual.useMatchSummary>)=>state.real?actual.useMatchSummary(...args):state};});
 const initial=structuredClone(state.data);
-afterEach(()=>{cleanup();state.data=structuredClone(initial);state.loading=false;state.error=null;});
+afterEach(()=>{cleanup();state.data=structuredClone(initial);state.loading=false;state.error=null;state.real=false;bridge.invoke.mockReset();});
 it('offers available sections and displays explicit zero stats and player names',()=>{render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));expect(screen.getByText("45+2'")).toBeTruthy();expect(screen.getByText('Verified provider goal')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getByText('0')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));expect(screen.getByText('A long player name')).toBeTruthy();});
 it('keeps the details freshness line on Overview instead of repeating it above every tab',()=>{
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);
@@ -259,4 +262,24 @@ it('explains why a complete starting XI has no formation pitch',()=>{
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));
  expect(screen.getByText('Formation unavailable for this lineup.')).toBeTruthy();
  state.data=old;
+});
+it('shows Lineups and Stats as disabled placeholder tabs before kick-off',()=>{
+ const old=state.data;state.data={...old,events:[],statistics:[],players:[]};
+ render(<MatchCentre match={{...mockSnapshot.matches[0],status:'scheduled'}}/>);
+ for(const name of ['Lineups','Stats']){const tab=screen.getByRole('tab',{name});expect(tab.getAttribute('aria-disabled')).toBe('true');expect(tab.getAttribute('title')).toBe('Available closer to kick-off');}
+ fireEvent.click(screen.getByRole('tab',{name:'Stats'}));
+ expect(screen.getByRole('tab',{name:'Overview'}).getAttribute('aria-selected')).toBe('true');
+ expect(screen.queryByRole('table',{name:'Team statistics'})).toBeNull();state.data=old;
+});
+it('forces a cache-bypassing details refresh from the Overview freshness line',async()=>{
+ const id=mockSnapshot.matches[0].id;state.real=true;
+ bridge.invoke.mockResolvedValue({...structuredClone(initial),matchId:id,stale:false,error:null});
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ await screen.findByText(/Details checked/);
+ bridge.invoke.mockClear();
+ const refresh=screen.getByRole('button',{name:'Refresh match details'});
+ fireEvent.click(refresh);
+ expect(bridge.invoke).toHaveBeenCalledWith('get_match_details',{id,force:true});
+ expect(refresh.hasAttribute('disabled')).toBe(true);
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Refresh match details'}).hasAttribute('disabled')).toBe(false),{timeout:2000});
 });

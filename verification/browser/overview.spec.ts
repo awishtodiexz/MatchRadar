@@ -64,7 +64,7 @@ for(const [width,theme] of [[320,'light'],[390,'dark']] as const) test(`Overview
  await page.getByRole('button',{name:'Match details: Manchester United versus Aston Villa'}).click();
  await expect(page.getByRole('heading',{name:'Match information'})).toBeVisible();
  await expect(page.getByLabel('Win against Aston Villa, 2–0')).toBeVisible();
- await expect(page.getByRole('tab',{name:'Stats',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('tab',{name:'Stats',exact:true})).toHaveAttribute('aria-disabled','true');
  await page.screenshot({path:info.outputPath('prematch-overview.png')});
  await installBridge(page,{snapshot:{...mockSnapshot,settings:{...mockSnapshot.settings,theme},matches:[{...live,scoreStale:true}]},details:'error'});await page.reload();
  await page.getByRole('button',{name:'Match details: Manchester United versus Aston Villa'}).click();

@@ -1,4 +1,5 @@
 import { useId, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import type { Match } from '../types';
 import { isLive } from '../fixtures';
 import { useMatchSummary } from '../useMatchSummary';
@@ -9,8 +10,15 @@ import { MatchEvents, keyEvent } from './MatchEvents';
 import { MatchOverview } from './MatchOverview';
 import { isCard, isGoal } from './matchEventKinds';
 
+export type MatchSummaryState = ReturnType<typeof useMatchSummary>;
+
 export function MatchCentre({match}:{match:Match}) {
   const summary = useMatchSummary(match.id,isLive(match),match.status==='fulltime');
+  return <MatchCentreView match={match} summary={summary}/>;
+}
+
+/** Match centre driven by a summary the parent already owns (one poller per match). */
+export function MatchCentreView({match,summary}:{match:Match;summary:MatchSummaryState}) {
   const {loading,error,retry}=summary;
   const data=summary.data;
   const [selected,setSelected]=useState('Overview');
@@ -29,10 +37,10 @@ export function MatchCentre({match}:{match:Match}) {
     requestAnimationFrame(()=>document.querySelector<HTMLElement>('.detail-body')?.scrollTo({top:0}));
   };
   return <section className="match-centre" aria-label="Match centre" aria-busy={loading}>
-    <div className="centre-tabs" role="tablist" aria-label="Match centre sections">{tabs.map((name,index)=><button key={name} role="tab" id={sectionId+'-'+name} aria-controls={sectionId+'-panel'} aria-selected={tab===name} tabIndex={tab===name?0:-1} onClick={()=>select(name)} onKeyDown={event=>{
+    <div className="centre-tabs scoped-tabs" role="tablist" aria-label="Match centre sections">{tabs.map((name,index)=><button key={name} role="tab" id={sectionId+'-'+name} aria-controls={sectionId+'-panel'} aria-selected={tab===name} tabIndex={tab===name?0:-1} onClick={()=>select(name)} onKeyDown={event=>{
       const next=event.key==='ArrowRight'?(index+1)%tabs.length:event.key==='ArrowLeft'?(index+tabs.length-1)%tabs.length:event.key==='Home'?0:event.key==='End'?tabs.length-1:undefined;
       if(next===undefined)return;event.preventDefault();select(tabs[next]);document.getElementById(sectionId+'-'+tabs[next])?.focus();
-    }}>{name}</button>)}</div>
+    }}>{name}</button>)}{match.status==='scheduled'&&['Lineups','Stats'].filter(name=>!tabs.includes(name)).map(name=><button key={'upcoming-'+name} type="button" role="tab" aria-disabled="true" aria-selected={false} tabIndex={-1} className="tab-upcoming" title="Available closer to kick-off">{name}</button>)}</div>
     <div className="centre-panel" role="tabpanel" id={sectionId+'-panel'} aria-labelledby={sectionId+'-'+tab} tabIndex={0}>
     {loading&&!data&&<div className="skeletons" role="status" aria-label="Loading match details"><div/></div>}
     {error&&<p role="status">{error} <button className="text-button" onClick={retry}>Retry details</button></p>}
@@ -40,7 +48,7 @@ export function MatchCentre({match}:{match:Match}) {
     {tab==='Overview'&&(!loading||data)&&<>
       <MatchOverview match={match} data={data}/>
       <MatchPreview match={match} data={data}/>
-      {data&&<p className="overview-freshness">{data.stale?'Saved details':'Details checked'} · {data.stale?new Date(data.updatedAt).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):new Date(data.updatedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>}
+      {data&&<div className="overview-freshness"><span>{data.stale?'Saved details':'Details checked'} · {data.stale?new Date(data.updatedAt).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):new Date(data.updatedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span><button type="button" className="icon-button refresh-details" aria-label="Refresh match details" title="Refresh match details" onClick={()=>void summary.refresh()} disabled={summary.refreshing} aria-busy={summary.refreshing}><RefreshCw size={12} className={summary.refreshing?'spin':''}/></button></div>}
     </>}
     {tab==='Commentary'&&<>
       <div className="timeline-toolbar">

@@ -68,14 +68,14 @@ test('theme changes and demo controls are absent from settings', async ({ page }
   await expect(page.getByRole('region', { name: 'Demo controls' })).toHaveCount(0);
 });
 
-test('upcoming match shows supplied venue and omits unavailable detail tabs', async ({ page }, info) => {
+test('upcoming match shows supplied venue and marks later detail tabs unavailable', async ({ page }, info) => {
   await page.getByRole('button', { name: 'Upcoming', exact: true }).click();
   await page.getByRole('button', { name: 'Match details: Manchester City versus Manchester United' }).click();
   await expect(page.getByText('Lineups and live coverage appear closer to kick-off.')).toBeVisible();
   await expect(page.getByText('Test Stadium')).toBeVisible();
   await page.screenshot({path:info.outputPath('upcoming-details.png'),animations:'disabled'});
-  await expect(page.getByRole('tab', { name: 'Stats', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('tab', { name: 'Lineups', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Stats', exact: true })).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByRole('tab', { name: 'Lineups', exact: true })).toHaveAttribute('aria-disabled', 'true');
 });
 
 for (const [width, theme] of [[320, 'light'], [390, 'dark']] as const) {

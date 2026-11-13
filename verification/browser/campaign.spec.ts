@@ -48,7 +48,7 @@ test('explores filters, bells, search and details', async ({ page }) => {
   await page.getByRole('button',{name:'Upcoming',exact:true}).click();
   await page.getByRole('button',{name:'Match details: Manchester City versus Manchester United'}).click();
   await expect(page.getByText('Lineups and live coverage appear closer to kick-off.')).toBeVisible();
-  await expect(page.getByRole('tab',{name:'Stats'})).toHaveCount(0);
+  await expect(page.getByRole('tab',{name:'Stats'})).toHaveAttribute('aria-disabled','true');
 });
 
 test('following-only empty state explains the filter and offers recovery', async ({ page }) => {

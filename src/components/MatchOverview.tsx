@@ -1,4 +1,4 @@
-import { MapPin, Users, Flag, Clock } from 'lucide-react';
+import { MapPin, Users, Flag, Clock, Trophy, Tv, Thermometer, Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudFog } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Match } from '../types';
 import type { MatchScorer, MatchSummary } from '../useMatchSummary';
@@ -36,11 +36,25 @@ export function MatchOverview({match,data}:{match:Match;data:MatchSummary|null})
   const hasGoals=scorers.length>0||(match.homeScore??0)+(match.awayScore??0)>0;
   const incidents=(data?.events??[]).filter(event=>isIncident(event.kind));
   // Only show facts the provider supplied; a column of "Not provided" is noise.
+  const text=(value:unknown)=>typeof value==='string'?value.trim():'';
+  const competition=text(match.competition);
+  const matchweek=data?.matchweek;
+  const season=text(data?.seasonName).match(/\b(\d{4}[-–/]\d{2,4})\b/)?.[1];
+  const competitionSub=typeof matchweek==='number'&&Number.isInteger(matchweek)&&matchweek>=1?`Matchweek ${matchweek}`:season?`Season ${season}`:text(match.leg);
+  const broadcasts=(data?.broadcasts??[]).map(text).filter(Boolean);
+  const celsius=typeof data?.weather?.temperatureF==='number'&&Number.isFinite(data.weather.temperatureF)?Math.round((data.weather.temperatureF-32)*5/9):null;
+  const condition=text(data?.weather?.condition);
+  const weatherRules:Array<[RegExp,ReactNode]>=[[/rain|shower|drizzle/i,<CloudRain size={14}/>],[/snow|sleet/i,<CloudSnow size={14}/>],[/storm|thunder/i,<CloudLightning size={14}/>],[/cloud|overcast/i,<Cloud size={14}/>],[/fog|mist|haze/i,<CloudFog size={14}/>],[/sun|clear/i,<Sun size={14}/>]];
+  const weatherIcon=weatherRules.find(([pattern])=>pattern.test(condition))?.[1]??<Thermometer size={14}/>;
+  const referee=text(data?.referee);
   const facts=[
+    competition&&{key:'competition',icon:<Trophy size={14}/>,label:'Competition',value:competition,sub:competitionSub||undefined},
     data?.venue&&{key:'venue',icon:<MapPin size={14}/>,label:'Stadium',value:data.venue,sub:[data.venueCity,data.capacity&&`Capacity ${data.capacity.toLocaleString()}`].filter(Boolean).join(' · ')},
-    data?.referee&&{key:'referee',icon:<Flag size={14}/>,label:'Referee',value:data.referee},
-    data?.attendance!=null&&{key:'attendance',icon:<Users size={14}/>,label:'Attendance',value:data.attendance.toLocaleString()},
-  ].filter(Boolean) as Array<{key:string;icon:ReactNode;label:string;value:string;sub?:string}>;
+    !!broadcasts.length&&{key:'broadcast',icon:<Tv size={14}/>,label:'Broadcast',value:broadcasts.slice(0,3).join(' · '),sub:broadcasts.length>3?`+${broadcasts.length-3} more`:undefined,title:broadcasts.join(' · ')},
+    referee&&{key:'referee',icon:<Flag size={14}/>,label:'Referee',value:referee},
+    (celsius!==null||condition)&&{key:'weather',icon:weatherIcon,label:'Kick-off weather',value:celsius!==null?`${celsius}°C`:condition,sub:celsius!==null&&condition?condition:undefined},
+    data?.attendance!=null&&Number.isFinite(data.attendance)&&{key:'attendance',icon:<Users size={14}/>,label:'Attendance',value:data.attendance.toLocaleString()},
+  ].filter(Boolean) as Array<{key:string;icon:ReactNode;label:string;value:string;sub?:string;title?:string}>;
   const note=match.status==='scheduled'?'Lineups and live coverage appear closer to kick-off.'
     :match.status==='postponed'?'This match has been postponed.'
     :match.status==='cancelled'?closedNote(match)
@@ -65,7 +79,7 @@ export function MatchOverview({match,data}:{match:Match;data:MatchSummary|null})
     <OverviewCard title="Match information" label="Match information" className="match-information">
       {facts.length?<dl>{facts.map(fact=><div key={fact.key}>
         <dt><span className="ov-icon" aria-hidden="true">{fact.icon}</span>{fact.label}</dt>
-        <dd><strong>{fact.value}</strong>{fact.sub&&<small>{fact.sub}</small>}</dd>
+        <dd title={fact.title}><strong>{fact.value}</strong>{fact.sub&&<small>{fact.sub}</small>}</dd>
       </div>)}</dl>:<p className="ov-empty">Venue and officials have not been announced yet.</p>}
     </OverviewCard>
   </article>;

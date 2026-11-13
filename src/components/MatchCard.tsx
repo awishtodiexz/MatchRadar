@@ -98,9 +98,9 @@ export function MatchAlertsButton({match, settings}: {match:Match; settings:Sett
   const reset = () => { const next = {...settings.matchAlerts}; delete next[match.id]; heading.current?.focus(); void save({matchAlerts:next}); };
   return <div className="alert-control">
     <button ref={trigger} className="icon-button alert-trigger" data-alert-state={alerts.state}
-      aria-label={`Match alerts: ${alerts.label}`} aria-haspopup="dialog" aria-expanded={open} title={titleFor(alerts)}
+      aria-label={`Match alerts: ${alerts.label}`} aria-haspopup="dialog" aria-expanded={open} aria-pressed={alerts.enabled} title={titleFor(alerts)}
       onClick={()=>setOpen(value=>!value)}>
-      {alerts.enabled?<BellRing size={17}/>:alerts.state==='muted'?<BellOff size={17}/>:<Bell size={17}/>}
+      {alerts.enabled?<BellRing size={17} fill="currentColor"/>:alerts.state==='muted'?<BellOff size={17}/>:<Bell size={17}/>}
     </button>
     {open&&<div className="alert-menu" role="dialog" aria-labelledby={menuId} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setOpen(false);trigger.current?.focus();}}}>
       <div className="alert-menu-head"><h3 id={menuId} ref={heading} tabIndex={-1}>Match alerts</h3><span className="state-label" data-alert-state={alerts.state}>{alerts.label}</span></div>
@@ -113,6 +113,10 @@ export function MatchAlertsButton({match, settings}: {match:Match; settings:Sett
   </div>;
 }
 
+// Tooltip for the details-header bell only; the list-card bell keeps its own title.
 function titleFor(alerts:ReturnType<typeof alertPresentation>) {
-  return alerts.closed?alerts.description:`${alerts.description} ${alerts.enabled?'Click to mute.':'Click for reminders, match start and goals.'} Use Match alerts to return to team settings.`;
+  if(alerts.closed) return alerts.description;
+  if(alerts.enabled) return 'Match alerts on: Reminder, Kick-off, Goals · click to manage';
+  if(alerts.state==='muted') return 'Match alerts muted · click to manage';
+  return 'Match alerts follow your team settings · click to manage';
 }

@@ -70,7 +70,7 @@ h1,h2,h3,h4,h5,p {margin:0;}
 .quiet .dot {background:var(--muted);}
 
 /* Only the main content scrolls. Menus use opaque surfaces. */
-.match-list,.settings-body,.detail-body {overflow-y:auto;overflow-x:hidden;flex:1;min-height:0;min-width:0;scrollbar-width:thin;scrollbar-color:var(--scrollbar) transparent;overscroll-behavior:contain;scrollbar-gutter:stable;}
+.match-list,.settings-body,.detail-body {overflow-y:auto;overflow-x:hidden;flex:1;min-height:0;min-width:0;overscroll-behavior:contain;scrollbar-gutter:stable;}
 .match-list {padding:0 var(--gutter) 16px;}
 .settings-body {padding:16px var(--gutter);}
 .detail-body {padding:0;}
@@ -467,3 +467,81 @@ footer {min-height:44px;display:flex;align-items:center;justify-content:space-be
  .detail-score > span.is-time {font-size:26px;}
 }
 .ov-moments .match-events .timeline-period {background:none;padding:4px 0;border-bottom:1px solid var(--border);border-radius:0;color:var(--muted);}
+
+/* @slot:T2 titlebar, ticker, scrollbar */
+.header-actions .icon-button[aria-pressed=true] {color:var(--accent);background:var(--accent-soft);}
+.ticker-mode .header {height:auto;padding-top:6px;padding-bottom:6px;}
+.ticker {flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:6px;padding:6px 12px 10px;}
+.ticker-card {display:grid;grid-template-columns:22px minmax(0,1fr) auto minmax(0,1fr) 22px;align-items:center;gap:8px;width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--surface-soft);color:var(--text);text-align:left;}
+.ticker-card:hover {border-color:var(--accent-border);}
+.ticker-card .badge {width:22px;height:22px;font-size:7px;}
+.ticker-team {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:650;}
+.ticker-team.home {text-align:left;}
+.ticker-team.away {text-align:right;}
+.ticker-centre {display:flex;flex-direction:column;align-items:center;min-width:0;}
+.ticker-score {font-size:18px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.ticker-centre.is-live .ticker-score {color:var(--accent);}
+.ticker-meta {display:flex;align-items:center;gap:4px;font-size:9px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap;}
+.ticker-empty {text-align:center;color:var(--muted);font-size:12px;}
+.ticker-card-empty {display:block;text-align:center;font-size:12px;font-weight:650;}
+/* Scrollbars: WebView2 ignores ::-webkit-scrollbar once scrollbar-width/color are set, so only the webkit rules are used here. */
+.match-list::-webkit-scrollbar,.settings-body::-webkit-scrollbar,.detail-body::-webkit-scrollbar {width:5px;height:5px;}
+.match-list::-webkit-scrollbar-track,.settings-body::-webkit-scrollbar-track,.detail-body::-webkit-scrollbar-track {background:transparent;}
+.match-list::-webkit-scrollbar-thumb,.settings-body::-webkit-scrollbar-thumb,.detail-body::-webkit-scrollbar-thumb {background:rgba(255,255,255,.14);border-radius:999px;}
+.match-list::-webkit-scrollbar-thumb:hover,.settings-body::-webkit-scrollbar-thumb:hover,.detail-body::-webkit-scrollbar-thumb:hover {background:rgba(255,255,255,.26);}
+.match-list::-webkit-scrollbar-button,.settings-body::-webkit-scrollbar-button,.detail-body::-webkit-scrollbar-button {display:none;height:0;}
+.match-list::-webkit-scrollbar-corner,.settings-body::-webkit-scrollbar-corner,.detail-body::-webkit-scrollbar-corner {background:transparent;}
+.shell.theme-light .match-list::-webkit-scrollbar-thumb,.shell.theme-light .settings-body::-webkit-scrollbar-thumb,.shell.theme-light .detail-body::-webkit-scrollbar-thumb {background:rgba(0,0,0,.18);}
+.shell.theme-light .match-list::-webkit-scrollbar-thumb:hover,.shell.theme-light .settings-body::-webkit-scrollbar-thumb:hover,.shell.theme-light .detail-body::-webkit-scrollbar-thumb:hover {background:rgba(0,0,0,.3);}
+@supports not selector(::-webkit-scrollbar) {
+  .match-list,.settings-body,.detail-body {scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.14) transparent;}
+  .shell.theme-light .match-list,.shell.theme-light .settings-body,.shell.theme-light .detail-body {scrollbar-color:rgba(0,0,0,.18) transparent;}
+}
+
+/* @slot:T3 tabs, refresh, alert bell */
+.match-centre > .centre-tabs.scoped-tabs button {flex:0 0 auto;padding-left:12px;padding-right:12px;}
+.match-centre > .centre-tabs.scoped-tabs {gap:4px;}
+.centre-tabs button.tab-upcoming {opacity:.4;cursor:not-allowed;}
+.centre-tabs button.tab-upcoming:hover {color:var(--muted);}
+.overview-freshness {display:flex;align-items:center;justify-content:center;gap:4px;}
+.refresh-details {width:22px;height:22px;border-radius:6px;}
+.refresh-details:hover:not(:disabled) {color:var(--accent);}
+.alert-trigger[data-alert-state=on] {background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent-border);}
+.alert-trigger[data-alert-state=muted] {opacity:.7;}
+
+/* @slot:T4 header countdown, standings */
+.detail-date .countdown {color:var(--text);font-weight:600;font-variant-numeric:tabular-nums;}
+.tz-badge {display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;border:1px solid var(--border);color:var(--muted);font-size:9px;font-weight:650;letter-spacing:.06em;vertical-align:1px;}
+.table-pill {margin-top:-2px;padding:2px 8px;border-radius:999px;background:var(--surface);border:1px solid var(--border);color:var(--muted);font-size:10px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;}
+
+/* @slot:T5 form, leaders, predictor */
+.form-pill {position:relative;}
+.form-tip {position:absolute;bottom:calc(100% + 6px);right:0;z-index:20;white-space:nowrap;padding:5px 8px;border-radius:6px;background:var(--surface-solid);border:1px solid var(--border-strong);box-shadow:0 6px 18px #0006;color:var(--text);font-size:10px;font-weight:550;opacity:0;pointer-events:none;transform:translateY(2px);transition:opacity .12s,transform .12s;}
+.form-pill:hover .form-tip,.form-pill:focus-visible .form-tip {opacity:1;transform:none;}
+.form-tip em {margin-left:6px;font-style:normal;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.06em;}
+.leader-row:has(.leader-bar) {row-gap:6px;}
+.leader-bar {grid-column:1/-1;grid-row:2;display:flex;gap:2px;height:3px;margin-top:2px;}
+.leader-bar i {display:block;min-width:2px;flex-basis:0;border-radius:2px;background:var(--border-strong);}
+.leader-bar i.lead {background:var(--accent);}
+.predictor-labels {display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;font-size:11px;}
+.predictor-labels > span {display:flex;align-items:center;gap:6px;min-width:0;}
+.predictor-labels .badge {width:16px;height:16px;flex:none;}
+.predictor-home {justify-content:flex-start;}
+.predictor-draw {justify-content:center;color:var(--muted);}
+.predictor-away {justify-content:flex-end;}
+.predictor-labels b {font-weight:600;}
+.predictor-labels strong {font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text);}
+.predictor-home strong {color:var(--accent);}
+.predictor-draw strong {color:var(--muted);}
+.predictor-bar {display:flex;gap:2px;height:6px;border-radius:999px;overflow:hidden;margin-top:8px;}
+.predictor-bar i {display:block;flex-basis:0;}
+.predictor-bar .home {background:var(--accent);}
+.predictor-bar .draw {background:var(--border-strong);}
+.predictor-bar .away {background:#9fb4c8;}
+.shell.theme-light .predictor-bar .away {background:#5f7a94;}
+
+/* @slot:T6 match information */
+.match-information dt {flex:none;white-space:nowrap;}
+.match-information dd {flex:1 1 auto;}
+.match-information dd strong {max-width:100%;}
+.match-information dd small {overflow-wrap:anywhere;}

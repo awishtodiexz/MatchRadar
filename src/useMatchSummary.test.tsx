@@ -50,6 +50,38 @@ it('fetches on full-time transition and retries until the provider confirms fina
  await act(async()=>vi.advanceTimersByTimeAsync(60000));expect(bridge.invoke).toHaveBeenCalledTimes(3);
  await act(async()=>vi.advanceTimersByTimeAsync(180000));expect(bridge.invoke).toHaveBeenCalledTimes(3);unmount();
 });
+it('forces a cache-bypassing refresh and keeps the spinner up for at least 600ms',async()=>{
+ bridge.invoke.mockResolvedValueOnce(detail('1')).mockResolvedValueOnce({...detail('1'),updatedAt:'2026-10-29T13:00:00Z'});
+ const {result}=renderHook(()=>useMatchSummary('1',false));await waitFor(()=>expect(result.current.data?.matchId).toBe('1'));
+ const started=Date.now();act(()=>result.current.refresh());
+ expect(bridge.invoke).toHaveBeenLastCalledWith('get_match_details',{id:'1',force:true});expect(result.current.refreshing).toBe(true);
+ await waitFor(()=>expect(result.current.refreshing).toBe(false),{timeout:2000});
+ expect(Date.now()-started).toBeGreaterThanOrEqual(590);expect(result.current.data?.updatedAt).toBe('2026-10-29T13:00:00Z');
+});
+it('ignores a second refresh while one is already running',async()=>{
+ bridge.invoke.mockResolvedValue(detail('1'));const {result}=renderHook(()=>useMatchSummary('1',false));await waitFor(()=>expect(result.current.data?.matchId).toBe('1'));
+ bridge.invoke.mockClear();act(()=>{result.current.refresh();result.current.refresh();});
+ expect(bridge.invoke.mock.calls.filter(call=>call[1]?.force)).toHaveLength(1);
+ await waitFor(()=>expect(result.current.refreshing).toBe(false),{timeout:2000});
+});
+it('keeps saved details and marks them stale when a manual refresh fails',async()=>{
+ bridge.invoke.mockResolvedValueOnce(detail('1')).mockRejectedValueOnce(new Error('offline'));
+ const {result}=renderHook(()=>useMatchSummary('1',false));await waitFor(()=>expect(result.current.data?.matchId).toBe('1'));
+ act(()=>result.current.refresh());
+ await waitFor(()=>expect(result.current.refreshing).toBe(false),{timeout:2000});
+ expect(result.current.data?.matchId).toBe('1');expect(result.current.data?.stale).toBe(true);expect(result.current.error).toMatch(/unavailable/);
+});
+it('drops a refresh result that lands after navigating to another match',async()=>{
+ let release!:(value:MatchSummary)=>void;
+ bridge.invoke.mockImplementation((_command:string,args:{id:string;force?:boolean})=>args.force?new Promise<MatchSummary>(resolve=>{release=resolve;}):Promise.resolve(detail(args.id)));
+ const {result,rerender}=renderHook(({id})=>useMatchSummary(id,false),{initialProps:{id:'1'}});
+ await waitFor(()=>expect(result.current.data?.matchId).toBe('1'));
+ act(()=>result.current.refresh());rerender({id:'2'});
+ await waitFor(()=>expect(result.current.data?.matchId).toBe('2'));
+ await act(async()=>release(detail('1')));
+ await waitFor(()=>expect(result.current.refreshing).toBe(false),{timeout:2000});
+ expect(result.current.data?.matchId).toBe('2');
+});
 it('continues final reconciliation after an IPC failure while retaining saved data',async()=>{
  vi.useFakeTimers();bridge.invoke.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({...detail('1'),matchState:'post'});
  const {result,unmount}=renderHook(()=>useMatchSummary('1',false,true));

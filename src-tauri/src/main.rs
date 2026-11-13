@@ -95,6 +95,7 @@ fn append_log(path: &Path, message: &str) {
 #[tauri::command]
 async fn get_match_details(
     id: String,
+    force: Option<bool>,
     app: tauri::AppHandle,
     cache: tauri::State<'_, details::Cache>,
 ) -> Result<details::Details, String> {
@@ -124,7 +125,9 @@ async fn get_match_details(
             },
         )
     };
-    let mut data = cache.get(league, &id, phase).await?;
+    let mut data = cache
+        .get(league, &id, phase, force.unwrap_or(false))
+        .await?;
     if !data.stale {
         let state = app.state::<State>();
         let mut snapshot = snapshot_lock(&state);

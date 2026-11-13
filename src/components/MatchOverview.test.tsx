@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
 import { MatchOverview } from './MatchOverview';
 import { mockSnapshot } from '../test-fixtures/fixtures';
@@ -54,7 +54,38 @@ it('shows the supplied match facts and omits missing fields',()=>{
  const {unmount}=show(base,{...data,referee:'Referee Name',venue:'Test Stadium',venueCity:'Test City',capacity:31876,attendance:31629});
  expect(screen.getByText('Referee Name')).toBeTruthy();expect(screen.getByText('Test Stadium')).toBeTruthy();expect(screen.getByText('Test City · Capacity 31,876')).toBeTruthy();
  expect(screen.getByText('31,629')).toBeTruthy();unmount();
- show(base,data);expect(screen.queryByText('Not provided')).toBeNull();expect(screen.getByText(/have not been announced/)).toBeTruthy();
+ show({...base,competition:''},data);expect(screen.queryByText('Not provided')).toBeNull();expect(screen.getByText(/have not been announced/)).toBeTruthy();
+});
+
+it('lists competition, broadcast, referee, weather and attendance rows in order when fully supplied',()=>{
+ show({...base,competition:'Premier League'},{...data,seasonName:'2026-27 English Premier League',matchweek:12,broadcasts:['Sky Sports','TNT Sports'],referee:'Referee Name',venue:'Test Stadium',venueCity:'Test City',capacity:31876,attendance:31629,weather:{temperatureF:54,condition:'Partly Cloudy'}});
+ const info=screen.getByRole('region',{name:'Match information'});
+ expect([...info.querySelectorAll('dt')].map(dt=>dt.textContent)).toEqual(['Competition','Stadium','Broadcast','Referee','Kick-off weather','Attendance']);
+ expect(within(info).getByText('Premier League')).toBeTruthy();expect(within(info).getByText('Matchweek 12')).toBeTruthy();
+ expect(within(info).getByText('Sky Sports · TNT Sports')).toBeTruthy();expect(within(info).getByText('Referee Name')).toBeTruthy();
+ expect(within(info).getByText('12°C')).toBeTruthy();expect(within(info).getByText('Partly Cloudy')).toBeTruthy();
+ expect(within(info).getByText('Test Stadium')).toBeTruthy();expect(within(info).getByText('31,629')).toBeTruthy();
+});
+
+it('collapses long broadcast lists to three names with a count and the full list in title',()=>{
+ show({...base,competition:'Premier League'},{...data,broadcasts:['Sky Sports','TNT Sports','Peacock','ESPN+']});
+ const row=screen.getByText('Sky Sports · TNT Sports · Peacock').closest('dd');
+ expect(row?.getAttribute('title')).toBe('Sky Sports · TNT Sports · Peacock · ESPN+');
+ expect(screen.getByText('+1 more')).toBeTruthy();
+});
+
+it('shows only competition and stadium when only the venue is supplied, with no placeholder text',()=>{
+ const {unmount}=show({...base,competition:'Premier League'},{...data,venue:'Test Stadium'});
+ const info=screen.getByRole('region',{name:'Match information'});
+ expect([...info.querySelectorAll('dt')].map(dt=>dt.textContent)).toEqual(['Competition','Stadium']);
+ expect(screen.queryByText('Broadcast')).toBeNull();expect(screen.queryByText('Referee')).toBeNull();expect(screen.queryByText('Kick-off weather')).toBeNull();
+ expect(info.textContent).not.toMatch(/undefined|NaN|null|°F/);
+ unmount();
+});
+
+it('falls back to the season years when the matchweek is absent',()=>{
+ show({...base,competition:'Premier League'},{...data,seasonName:'2026-27 English Premier League',matchweek:null});
+ expect(screen.getByText('Season 2026-27')).toBeTruthy();
 });
 
 it('surfaces triple-hyphen VAR reviews without treating them as goals',()=>{

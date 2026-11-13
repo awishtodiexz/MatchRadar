@@ -3,9 +3,12 @@ import { cleanup,render,screen } from '@testing-library/react';
 import { afterEach,expect,it,vi } from 'vitest';
 import { MatchDetails } from './MatchDetails';
 import { defaults,mockMatches } from '../test-fixtures/fixtures';
-import { timeLabel } from '../presentation';
-vi.mock('../useMatchSummary',()=>({useMatchSummary:()=>({data:null,loading:false,error:null,retry:vi.fn()})}));
-afterEach(cleanup);
+import { dateLabel,timeLabel } from '../presentation';
+const summary = vi.hoisted(()=>({data:null as unknown}));
+vi.mock('../useMatchSummary',()=>({useMatchSummary:()=>({data:summary.data,loading:false,error:null,retry:vi.fn()})}));
+afterEach(()=>{cleanup();summary.data=null;});
+
+const summaryWith = (matchId:string,standings?:unknown) => ({matchId,updatedAt:new Date().toISOString(),stale:false,error:null,venue:null,events:[],statistics:[],players:[],...(standings?{standings}:{})});
 
 it('shows kick-off time and an explicit note for a postponed match',()=>{
  const match=mockMatches[5];
@@ -40,4 +43,43 @@ it('shows knockout leg and aggregate context when the provider supplies it',()=>
 it('omits knockout context for league matches',()=>{
  render(<MatchDetails match={mockMatches[4]} settings={defaults} back={()=>{}}/>);
  expect(screen.queryByText(/Aggregate/)).toBeNull();
+});
+
+it('shows a countdown in place of a date that is already in the status pill',()=>{
+ // Eight days out, so relativeDay returns the calendar date rather than "Today"/"Tomorrow".
+ const kickoff=new Date(Date.now()+(8*24+4)*3600_000+30*60_000).toISOString();
+ const dateText=dateLabel(kickoff);
+ render(<MatchDetails match={{...mockMatches[2],kickoff}} settings={defaults} back={()=>{}}/>);
+ expect(document.querySelector('.detail-date .countdown')?.textContent).toMatch(/^Starts in \d+d \d+h$/);
+ expect(document.querySelector('.detail-date .tz-badge')?.textContent).toBeTruthy();
+ expect(document.querySelector('.detail-date')?.textContent).not.toContain(dateText);
+ const heroText=document.querySelector('.detail-hero')?.textContent??'';
+ expect(heroText.split(dateText).length-1).toBe(1);
+});
+
+it('shows league position and points under each club when the summary has standings',()=>{
+ const match=mockMatches[2];
+ summary.data=summaryWith(match.id,[
+  {teamId:match.home.id,rank:1,points:27,played:10},
+  {teamId:match.away.id,rank:12,points:14,played:10},
+ ]);
+ render(<MatchDetails match={match} settings={defaults} back={()=>{}}/>);
+ const pills=[...document.querySelectorAll('.table-pill')].map(el=>el.textContent);
+ expect(pills).toEqual(['1st · 27 pts','12th · 14 pts']);
+ const homePill=screen.getByText('1st · 27 pts');
+ expect(homePill.getAttribute('title')).toBe('1st in the table · 27 points from 10 matches');
+ expect(homePill.parentElement?.querySelector('b')?.textContent).toBe(match.home.name);
+ expect(screen.getByText('12th · 14 pts').parentElement?.querySelector('b')?.textContent).toBe(match.away.name);
+});
+
+it('renders no standings pill when the summary has no standings or only invalid rows',()=>{
+ const match=mockMatches[2];
+ summary.data=summaryWith(match.id);
+ const {unmount}=render(<MatchDetails match={match} settings={defaults} back={()=>{}}/>);
+ expect(document.querySelectorAll('.table-pill')).toHaveLength(0);
+ unmount();
+ summary.data=summaryWith(match.id,[{teamId:match.home.id,rank:Number.NaN,points:27},{teamId:match.away.id,rank:3,points:Number.NaN}]);
+ render(<MatchDetails match={match} settings={defaults} back={()=>{}}/>);
+ expect(document.querySelectorAll('.table-pill')).toHaveLength(0);
+ expect(document.body.textContent).not.toMatch(/NaN|undefined|null/);
 });
