@@ -37,6 +37,17 @@ if ($Background) {
     exit 0
 }
 
+# Start-Process (ShellExecute) never returns when called from the hidden worker,
+# so the app never reopened and the worker kept the build lock forever. Start
+# the exe directly instead.
+function Start-App {
+    if (-not (Test-Path $exe)) { return }
+    $info = [System.Diagnostics.ProcessStartInfo]::new($exe)
+    $info.UseShellExecute = $false
+    $info.WorkingDirectory = Split-Path -Parent $exe
+    [void][System.Diagnostics.Process]::Start($info)
+}
+
 function Write-Log([string]$Message) {
     "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message" | Add-Content -Path $log
 }
@@ -102,12 +113,12 @@ try {
             Write-Log "Build FAILED. See $buildLog"
         }
         # Reopen the app either way: on failure the previous exe is still there.
-        if (Test-Path $exe) { Start-Process -FilePath $exe }
+        Start-App
     } while (Test-Path $pendingFile)
 }
 catch {
     Write-Log "Build FAILED: $($_.Exception.Message). See $(Join-Path $stateDir 'last-build-output.log')"
-    if (Test-Path $exe) { Start-Process -FilePath $exe }
+    Start-App
 }
 finally {
     Remove-Item $lockFile -ErrorAction SilentlyContinue
