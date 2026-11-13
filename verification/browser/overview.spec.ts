@@ -21,7 +21,7 @@ for(const width of [320,390,580]) test(`Everton overview and numbers ${width}`,a
  page.on('request',request=>{if(/headshots|thesportsdb/i.test(request.url()))imageRequests.push(request.url());});
  await page.route('https://**/*',route=>route.abort());
  await installBridge(page,{snapshot:{...mockSnapshot,matches:[match]},summary});await page.goto('/');
- await page.getByRole('button',{name:'Match details: Everton versus Coventry City'}).click();
+ await page.getByRole('button',{name:/Match details:.*Everton.*Coventry City/}).click();
  await expect(page.locator('.overview-intro')).toHaveCount(0);
  await expect(page.locator('.match-events .event')).toHaveCount(16);
  await expect(page.locator('.match-events .summary-icon[aria-label="Substitution"]')).toHaveCount(10);
@@ -52,7 +52,7 @@ for(const [width,theme] of [[320,'light'],[390,'dark']] as const) test(`Overview
  };
  await page.setViewportSize({width,height:760});await page.route('https://**/*',route=>route.abort());
  await installBridge(page,{snapshot:{...mockSnapshot,settings:{...mockSnapshot.settings,theme},matches:[live]},summary:liveSummary});await page.goto('/');
- await page.getByRole('button',{name:'Match details: Manchester United versus Aston Villa'}).click();
+ await page.getByRole('button',{name:/Match details:.*Manchester United.*Aston Villa/}).click();
  await expect(page.locator('.overview-intro')).toHaveCount(0);
  await expect(page.getByText('Nicolas Jackson',{exact:true})).toBeVisible();
  await expect(page.getByLabel('Match snapshot')).toHaveCount(0);
@@ -61,13 +61,14 @@ for(const [width,theme] of [[320,'light'],[390,'dark']] as const) test(`Overview
  await page.getByRole('tab',{name:'Stats',exact:true}).click();
  await expect(page.getByRole('tab',{name:'Stats',exact:true})).toHaveAttribute('aria-selected','true');
  await installBridge(page,{snapshot:{...mockSnapshot,settings:{...mockSnapshot.settings,theme},matches:[{...live,status:'scheduled',homeScore:null,awayScore:null}]},summary:{...liveSummary,scorers:[],statistics:[],form:{'360':[{opponent:'Aston Villa',opponentId:'362',result:'W',score:'2-0',atHome:true}]}}});await page.reload();
- await page.getByRole('button',{name:'Match details: Manchester United versus Aston Villa'}).click();
+ await page.getByRole('button',{name:/Match details:.*Manchester United.*Aston Villa/}).click();
  await expect(page.getByRole('heading',{name:'Match information'})).toBeVisible();
  await expect(page.getByLabel('Win against Aston Villa, 2–0')).toBeVisible();
- await expect(page.getByRole('tab',{name:'Stats',exact:true})).toHaveAttribute('aria-disabled','true');
+ await page.getByRole('tab',{name:'Stats',exact:true}).click();
+ await expect(page.getByRole('tabpanel',{name:'Stats'})).toBeVisible();
  await page.screenshot({path:info.outputPath('prematch-overview.png')});
  await installBridge(page,{snapshot:{...mockSnapshot,settings:{...mockSnapshot.settings,theme},matches:[{...live,scoreStale:true}]},details:'error'});await page.reload();
- await page.getByRole('button',{name:'Match details: Manchester United versus Aston Villa'}).click();
+ await page.getByRole('button',{name:/Match details:.*Manchester United.*Aston Villa/}).click();
  await expect(page.locator('.detail-status')).toContainText('Saved');
  await expect(page.getByRole('button',{name:'Retry details'})).toBeVisible();
  expect(await page.locator('.detail-body').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);

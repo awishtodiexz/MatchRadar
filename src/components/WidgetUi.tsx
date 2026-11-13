@@ -1,12 +1,24 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { crestCandidates, competitionLogoCandidates } from '../teams';
 import { useApp } from '../store';
 import type { Competition, Team } from '../types';
 
+const subscribeTheme = (notify:()=>void) => {
+  const query=window.matchMedia?.('(prefers-color-scheme: light)');
+  query?.addEventListener('change',notify);
+  return ()=>query?.removeEventListener('change',notify);
+};
+const systemTheme = (): 'light'|'dark' => window.matchMedia?.('(prefers-color-scheme: light)').matches?'light':'dark';
+function useCrestTheme(): 'light'|'dark' {
+  const preference=useApp(state=>state.snapshot?.settings.theme ?? 'dark');
+  const system=useSyncExternalStore(subscribeTheme,systemTheme,systemTheme);
+  return preference==='system'?system:preference;
+}
+
 export function Badge({team}: {team: Team}) {
-  const theme = useApp(state => state.snapshot?.settings.theme ?? 'dark');
+  const theme = useCrestTheme();
   const candidates = useMemo(() => crestCandidates(team, theme), [team.id, team.logo, theme]);
   const [index, setIndex] = useState(0);
   useEffect(() => setIndex(0), [team.id, team.logo, theme]);
@@ -27,7 +39,7 @@ function ChampionsGlyph() {
 // Official competition badges from the same ESPN CDN as club crests. The
 // inline glyph stays as the offline fallback.
 function CompetitionArt({league}: {league: Competition}) {
-  const theme = useApp(state => state.snapshot?.settings.theme ?? 'dark');
+  const theme = useCrestTheme();
   const candidates = useMemo(() => competitionLogoCandidates(league, theme), [league, theme]);
   const [index, setIndex] = useState(0);
   useEffect(() => setIndex(0), [league, theme]);

@@ -2,7 +2,7 @@ import { useId, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import type { Match } from '../types';
 import { isLive } from '../fixtures';
-import { relativeAge } from '../presentation';
+import { dateLabel, relativeAge, timeLabel } from '../presentation';
 import { useMatchSummary } from '../useMatchSummary';
 import { MatchStats } from './MatchStats';
 import { MatchLineups } from './MatchLineups';
@@ -25,7 +25,7 @@ export function MatchCentreView({match,summary}:{match:Match;summary:MatchSummar
   const [selected,setSelected]=useState('Overview');
   const [eventType,setEventType]=useState('all');
   const [newestFirst,setNewestFirst]=useState(true);
-  const tabs=['Overview',...(data?.statistics.length?['Stats']:[]),...(data?.players.length?['Lineups']:[]),...(data?.events.length?['Commentary']:[])];
+  const tabs=['Overview','Stats','Lineups','Commentary'];
   const tab=tabs.includes(selected)?selected:'Overview';
   const sectionId=useId();
   const events=data?.events??[];
@@ -40,7 +40,7 @@ export function MatchCentreView({match,summary}:{match:Match;summary:MatchSummar
     <div className="centre-tabs scoped-tabs" role="tablist" aria-label="Match centre sections">{tabs.map((name,index)=><button key={name} role="tab" id={sectionId+'-'+name} aria-controls={sectionId+'-panel'} aria-selected={tab===name} tabIndex={tab===name?0:-1} onClick={()=>select(name)} onKeyDown={event=>{
       const next=event.key==='ArrowRight'?(index+1)%tabs.length:event.key==='ArrowLeft'?(index+tabs.length-1)%tabs.length:event.key==='Home'?0:event.key==='End'?tabs.length-1:undefined;
       if(next===undefined)return;event.preventDefault();select(tabs[next]);document.getElementById(sectionId+'-'+tabs[next])?.focus();
-    }}>{name}</button>)}{match.status==='scheduled'&&['Lineups','Stats'].filter(name=>!tabs.includes(name)).map(name=><button key={'upcoming-'+name} type="button" role="tab" aria-disabled="true" aria-selected={false} tabIndex={-1} className="tab-upcoming" title="Available closer to kick-off">{name}</button>)}</div>
+    }}>{name}</button>)}</div>
     <div className="centre-panel" role="tabpanel" id={sectionId+'-panel'} aria-labelledby={sectionId+'-'+tab} tabIndex={0}>
     {loading&&!data&&<div className="skeletons" role="status" aria-label="Loading match details"><div/></div>}
     {error&&<p role="status">{error} <button className="text-button" onClick={retry}>Retry details</button></p>}
@@ -48,9 +48,9 @@ export function MatchCentreView({match,summary}:{match:Match;summary:MatchSummar
     {tab==='Overview'&&(!loading||data)&&<>
       <MatchOverview match={match} data={data}/>
       <MatchPreview match={match} data={data}/>
-      {data&&<div className="overview-freshness"><span title={Number.isNaN(Date.parse(data.updatedAt))?undefined:new Date(data.updatedAt).toLocaleString([],{dateStyle:'medium',timeStyle:'short'})}>{data.stale?'Saved details · updated':'Match details updated'} {relativeAge(data.updatedAt)}</span><button type="button" className="icon-button refresh-details" aria-label="Refresh match details" title="Refresh match details" onClick={()=>void summary.refresh()} disabled={summary.refreshing} aria-busy={summary.refreshing}><RefreshCw size={12} className={summary.refreshing?'spin':''}/></button></div>}
+      {data&&<div className="overview-freshness"><span title={Number.isNaN(Date.parse(data.updatedAt))?undefined:`${dateLabel(data.updatedAt)} ${timeLabel(data.updatedAt)}`}>{data.stale?'Saved details · updated':'Match details updated'} {relativeAge(data.updatedAt)}</span><button type="button" className="icon-button refresh-details" aria-label="Refresh match details" title="Refresh match details" onClick={()=>void summary.refresh()} disabled={summary.refreshing} aria-busy={summary.refreshing}><RefreshCw size={12} className={summary.refreshing?'spin':''}/></button></div>}
     </>}
-    {tab==='Commentary'&&<>
+    {tab==='Commentary'&&(!loading||data)&&<>
       <div className="timeline-toolbar">
         <span>{newestFirst?'Latest first':'Oldest first'} · {filtered?`${visibleEvents.length} of ${events.length} events`:`${events.length} ${events.length===1?'event':'events'}`}</span>
       </div>
@@ -59,6 +59,7 @@ export function MatchCentreView({match,summary}:{match:Match;summary:MatchSummar
     </>}
     {tab==='Stats'&&data&&<>{data.statisticsNote&&<p className="field-note" role="status">{data.statisticsNote}</p>}<MatchStats match={match} statistics={data.statistics}/></>}
     {tab==='Lineups'&&data&&<MatchLineups match={match} players={data.players} substitutions={data.substitutions} formations={data.formations} coaches={data.coaches} events={data.events}/>}
+    {(tab==='Stats'||tab==='Lineups')&&!data&&!loading&&<p className="field-note">{tab} are not available for this match.</p>}
     </div>
   </section>;
 }

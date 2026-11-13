@@ -50,11 +50,11 @@ describe('widget controls', () => {
  it('labels forfeit and abandoned cards by their real outcome', () => {
   const {unmount}=render(<MatchCard match={{...mockSnapshot.matches[0],status:'fulltime',detail:'Forfeit',homeScore:3,awayScore:0}} settings={mockSnapshot.settings} onOpen={vi.fn()}/>);
   expect(document.querySelector('.fixture-time')?.textContent).toBe('FF');
-  expect(document.querySelector('.match-card .sr-only')?.textContent).toContain('3 to 0, Forfeit');
+  expect(screen.getByRole('button', {name:/Match details:/, description:/3 to 0, Forfeit/})).toBeTruthy();
   unmount();
   render(<MatchCard match={{...mockSnapshot.matches[0],status:'cancelled',detail:'Abandoned',homeScore:null,awayScore:null}} settings={mockSnapshot.settings} onOpen={vi.fn()}/>);
   expect(document.querySelector('.fixture-time')?.textContent).toBe('Abandoned');
-  expect(screen.getByRole('button',{name:/^Match abandoned:/})).toBeTruthy();
+  expect(screen.queryByRole('button',{name:/^Match alerts:/})).toBeNull();
  });
 
  it('shows partial fixture success and saved live scores without claiming they were freshly confirmed', async () => {
@@ -70,7 +70,7 @@ describe('widget controls', () => {
   expect(card?.querySelector('.fixture-time')?.textContent).toContain('Saved');
   expect(screen.getByRole('heading',{name:/SAVED LIVE SCORES/})).toBeTruthy();
   expect(screen.getByRole('heading',{name:/SAVED LIVE SCORES/}).classList.contains('live-group')).toBe(false);
-  expect(screen.getByText('SAVED LIVE',{exact:true})).toBeTruthy();
+  expect(screen.getByLabelText(/Premier League: 4 in-progress matches, including saved scores/).textContent).toContain('SAVED');
   expect(document.querySelector('footer')?.textContent).toContain('PARTIAL · SCORES SAVED');
   expect(bridge.invoke.mock.calls.every(([command])=>command==='get_snapshot'||command==='get_notification_target')).toBe(true);
  });
@@ -82,35 +82,38 @@ describe('widget controls', () => {
    return Promise.resolve(command === 'get_snapshot' ? persisted : args?.settings);
   });
   render(<App/>);
-  fireEvent.click(screen.getByRole('button', {name:'Enable all alerts (using team settings): Arsenal versus Chelsea'}));
+  fireEvent.click(screen.getByRole('button', {name:'Match alerts: Arsenal versus Chelsea, Team default'}));
+  fireEvent.click(screen.getByRole('button', {name:'On'}));
   await waitFor(() => expect(persisted.settings.matchAlerts).toHaveProperty('demo-1'));
   await useApp.getState().load();
-  expect(screen.getByRole('button', {name:'Mute match alerts (all alerts on): Arsenal versus Chelsea'}).getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByRole('button', {name:'Match alerts: Arsenal versus Chelsea, On'})).toBeTruthy();
   expect(bridge.invoke.mock.calls.some(([command]) => command === 'refresh')).toBe(false);
  });
  it('uses a separate match bell, persists its override, and can mute team alerts', async () => {
   render(<App/>);
-  const bell = screen.getByRole('button', {name:'Enable all alerts (using team settings): Arsenal versus Chelsea'});
+  const bell = screen.getByRole('button', {name:'Match alerts: Arsenal versus Chelsea, Team default'});
   expect(bell.closest('button button')).toBeNull();
   fireEvent.click(bell);
+  expect(useApp.getState().snapshot?.settings.matchAlerts['demo-1']).toBeUndefined();
+  fireEvent.click(screen.getByRole('button', {name:'On'}));
   await waitFor(() => expect(useApp.getState().snapshot?.settings.matchAlerts['demo-1'].enabled).toBe(true));
   expect(screen.queryByText('Match details')).toBeNull();
-  const mute = screen.getByRole('button', {name:'Mute match alerts (all alerts on): Arsenal versus Chelsea'});
-  expect(mute.getAttribute('aria-pressed')).toBe('true');
-  fireEvent.click(mute);
+  expect(screen.getByRole('button', {name:'On'}).getAttribute('aria-pressed')).toBe('true');
+  fireEvent.click(screen.getByRole('button', {name:'Muted'}));
   await waitFor(() => expect(useApp.getState().snapshot?.settings.matchAlerts['demo-1'].enabled).toBe(false));
   await useApp.getState().load();
-  expect(screen.getByRole('button', {name:'Enable all alerts (match muted): Arsenal versus Chelsea'}).getAttribute('aria-pressed')).toBe('false');
+  expect(screen.getByRole('button', {name:'Match alerts: Arsenal versus Chelsea, Muted'})).toBeTruthy();
   expect(screen.getByRole('heading', {name:/LIVE NOW/})).toBeTruthy();
-  expect(screen.getByText(/next 14 days/)).toBeTruthy();
+  expect(screen.getByText(/Next 14 days/)).toBeTruthy();
   fireEvent.click(screen.getByRole('button', {name:'Settings'}));
   fireEvent.click(screen.getByText('Alerts', {exact:true}));
   fireEvent.click(screen.getByText('Reset match bells to team defaults'));
+  fireEvent.click(screen.getByRole('button', {name:'Confirm reset'}));
   await waitFor(() => expect(useApp.getState().snapshot?.settings.matchAlerts).toEqual({}));
  });
  it('hides to the tray instead of minimizing to the taskbar and leaves compact mode in Appearance', async () => {
   bridge.native = true; bridge.hide.mockResolvedValue(undefined); bridge.minimize.mockResolvedValue(undefined); bridge.invoke.mockImplementation((command: string) => command === 'get_snapshot' ? Promise.resolve(mockSnapshot) : Promise.resolve());
-  render(<App/>); fireEvent.click(screen.getByRole('button', {name:'Minimize widget'}));
+  render(<App/>); expect(screen.queryByRole('button', {name:'Minimize widget'})).toBeNull(); fireEvent.click(screen.getByRole('button', {name:'Hide widget'}));
   expect(bridge.hide).toHaveBeenCalledOnce(); expect(bridge.minimize).not.toHaveBeenCalled(); expect(useApp.getState().snapshot?.settings.compact).toBe(false);
   fireEvent.click(screen.getByRole('button', {name:'Settings'})); fireEvent.click(screen.getByText('Appearance'));
   expect(screen.getByLabelText(/Compact view/)).toBeTruthy();
@@ -126,12 +129,10 @@ describe('widget controls', () => {
   fireEvent.click(toggle);
   await waitFor(() => expect(useApp.getState().snapshot?.settings.startHidden).toBe(true));
  });
- it('synchronizes footer toggles with settings and preserves update time when appearance changes', async () => {
+ it('preserves update time when appearance changes', async () => {
   const updated = useApp.getState().snapshot?.updatedAt;
-  render(<App/>); fireEvent.click(screen.getByRole('button', {name:'Following only'}));
-  await waitFor(() => expect(screen.getByRole('button', {name:'Following only'}).getAttribute('aria-pressed')).toBe('true'));
-  fireEvent.click(screen.getByRole('button', {name:'Always on top'})); fireEvent.click(screen.getByRole('button', {name:'Settings'}));
-  expect((screen.getByRole('checkbox', {name:/Following only/}) as HTMLInputElement).checked).toBe(true);
+  render(<App/>); fireEvent.click(screen.getByRole('button', {name:'Always on top'})); fireEvent.click(screen.getByRole('button', {name:'Settings'}));
+  expect(screen.queryByRole('checkbox', {name:/Following only/})).toBeNull();
   fireEvent.click(screen.getByText('Appearance'));
   expect((screen.getByRole('checkbox', {name:/Always on top/}) as HTMLInputElement).checked).toBe(false);
   fireEvent.change(screen.getByLabelText(/Panel opacity/), {target:{value:'70'}});

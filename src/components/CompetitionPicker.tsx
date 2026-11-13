@@ -7,7 +7,7 @@ import type { CompetitionView } from '../types';
 const options: Array<{value: CompetitionView; label: string; short: string}> = [
   {value:'premierLeague', label:'Premier League', short:'England'},
   {value:'championsLeague', label:'Champions League', short:'Europe'},
-  {value:'both', label:'Both competitions', short:'All fixtures'}
+  {value:'both', label:'Both competitions', short:'Premier League + Champions League'}
 ];
 
 export function CompetitionPicker({value, onChange, disabled=false}: {
@@ -65,7 +65,7 @@ export function CompetitionPicker({value, onChange, disabled=false}: {
     }
   }}>
     <button ref={trigger} type="button" className="competition-trigger" disabled={disabled}
-      aria-haspopup="listbox" aria-expanded={open} aria-label={`Competition: ${current.label}. Change competition`}
+      aria-haspopup="listbox" aria-expanded={open}
       onClick={() => setOpen(next => !next)}
       onKeyDown={event => {
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -73,8 +73,10 @@ export function CompetitionPicker({value, onChange, disabled=false}: {
           setOpen(true);
         }
       }}>
+      <span className="sr-only">Competition: </span>
       <span aria-hidden="true"><CompetitionMark league={value}/></span>
-      <span className="competition-copy"><b><span className="competition-long">{current.label}</span><span className="competition-short">{current.value==='both'?'Both':current.label}</span></b><small aria-hidden="true">{current.short} · Match centre</small></span>
+      <span className="competition-copy"><b><span className="competition-long">{current.label}</span><span className="competition-short">{current.value==='both'?'Both':current.label}</span></b><small>{current.short}</small></span>
+      <span className="sr-only">Change competition</span>
       <ChevronDown size={14} aria-hidden="true"/>
     </button>
     {open && <div className="competition-menu" role="listbox" aria-label="Competition">

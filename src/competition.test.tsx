@@ -16,7 +16,7 @@ async function load(snapshot: Snapshot) {
   useApp.setState({ snapshot, loading: false, error: null });
   await useApp.getState().load();
 }
-const premierValue = (name: string) => screen.getByRole('button', { name: `Competition: ${name}. Change competition` });
+const premierValue = (name: string) => screen.getByRole('button', { name: new RegExp(`Competition: ${name}.*Change competition`) });
 
 beforeEach(async () => { await load(structuredClone(mockSnapshotWithUcl)); });
 afterEach(cleanup);
@@ -25,17 +25,17 @@ describe('competition selector', () => {
   it('defaults to the Premier League and hides Champions League fixtures', () => {
     render(<App />);
     expect(premierValue('Premier League')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Match details: Real Madrid versus Bayern Munich' })).toBeNull();
-    expect(screen.getByLabelText(/Premier League: 3 live matches/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Match details:.*Real Madrid.*Bayern Munich/ })).toBeNull();
+    expect(screen.getByLabelText(/Premier League: 4 live matches/)).toBeTruthy();
   });
 
   it('switches to Champions League and persists the choice optimistically', async () => {
     render(<App />);
     fireEvent.click(premierValue('Premier League'));
-    fireEvent.click(screen.getByRole('option', { name: /Champions League/ }));
+    fireEvent.click(screen.getByRole('option', { name: /^Champions League/ }));
     await waitFor(() => expect(premierValue('Champions League')).toBeTruthy());
-    expect(screen.getByRole('button', { name: 'Match details: Real Madrid versus Bayern Munich' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Match details: Arsenal versus Chelsea' })).toBeNull();
+    expect(screen.getByRole('button', { name: /Match details:.*Real Madrid.*Bayern Munich/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Match details:.*Arsenal.*Chelsea/ })).toBeNull();
     expect(useApp.getState().snapshot?.settings.competitionView).toBe('championsLeague');
     expect(screen.getByLabelText(/Champions League: checking live status/)).toBeTruthy();
     expect(screen.getByText('CHECKING LIVE',{exact:true})).toBeTruthy();
@@ -47,7 +47,7 @@ describe('competition selector', () => {
     await load({...base,leagueStatus:{'uefa.champions':{scoreError:'HTTP 503'}}});
     render(<App />);
     fireEvent.click(premierValue('Premier League'));
-    fireEvent.click(screen.getByRole('option', { name: /Champions League/ }));
+    fireEvent.click(screen.getByRole('option', { name: /^Champions League/ }));
     expect(screen.getByLabelText(/Champions League: live status unavailable/)).toBeTruthy();
     expect(screen.queryByText('CHECKING LIVE')).toBeNull();
     expect(screen.getByText(/UPDATE FAILED/)).toBeTruthy();
@@ -58,7 +58,7 @@ describe('competition selector', () => {
     await load({...base,leagueStatus:{'uefa.champions':{updatedAt:'2026-10-29T12:00:00Z',fixtureUpdatedAt:'2026-10-29T11:00:00Z'}}});
     render(<App />);
     fireEvent.click(premierValue('Premier League'));
-    fireEvent.click(screen.getByRole('option', { name: /Champions League/ }));
+    fireEvent.click(screen.getByRole('option', { name: /^Champions League/ }));
     expect(screen.getByLabelText(/Champions League: no confirmed live matches/)).toBeTruthy();
     expect(screen.getByText('NO LIVE MATCHES',{exact:true})).toBeTruthy();
     expect(screen.queryByText('CHECKING LIVE')).toBeNull();
@@ -70,18 +70,18 @@ describe('competition selector', () => {
     fireEvent.click(premierValue('Premier League'));
     fireEvent.click(screen.getByRole('option', { name: /Both competitions/ }));
     await waitFor(() => expect(premierValue('Both competitions')).toBeTruthy());
-    expect(screen.getByRole('button', { name: 'Match details: Real Madrid versus Bayern Munich' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Match details: Arsenal versus Chelsea' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Match details:.*Real Madrid.*Bayern Munich/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Match details:.*Arsenal.*Chelsea/ })).toBeTruthy();
     expect(screen.getAllByText('UCL').length).toBe(1);
     expect(screen.getAllByText('PL').length).toBeGreaterThan(0);
     const cards = [...document.querySelectorAll<HTMLElement>('[data-match-id]')].map(card => card.dataset.matchId);
     expect(cards).toContain(uclMatch.id);
     // The visual PL/UCL tag is hidden from name computation, so the card
     // description carries the competition and the article gets a matching name.
-    const uclCard = screen.getByRole('button', { name: 'Match details: Real Madrid versus Bayern Munich' });
+    const uclCard = screen.getByRole('button', { name: /Match details:.*Real Madrid.*Bayern Munich/ });
     expect(document.getElementById(uclCard.getAttribute('aria-describedby') ?? '')?.textContent).toContain('Champions League');
     expect(uclCard.closest('article')?.getAttribute('aria-labelledby')).toBe(uclCard.id);
-    const plCard = screen.getByRole('button', { name: 'Match details: Arsenal versus Chelsea' });
+    const plCard = screen.getByRole('button', { name: /Match details:.*Arsenal.*Chelsea/ });
     expect(document.getElementById(plCard.getAttribute('aria-describedby') ?? '')?.textContent).toContain('Premier League');
     // Chronological/day ordering is covered deterministically in fixtures.test.ts.
   });
@@ -91,9 +91,9 @@ describe('competition selector', () => {
     const trigger = premierValue('Premier League');
     fireEvent.keyDown(trigger, { key: 'ArrowDown' });
     expect(screen.getByRole('listbox', { name: 'Competition' })).toBeTruthy();
-    fireEvent.keyDown(screen.getByRole('option', { name: /Champions League/ }), { key: 'Escape' });
+    fireEvent.keyDown(screen.getByRole('option', { name: /^Champions League/ }), { key: 'Escape' });
     expect(screen.queryByRole('listbox', { name: 'Competition' })).toBeNull();
-    expect(screen.getByRole('heading', { name: /Matchday/ })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Fixture views' })).toBeTruthy();
   });
 
   it('counts live matches only for the selected competition', async () => {
@@ -106,13 +106,13 @@ describe('competition selector', () => {
         : match);
     await load(snapshot);
     render(<App />);
-    expect(screen.getByLabelText(/Premier League: 1 live matches/)).toBeTruthy();
+    expect(screen.getByLabelText(/Premier League: 2 live matches/)).toBeTruthy();
     fireEvent.click(premierValue('Premier League'));
-    fireEvent.click(screen.getByRole('option', { name: /Champions League/ }));
+    fireEvent.click(screen.getByRole('option', { name: /^Champions League/ }));
     await waitFor(() => expect(screen.getByLabelText(/Champions League: 1 live matches/)).toBeTruthy());
     fireEvent.click(premierValue('Champions League'));
     fireEvent.click(screen.getByRole('option', { name: /Both competitions/ }));
-    await waitFor(() => expect(screen.getByLabelText(/Both competitions: 2 live matches/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText(/Both competitions: 3 live matches/)).toBeTruthy());
   });
 
   it('tolerates legacy snapshots without a competition view', async () => {
@@ -121,7 +121,7 @@ describe('competition selector', () => {
     await load(legacy);
     render(<App />);
     expect(premierValue('Premier League')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Match details: Arsenal versus Chelsea' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Match details:.*Arsenal.*Chelsea/ })).toBeTruthy();
   });
 });
 

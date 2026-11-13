@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { dateLabel, matchButtonId, timeLabel, timeParts } from './presentation';
+import { dateLabel, matchButtonId, resultLabel, timeLabel, timeParts } from './presentation';
+import { mockMatches } from './test-fixtures/fixtures';
 
 // Persisted state is validated structurally, not semantically: a valid JSON
 // snapshot can still carry a damaged timestamp after a partial disk write.
@@ -26,4 +27,11 @@ describe('time labels', () => {
     expect(timeParts('12:05\u202fam')).toEqual(['12:05', '\u202fam']);
     expect(timeParts('14:30')).toEqual(['14:30', '']);
   });
+});
+
+it('labels completed results by their outcome', () => {
+  const match = {...mockMatches[0], status:'fulltime' as const};
+  for (const [detail, expected] of [['FT', 'FT'], ['AET', 'AET'], ['Final - After Extra Time', 'AET'], ['FT-Pens', 'PEN'], ['Final - Penalties', 'PEN'], ['Forfeit', 'FF']]) {
+    expect(resultLabel({...match, detail})).toBe(expected);
+  }
 });

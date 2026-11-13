@@ -112,6 +112,12 @@ fn best_monitor(window: Bounds, monitors: &[Bounds]) -> Option<Bounds> {
     Some(best)
 }
 
+fn maximum_size(area: Bounds, scale: f64, frame_width: u32, frame_height: u32) -> (u32, u32) {
+    let width = ((600.0 * scale) as u32).min((area.width as u32).saturating_sub(frame_width));
+    let height = ((1100.0 * scale) as u32).min((area.height as u32).saturating_sub(frame_height));
+    (width.max(1), height.max(1))
+}
+
 fn monitor_bounds(rect: &PhysicalRect<i32, u32>) -> Bounds {
     Bounds::new(
         i64::from(rect.position.x),
@@ -154,6 +160,21 @@ pub(crate) fn ensure_visible(window: &WebviewWindow) -> Result<bool, String> {
         .ok()
         .flatten()
         .map(|monitor| monitor_bounds(monitor.work_area()));
+    if let Some(monitor) = window.current_monitor().ok().flatten() {
+        let inner = window
+            .inner_size()
+            .map_err(|e| format!("Read widget content size: {e}"))?;
+        let area = monitor_bounds(monitor.work_area());
+        let maximum = maximum_size(
+            area,
+            monitor.scale_factor(),
+            size.width.saturating_sub(inner.width),
+            size.height.saturating_sub(inner.height),
+        );
+        window
+            .set_max_size(Some(tauri::PhysicalSize::new(maximum.0, maximum.1)))
+            .map_err(|e| format!("Limit widget to display work area: {e}"))?;
+    }
     let Some((x, y)) = placement(current, &monitors, primary) else {
         return Ok(false);
     };
@@ -213,6 +234,19 @@ mod tests {
 
     fn primary() -> Bounds {
         rect(0, 0, 1920, 1040)
+    }
+
+    #[test]
+    fn maximum_dimensions_fit_the_work_area_and_frame() {
+        assert_eq!(maximum_size(primary(), 1.0, 16, 9), (600, 1031));
+        assert_eq!(
+            maximum_size(rect(0, 0, 1920, 1040), 1.5, 24, 14),
+            (900, 1026)
+        );
+        assert_eq!(
+            maximum_size(rect(0, 0, 3840, 2100), 2.0, 32, 18),
+            (1200, 2082)
+        );
     }
 
     #[test]

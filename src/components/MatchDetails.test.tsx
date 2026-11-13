@@ -8,6 +8,11 @@ const summary = vi.hoisted(()=>({data:null as unknown}));
 vi.mock('../useMatchSummary',()=>({useMatchSummary:()=>({data:summary.data,loading:false,error:null,retry:vi.fn()})}));
 afterEach(()=>{cleanup();summary.data=null;});
 
+it.each([['FT','FULL-TIME'],['AET','AFTER EXTRA TIME'],['PEN','AFTER PENALTIES'],['Forfeit','FORFEIT']])('identifies a completed %s result in Match Centre', (detail,label)=>{
+ render(<MatchDetails match={{...mockMatches[0],status:'fulltime',detail}} settings={defaults} back={()=>{}}/>);
+ expect(document.querySelector('.detail-status')?.textContent).toBe(label);
+});
+
 const summaryWith = (matchId:string,standings?:unknown) => ({matchId,updatedAt:new Date().toISOString(),stale:false,error:null,venue:null,events:[],statistics:[],players:[],...(standings?{standings}:{})});
 
 it('shows kick-off time and an explicit note for a postponed match',()=>{

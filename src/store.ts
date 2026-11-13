@@ -3,7 +3,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { Settings, Snapshot } from './types';
 
 type Patch = Partial<Settings>;
-type Store = { snapshot: Snapshot | null; loading: boolean; error: string | null; opacityPreview: number | null; setOpacityPreview: (value:number|null) => void; load: () => Promise<void>; refresh: () => Promise<void>; save: (patch: Patch) => Promise<void> };
+type Store = { snapshot: Snapshot | null; loading: boolean; error: string | null; opacityPreview: number | null; setOpacityPreview: (value:number|null) => void; load: () => Promise<void>; refresh: () => Promise<void>; save: (patch: Patch) => Promise<boolean> };
 const pending: Patch[] = [];
 let queue: Promise<void> = Promise.resolve();
 let readSequence = 0;
@@ -70,15 +70,17 @@ export const useApp = create<Store>((set, get) => ({
         ++settingsRevision;
         pending.shift();
         set({snapshot:projected()});
+        return true;
       } catch {
         pending.shift();
         set({snapshot:projected(), error:'Could not save settings. Please try again.'});
         // A transport/event error can happen after Rust persisted the write.
         // Reconcile locally without holding up later queued edits or polling ESPN.
         if (isTauri()) void get().load();
+        return false;
       }
     });
-    queue = task;
+    queue = task.then(()=>{});
     return task;
   }
 }));

@@ -139,7 +139,7 @@ export function MatchPreview({match,data}:{match:Match;data:MatchSummary|null}) 
         <i className="home" style={{flexGrow:shares[0],minWidth:shares[0]?2:0}}/><i className="draw" style={{flexGrow:shares[1],minWidth:shares[1]?2:0}}/><i className="away" style={{flexGrow:shares[2],minWidth:shares[2]?2:0}}/>
       </div>
     </OverviewCard>}
-    {!!formTeams.length&&<OverviewCard title="Form" note="Last five · newest on the right" label="Form">
+    {!!formTeams.length&&<OverviewCard title="Form" note="Last five · newest on the right · scores: team–opponent" label="Form">
       <div className="form-list">{formTeams.map(team=><FormRow key={team.id} team={team} games={data?.form?.[team.id]??[]}/>)}</div>
     </OverviewCard>}
     {!!categories.length&&<OverviewCard title="Team leaders" note={match.status==='scheduled'?'This season':'This match'} label="Team leaders">

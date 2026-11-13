@@ -275,6 +275,38 @@ fn normalize(event: &Value, league: Competition) -> Option<Match> {
         "Abandoned"
     } else if forfeit {
         FORFEIT_DETAIL
+    } else if mapped == "fulltime"
+        && [
+            field(kind, "shortDetail"),
+            field(kind, "detail"),
+            field(kind, "name"),
+        ]
+        .iter()
+        .any(|value| {
+            value
+                .split(|character: char| !character.is_ascii_alphanumeric())
+                .any(|word| {
+                    matches!(
+                        word.to_ascii_lowercase().as_str(),
+                        "pen" | "pens" | "penalty" | "penalties"
+                    )
+                })
+        })
+    {
+        "PEN"
+    } else if mapped == "fulltime"
+        && [
+            field(kind, "shortDetail"),
+            field(kind, "detail"),
+            field(kind, "name"),
+        ]
+        .iter()
+        .any(|value| {
+            let value = value.to_ascii_lowercase();
+            value.contains("aet") || value.contains("extra time") || value.contains("extra_time")
+        })
+    {
+        "AET"
     } else if mapped == "live" {
         let clock = field(status, "displayClock");
         if clock.is_empty() {
@@ -563,6 +595,20 @@ mod tests {
         assert_eq!(m.home.name, "Home");
         assert_eq!(m.status, "live");
         assert_eq!(m.home_score, Some(2));
+    }
+    #[test]
+    fn normalizes_final_outcomes_from_espn_details() {
+        for (short, detail, expected) in [
+            ("FT", "Full Time", "FT"),
+            ("FT", "After Extra Time", "AET"),
+            ("AET", "Full Time", "AET"),
+            ("FT", "Final - Penalties", "PEN"),
+            ("FT-Pens", "After Extra Time", "PEN"),
+        ] {
+            let event = serde_json::json!({"id":"1","date":"2026-08-22T14:00:00Z","status":{"type":{"state":"post","name":"STATUS_FULL_TIME","shortDetail":short,"detail":detail}},"competitions":[{"competitors":[{"homeAway":"home","team":{"id":"1","displayName":"Home"}},{"homeAway":"away","team":{"id":"2","displayName":"Away"}}]}]});
+            let result = normalize(&event, Competition::ChampionsLeague).unwrap();
+            assert_eq!(result.detail, expected);
+        }
     }
 }
 #[cfg(test)]

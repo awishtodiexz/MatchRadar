@@ -5,12 +5,22 @@ import App from './App';import { useApp } from './store';import { mockSnapshot }
 import type { MatchSummary } from './useMatchSummary';
 const bridge=vi.hoisted(()=>({invoke:vi.fn()}));vi.mock('@tauri-apps/api/core',()=>({isTauri:()=>true,invoke:bridge.invoke}));vi.mock('@tauri-apps/api/event',()=>({listen:vi.fn().mockResolvedValue(()=>{})}));
 afterEach(()=>{cleanup();vi.clearAllMocks();});
+it('orders result days and matches newest first',async()=>{
+ const base=mockSnapshot.matches[4];
+ const results=[{...base,id:'old',kickoff:'2026-10-20T12:00:00Z'}, {...base,id:'new',kickoff:'2026-10-22T16:00:00Z'}, {...base,id:'middle',kickoff:'2026-10-22T12:00:00Z'}];
+ const snapshot={...structuredClone(mockSnapshot),matches:[],settings:{...mockSnapshot.settings}};
+ bridge.invoke.mockImplementation(async(cmd:string)=>{if(cmd==='get_snapshot')return snapshot;if(cmd==='get_recent_results')return {matches:results,updatedAt:'2026-10-29T12:00:00Z',error:null};throw Error('Unexpected command '+cmd);});
+ useApp.setState({snapshot:null,loading:true,error:null});render(<App/>);
+ fireEvent.click(await screen.findByRole('button',{name:'Results'}));
+ await waitFor(()=>expect(document.querySelectorAll('[data-match-id]')).toHaveLength(3));
+ expect([...document.querySelectorAll<HTMLElement>('[data-match-id]')].map(card=>card.dataset.matchId)).toEqual(['new','middle','old']);
+});
 it('shows a result outside yesterday/today and fetches its summary only when opened',async()=>{
  const completed={...mockSnapshot.matches[4],id:'401879268',kickoff:'2026-10-20T12:00:00Z'};const snapshot={...structuredClone(mockSnapshot),matches:[],settings:{...mockSnapshot.settings}};
  bridge.invoke.mockImplementation(async(cmd:string,args?:{id:string})=>{if(cmd==='get_snapshot')return snapshot;if(cmd==='get_recent_results')return {matches:[completed],updatedAt:'2026-10-29T12:00:00Z',error:null};if(cmd==='get_match_details')return {matchId:args?.id,venue:null,updatedAt:'2026-10-29T12:00:00Z',stale:false,error:null,events:[],statistics:[],players:[]};throw Error('Unexpected command '+cmd);});
  useApp.setState({snapshot:null,loading:true,error:null});render(<App/>);await waitFor(()=>expect(screen.getByText('No fixtures in this window')).toBeTruthy());
  expect(bridge.invoke.mock.calls.some(c=>c[0]==='get_recent_results')).toBe(false);fireEvent.click(screen.getByRole('button',{name:'Results'}));
- const card=await screen.findByRole('button',{name:'Match details: Brighton & Hove Albion versus Everton'});expect(bridge.invoke.mock.calls.some(c=>c[0]==='get_match_details')).toBe(false);
+ const card=await screen.findByRole('button',{name:/Match details:.*Brighton & Hove Albion.*Everton/});expect(bridge.invoke.mock.calls.some(c=>c[0]==='get_match_details')).toBe(false);
  fireEvent.click(card);await waitFor(()=>expect(bridge.invoke).toHaveBeenCalledWith('get_match_details',{id:'401879268'}));expect(screen.getByRole('heading',{name:'Match details'})).toBeTruthy();
 });
 
@@ -36,7 +46,7 @@ it('shows a completed provider summary through Results, including events, statis
  });
  useApp.setState({snapshot:null,loading:true,error:null});render(<App/>);
  await screen.findByRole('button',{name:'Results'});fireEvent.click(screen.getByRole('button',{name:'Results'}));
- const card=await screen.findByRole('button',{name:'Match details: Arsenal versus Leeds United'});
+ const card=await screen.findByRole('button',{name:/Match details:.*Arsenal.*Leeds United/});
  expect(bridge.invoke.mock.calls.some(c=>c[0]==='get_match_details')).toBe(false);
  fireEvent.click(card);await screen.findByText('Emirates Stadium');
  fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));
@@ -62,7 +72,7 @@ it('uses a newer corrected result in both the result card and the opened match',
  });
  useApp.setState({snapshot:null,loading:true,error:null});render(<App/>);
  fireEvent.click(await screen.findByRole('button',{name:'Results'}));
- const card=await screen.findByRole('button',{name:'Match details: Brighton & Hove Albion versus Everton'});
+ const card=await screen.findByRole('button',{name:/Match details:.*Brighton & Hove Albion.*Everton/});
  await waitFor(()=>expect(card.querySelector('.scores')?.textContent).toBe('21'));
  fireEvent.click(card);await waitFor(()=>expect(document.querySelector('.detail-score>span')?.textContent).toBe('2 – 1'));
 });

@@ -10,11 +10,6 @@ const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 async function violations(page: Page) {
   const result = await new AxeBuilder({ page })
     .withTags(TAGS)
-    // Match cards deliberately use one descriptive name ("Match details: X versus Y")
-    // while the row also renders score, clock and status. Those facts are exposed as
-    // the accessible description, but axe treats the composite card text as a label
-    // and reports every scored card as a label-in-name mismatch.
-    .disableRules(['label-content-name-mismatch'])
     .analyze();
   return result.violations
     .filter(rule => rule.impact === 'serious' || rule.impact === 'critical')
@@ -26,13 +21,13 @@ test.beforeEach(async ({ page }) => {
   await page.route('https://**/*', route => route.abort());
   await installBridge(page);
   await page.goto('/');
-  await expect(page.getByRole('button', { name: 'Match details: Arsenal versus Chelsea' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Match details:.*Arsenal.*Chelsea/ })).toBeVisible();
 });
 
 test('home has no serious accessibility violations in either theme', async ({ page }) => {
   // Score and clock stay available to assistive tech through the description.
-  await expect(page.getByRole('button', { name: 'Match details: Arsenal versus Chelsea' }))
-    .toHaveAttribute('title', /2 to 1, 67′/);
+  await expect(page.getByRole('button', { name: /Match details:.*Arsenal.*Chelsea/ }))
+    .toHaveAccessibleDescription( /2 to 1, 67′/);
   expect(await violations(page)).toEqual([]);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
@@ -42,7 +37,7 @@ test('home has no serious accessibility violations in either theme', async ({ pa
 });
 
 test('the match centre tabs have no serious accessibility violations', async ({ page }) => {
-  await page.getByRole('button', { name: 'Match details: Arsenal versus Chelsea' }).click();
+  await page.getByRole('button', { name: /Match details:.*Arsenal.*Chelsea/ }).click();
   for (const tab of ['Overview', 'Commentary', 'Stats', 'Lineups']) {
     await page.getByRole('tab', { name: tab, exact: true }).click();
     await expect(page.getByRole('tabpanel', { name: tab })).toBeVisible();

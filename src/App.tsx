@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, KeyboardEvent, MouseEvent, UIEvent } from 'react';
+import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { LogicalSize } from '@tauri-apps/api/dpi';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { ListFilter, Maximize2, Minimize2, Minus, Pin, Radio, RefreshCw, Settings2, Star, X } from 'lucide-react';
+import { Maximize2, Minimize2, Pin, Radio, RefreshCw, Settings2, X } from 'lucide-react';
 import logo from './assets/logo.png';
 import { groupFixtures, isInProgress, isLive } from './fixtures';
 import { competitionLeagues, competitionName, competitionSlug, competitionStatus, rateLimitedUntil, resultsStatus, updateStatus } from './freshness';
@@ -34,12 +34,12 @@ const followsTeam = (match:Match, favorites:string[]) => favorites.includes(matc
 export default function App() {
   const {snapshot,loading,load,refresh,save,error,opacityPreview} = useApp();
   const [view,setView] = useState<'home'|'settings'|'detail'>('home');
-  const [themeHint] = useState<'dark'|'light'>(()=>{try{return localStorage.getItem('matchradar.theme')==='light'?'light':'dark';}catch{return 'dark';}});
+  const [themeHint] = useState<'dark'|'light'>(()=>{try{const theme=localStorage.getItem('matchradar.theme');return theme==='light'||(theme==='system'&&window.matchMedia?.('(prefers-color-scheme: light)').matches)?'light':'dark';}catch{return 'dark';}});
   const [matchView,setMatchView] = useState<MatchView>('All');
   const [selected,setSelected] = useState<Match|null>(null);
   const [notificationRequest,setNotificationRequest] = useState(0);
   const [refreshing,setRefreshing] = useState(false);
-  const [heroCollapsed,setHeroCollapsed] = useState(false);
+  const [systemTheme,setSystemTheme] = useState<'dark'|'light'>(()=>window.matchMedia?.('(prefers-color-scheme: light)').matches?'light':'dark');
   // Session-only slim mode; the widget's full size is remembered so it can be restored.
   const [ticker,setTicker] = useState(false);
   const tickerRestoreSize = useRef<{width:number;height:number}|null>(null);
@@ -139,17 +139,18 @@ export default function App() {
     if(view!=='home') return;
     const list=root.current?.querySelector<HTMLElement>('.match-list');
     if(list) list.scrollTop=0;
-    setHeroCollapsed(false);
-  },[competitionView,matchView,settings?.followedOnly]);
-  useEffect(()=>{if(view!=='home')setHeroCollapsed(false);},[view]);
-  // Collapse the Matchday header once the list scrolls, so a narrow widget shows more
-  // fixtures. Only collapse when the list stays scrollable afterwards; otherwise the
-  // reclaimed height would clamp scrollTop to 0 and the header would flicker back.
-  const listScroll = (event:UIEvent<HTMLDivElement>) => {
-    const list=event.currentTarget;
-    if(list.scrollTop<=4) setHeroCollapsed(false);
-    else if(list.scrollTop>48&&list.scrollHeight-list.clientHeight>140) setHeroCollapsed(true);
-  };
+  },[competitionView,matchView]);
+  useEffect(()=>{
+    if(settings?.followedOnly) setMatchView('Following');
+    else setMatchView(current=>current==='Following'?'All':current);
+  },[settings?.followedOnly]);
+  useEffect(()=>{
+    const preference=window.matchMedia?.('(prefers-color-scheme: light)');
+    if(!preference) return;
+    const changed=()=>setSystemTheme(preference.matches?'light':'dark');
+    preference.addEventListener('change',changed);
+    return ()=>preference.removeEventListener('change',changed);
+  },[]);
   useEffect(()=>{
     if(view!=='detail'||!selected||!notificationFocus.current) return;
     const timer=setTimeout(()=>{
@@ -161,16 +162,14 @@ export default function App() {
     return ()=>clearTimeout(timer);
   },[view,selected,notificationRequest]);
   const viewMatches = useMemo(()=>matchesView(sourceMatches??[],matchView,settings?.favorites??[]),[sourceMatches,matchView,settings?.favorites]);
-  const matches = useMemo(()=>{
-    const favorites=settings?.favorites??[];
-    return viewMatches.filter(m=>!settings?.followedOnly||favorites.includes(m.home.id)||favorites.includes(m.away.id));
-  },[viewMatches,settings?.followedOnly,settings?.favorites]);
-  const groups = useMemo(()=>groupFixtures(matches,settings?.favorites??[],day),[matches,settings?.favorites,day]);
+  const matches = viewMatches;
+  const groups = useMemo(()=>groupFixtures(matches,historyView?[]:settings?.favorites??[],day,historyView?'results':'fixtures'),[matches,settings?.favorites,day,historyView]);
   // Tab counts make empty views visible before they are opened. Results only has a
   // count once its history has loaded; an unknown count is left blank, not 0.
   const viewCounts = useMemo(()=>{
     const favorites=settings?.favorites??[];
-    const visible=(items:Match[])=>settings?.followedOnly?items.filter(m=>followsTeam(m,favorites)):items;
+    if(!snapshot) return {};
+    const visible=(items:Match[])=>items;
     const counts:Partial<Record<MatchView,number>>={};
     for(const name of VIEWS) if(name!=='Results') counts[name]=visible(matchesView(competitionMatches,name,favorites)).length;
     if(recent.data.updatedAt||recent.data.matches.length) {
@@ -178,10 +177,10 @@ export default function App() {
       counts.Results=visible(mergeResults(recent.data.matches,competitionMatches).filter(m=>m.status==='fulltime'&&included.includes(m.league??'premierLeague'))).length;
     }
     return counts;
-  },[competitionMatches,competitionView,recent.data.matches,recent.data.updatedAt,settings?.favorites,settings?.followedOnly]);
+  },[competitionMatches,competitionView,recent.data.matches,recent.data.updatedAt,settings?.favorites,snapshot]);
   // Status is scoped to the selected competition(s), independent of card filters.
-  const live = competitionMatches.filter(m=>isLive(m)&&!m.scoreStale).length;
-  const savedLive = competitionMatches.some(m=>isLive(m)&&m.scoreStale);
+  const live = competitionMatches.filter(isInProgress).length;
+  const savedLive = competitionMatches.some(m=>isInProgress(m)&&m.scoreStale);
   const unchecked = snapshot?.leagueStatus
     ? competitionLeagues(competitionView).some(league=>!snapshot.leagueStatus?.[competitionSlug(league)]?.updatedAt)
     : !viewStatus.updatedAt;
@@ -193,17 +192,16 @@ export default function App() {
   const scoresUnconfirmed = !viewStatus.updatedAt&&!viewStatus.error&&!viewStatus.scoreError;
   const liveChecking = !feedUnavailable&&!live&&!savedLive&&scoresUnconfirmed;
   const liveUnknown = !live&&!savedLive&&!liveChecking&&(!!viewStatus.scoreError||unchecked);
-  const filterEmpty = !!settings?.followedOnly && viewMatches.length>0 && !matches.length;
   const viewEmpty = viewMatches.length===0;
   const followingEmpty = matchView==='Following' && viewEmpty;
   const upcomingEmpty = matchView==='Upcoming' && viewEmpty;
   const windowLabel = competitionView==='both'?30:competitionView==='championsLeague'?30:14;
-  const showAllMatches = () => {recoveryFocus.current=true;setMatchView('All');void save({followedOnly:false});};
+  const selectMatchView = (next:MatchView) => {setMatchView(next);if(settings&&settings.followedOnly!==(next==='Following')) void save({followedOnly:next==='Following'});};
+  const showAllMatches = () => {recoveryFocus.current=true;selectMatchView('All');};
   const liveStatusUnavailable=!liveChecking&&(!!viewStatus.scoreError||unchecked);
-  const liveEmpty = liveEmptyState({checking:liveChecking,scoreError:liveStatusUnavailable,savedLive,live,followedOnly:!!settings?.followedOnly,view:matchView,competition:competitionView==='both'?'live':competitionName(competitionView),both:competitionView==='both'});
+  const liveEmpty = liveEmptyState({checking:liveChecking,scoreError:liveStatusUnavailable,savedLive,live,followedOnly:false,view:matchView,competition:competitionView==='both'?'live':competitionName(competitionView),both:competitionView==='both'});
   const emptyTitle = feedUnavailable ? 'Unable to load matches' : liveEmpty?.title ?? (
-    filterEmpty ? (matchView==='All'?'No followed-team matches':`No ${matchView.toLowerCase()} matches involving followed clubs`)
-    : listError ? (historyView?'Unable to update results':viewStatus.partial?'Some updates are unavailable':'Unable to update matches')
+    listError ? (historyView?'Unable to update results':viewStatus.partial?'Some updates are unavailable':'Unable to update matches')
     : followingEmpty ? 'No matches involving followed clubs'
     : upcomingEmpty ? 'No upcoming matches'
     : historyView ? 'No recent results'
@@ -211,15 +209,14 @@ export default function App() {
     : 'No matches'
   );
   const emptyMessage = feedUnavailable ? (error ?? 'The widget’s saved fixtures could not be loaded. Try again in a moment.') : liveEmpty?.message ?? (
-    filterEmpty ? `Your active filters hide the other ${competitionMatchesLabel}. Show all matches or choose another view.`
-    : listError ? (historyView?'Could not update results. Any saved results remain available.':viewStatus.partial?'Available data was saved, but some updates could not be confirmed.':'Could not update the feed. Any saved fixtures remain available.')
+    listError ? (historyView?'Could not update results. Any saved results remain available.':viewStatus.partial?'Available data was saved, but some updates could not be confirmed.':'Could not update the feed. Any saved fixtures remain available.')
     : followingEmpty ? (settings?.favorites.length?'Your followed clubs have no matches in this competition window.':'Follow a club in Settings to see its matches here.')
     : upcomingEmpty ? `No ${competitionMatchesLabel} are scheduled in the next ${windowLabel} days.`
     : historyView ? `No completed ${competitionMatchesLabel} were found in the previous 14 days.`
     : `No ${competitionMatchesLabel} are available for the next ${windowLabel} days.`
   );
   const emptyAction = feedUnavailable ? 'retry'
-    : liveEmpty?.canShowAll||filterEmpty||followingEmpty||upcomingEmpty ? 'show'
+    : liveEmpty?.canShowAll||followingEmpty||upcomingEmpty ? 'show'
     : (liveEmpty&&liveStatusUnavailable||listError ? 'retry' : null);
   const waiting = historyView?recent.loading&&!matches.length:!allMatches?.length&&(loading||!!snapshot?.refreshing&&!viewStatus.updatedAt&&!viewStatus.fixtureUpdatedAt&&!viewStatus.error);
   const busy = refreshing||!!snapshot?.refreshing;
@@ -287,17 +284,17 @@ export default function App() {
   };
   const keyDown = (event:KeyboardEvent) => {
     if(event.key==='Escape'&&!event.defaultPrevented&&!(event.target instanceof HTMLSelectElement)) {
+      if(root.current?.querySelector('.alert-menu')) {event.preventDefault();return;}
       if(ticker) {event.preventDefault();void toggleTicker();}
       else if(view!=='home') {event.preventDefault();back();}
     }
   };
-  return <main ref={root} onKeyDown={keyDown} onContextMenu={contextMenu} className={'shell theme-'+(settings?.theme??themeHint)+' '+(panelOpacity<85?'transparent-panel ':'')+(settings?.compact?'compact-view ':'')+(settings?.reducedMotion?'reduced ':'')+(ticker?'ticker-mode':'')} style={{'--panel-opacity':panelOpacity/100} as CSSProperties}>
+  return <main ref={root} onKeyDown={keyDown} onContextMenu={contextMenu} className={'shell theme-'+(settings?.theme==='system'?systemTheme:settings?.theme??themeHint)+' '+(panelOpacity<85?'transparent-panel ':'')+(settings?.compact?'compact-view ':'')+(settings?.reducedMotion?'reduced ':'')+(ticker?'ticker-mode':'')} style={{'--panel-opacity':panelOpacity/100} as CSSProperties}>
     <header className="header" data-tauri-drag-region>
       <div className="brand" data-tauri-drag-region><span className="brand-icon"><img src={logo} alt=""/></span><div data-tauri-drag-region><h1>match<span>radar</span></h1></div></div>
       <div className="header-actions">
         <button className="icon-button" title={settings?.alwaysOnTop?'Always on top is on · unpin widget':'Always on top is off · keep widget above other windows'} disabled={!settings} onClick={()=>void toggleAlwaysOnTop()} aria-label="Always on top" aria-pressed={!!settings?.alwaysOnTop}><Pin size={15} fill={settings?.alwaysOnTop?'currentColor':'none'}/></button>
         <button className="icon-button" title={ticker?'Expand the full widget':'Collapse to a slim match ticker'} onClick={()=>void toggleTicker()} aria-label="Ticker mode" aria-pressed={ticker}>{ticker?<Maximize2 size={15}/>:<Minimize2 size={15}/>}</button>
-        <button className="icon-button" title={native?'Hide to system tray':'Hide is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().hide().catch(()=>useApp.setState({error:'Could not hide the widget.'}))} aria-label="Minimize widget"><Minus size={17}/></button>
         <button className="icon-button close" title={native?'Hide to system tray':'Hide is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().hide().catch(()=>useApp.setState({error:'Could not hide the widget.'}))} aria-label="Hide widget"><X size={16}/></button>
       </div>
     </header>
@@ -305,22 +302,21 @@ export default function App() {
       :view==='settings'&&settings?<SettingsPanel settings={settings} matches={allMatches??[]} save={save} back={back} refresh={()=>void doRefresh()} refreshing={busy}/>
       :view==='detail'&&selected&&settings?<MatchDetails key={`${selected.id}:${notificationRequest}`} match={detailMatch??selected} settings={settings} back={back}/>
       :<>
-        <div className={'hero'+(heroCollapsed?' is-collapsed':'')} aria-hidden={heroCollapsed||undefined}><div><h2>Matchday</h2><p>Fixtures, scores and the clubs you follow</p></div><time>{dateLabel(new Date().toISOString())}</time></div>
-        <div className="summary"><CompetitionPicker value={competitionView} onChange={value=>void save({competitionView:value})} disabled={!settings}/><span className={'live-pill '+(!live?'quiet':'')} aria-label={`${competitionTitle}: ${live?`${live} live matches`:savedLive?'saved scores, awaiting live update':liveChecking?'checking live status':liveUnknown?'live status unavailable':'no confirmed live matches'}`} title="Competition status, including matches hidden by your filter. Live scores refresh about every 60 seconds."><i className="dot"/>{live?`${live} LIVE`:savedLive?'SAVED LIVE':liveChecking?'CHECKING LIVE':liveUnknown?'LIVE UNAVAILABLE':'NO LIVE MATCHES'}</span></div>
-        <div className="match-list" onScroll={listScroll}>
-          <nav className="centre-tabs" aria-label="Fixture views">{VIEWS.map(name=>{const count=viewCounts[name];return <button key={name} aria-pressed={matchView===name} className={count===0?'is-empty':undefined} title={count===undefined?undefined:`${count} ${count===1?'match':'matches'}`} onClick={()=>setMatchView(name)}>{name}{count!==undefined&&<span className="tab-count" aria-hidden="true">{count}</span>}</button>;})}</nav>
-          <div className="schedule-context"><p className="schedule-note">{matchView==='Results'?'Results \u00b7 previous 14 days':competitionView==='championsLeague'?'Fixtures \u00b7 next 30 days':competitionView==='both'?'Fixtures \u00b7 chronological, up to 30 days ahead':'Fixtures \u00b7 next 14 days'}</p>{settings?.followedOnly&&<span className="filter-label"><ListFilter size={12}/>Following only</span>}</div>
+        <div className="summary"><CompetitionPicker value={competitionView} onChange={value=>void save({competitionView:value})} disabled={!settings}/><span className={'live-pill '+(!live?'quiet':'')} aria-label={`${competitionTitle}: ${live?`${live} ${savedLive?'in-progress matches, including saved scores awaiting confirmation':'live matches'}`:savedLive?'saved scores, awaiting live update':liveChecking?'checking live status':liveUnknown?'live status unavailable':'no confirmed live matches'}`} title="In-progress matches, including half-time and suspended games."><i className="dot"/>{live?`${live} ${savedLive?'LIVE · SAVED':'LIVE'}`:savedLive?'SAVED LIVE':liveChecking?'CHECKING LIVE':liveUnknown?'LIVE UNAVAILABLE':'NO LIVE MATCHES'}</span></div>
+        <div className="match-list">
+          <nav className="centre-tabs" aria-label="Fixture views">{VIEWS.map(name=>{const count=viewCounts[name];return <button key={name} aria-pressed={matchView===name} className={count===0?'is-empty':undefined} title={count===undefined?undefined:`${count} ${count===1?'match':'matches'}`} onClick={()=>selectMatchView(name)}>{name}{count!==undefined&&<span className="tab-count" aria-hidden="true">{count}</span>}</button>;})}</nav>
+          <div className="schedule-context"><time dateTime={day.toISOString()}>{dateLabel(day.toISOString())}</time><p className="schedule-note">{historyView?'Results · latest first':`Next ${windowLabel} days`}</p></div>
           {listError&&!!sourceMatches?.length&&<div className="offline-banner" role="status" title={listError}><span>{historyView?'Results update failed - cached results retained':viewStatus.partial?'Partial update · some data may be stale':'Update failed · saved data is unchanged'}</span><button onClick={retryFeed} disabled={historyView?recent.loading:busy}>Retry</button></div>}
-          {historyView&&viewResults.updatedAt&&<p className="field-note">Results checked {new Date(viewResults.updatedAt).toLocaleString()}</p>}
+          {historyView&&viewResults.updatedAt&&<p className="field-note">Results checked {`${dateLabel(viewResults.updatedAt)} ${timeLabel(viewResults.updatedAt)}`}</p>}
           {waiting?<div className="skeletons" role="status" aria-label="Loading fixtures"><div/><div/><div/></div>
-            :!matches.length?<div className="empty" role={feedUnavailable?'alert':undefined}><Radio size={25}/><h3>{emptyTitle}</h3>
+            :!matches.length?<div className="empty" role={feedUnavailable?'alert':undefined}><Radio size={25}/><h2>{emptyTitle}</h2>
               <p>{emptyMessage}</p>
               {emptyAction==='show'?<button className="outline-button" onClick={showAllMatches}>Show all matches</button>:emptyAction==='retry'?<button className="outline-button" onClick={retryFeed} disabled={historyView?recent.loading:busy}><RefreshCw size={14}/>Retry</button>:null}
             </div>
-            :settings&&groups.map(({key,label,matches:items})=><section key={key} aria-labelledby={'date-group-'+key}><h3 id={'date-group-'+key} className={'group-title '+(key==='live'&&items.some(m=>!m.scoreStale)?'live-group':'')}><span>{label}</span><span>{items.length} {items.length===1?'match':'matches'}</span></h3>{items.map((match,index)=>{
+            :settings&&groups.map(({key,label,matches:items})=><section key={key} aria-labelledby={'date-group-'+key}><h2 id={'date-group-'+key} className={'group-title '+(key==='live'&&items.some(m=>!m.scoreStale)?'live-group':'')}><span>{label}</span><span>{items.length} {items.length===1?'match':'matches'}</span></h2>{items.map((match,index)=>{
               // Followed clubs lead each day; label the split so the order does not read as a sorting bug.
               const followed=followsTeam(match,settings.favorites);
-              const split=key!=='live'&&matchView!=='Following'&&items.some(m=>followsTeam(m,settings.favorites))&&items.some(m=>!followsTeam(m,settings.favorites));
+              const split=!historyView&&key!=='live'&&matchView!=='Following'&&items.some(m=>followsTeam(m,settings.favorites))&&items.some(m=>!followsTeam(m,settings.favorites));
               const heading=split&&(index===0||followsTeam(items[index-1],settings.favorites)!==followed)?<p className="group-subtitle" key={match.id+'-heading'}>{followed?'Your clubs':'Other matches'}</p>:null;
               return [heading,<MatchCard key={match.id} match={match} settings={settings} now={now} onOpen={()=>openMatch(match)} showCompetition={competitionView==='both'}/>];
             })}</section>)}
@@ -328,10 +324,9 @@ export default function App() {
       </>}
     {error&&!feedUnavailable&&<div className="error-banner" role="alert"><span data-copyable>{error}</span><button className="icon-button" aria-label="Dismiss message" title="Dismiss message" onClick={()=>useApp.setState({error:null})}><X size={14}/></button></div>}
     {!ticker&&<footer>
-      <div className="connection-info" role="status" title={[statusLabel,statusAbsolute,'Live scores refresh about every 60 seconds'].filter(Boolean).join(' · ')}><span className={'connection '+(viewStatus.error||feedUnavailable?'error':'')} aria-hidden="true"/><div className="status-copy"><span>{statusLabel}</span>{statusTime&&<time dateTime={status.timestamp??undefined}>{statusTime}</time>}</div></div>
+      <div className="connection-info" role="status" title={[statusLabel,statusAbsolute,'Live scores refresh about every 60 seconds'].filter(Boolean).join(' · ')}><span className={'connection '+(viewStatus.error||feedUnavailable?'error':!viewStatus.updatedAt?'pending':'')} aria-hidden="true"/><div className="status-copy"><span>{statusLabel}</span>{statusTime&&<time dateTime={status.timestamp??undefined}>{statusTime}</time>}</div></div>
       <div className="footer-actions">
         <button id="settings-control" className="icon-button" title={view==='settings'?'Return to matches (Esc)':'Open Settings'} onClick={()=>view==='settings'?back():openSettings()} aria-label="Settings" aria-pressed={view==='settings'}><Settings2 size={16}/></button>
-        <button className="icon-button" title={settings?.followedOnly?'Following only is on · show all matches':'Showing all matches · filter to followed clubs'} disabled={!settings} onClick={()=>settings&&void save({followedOnly:!settings.followedOnly})} aria-label="Following only" aria-pressed={!!settings?.followedOnly}><Star size={16} fill={settings?.followedOnly?'currentColor':'none'}/>{settings?.followedOnly&&<span className="filter-dot"/>}</button>
         <button className="icon-button" title={busy?'Updating fixtures…':limitedUntil?`ESPN is rate limiting requests · updates resume automatically at ${timeLabel(limitedUntil)}`:'Refresh fixtures and scores'} onClick={()=>void doRefresh()} disabled={busy} aria-label="Refresh" aria-busy={busy}><RefreshCw size={16} className={busy?'spin':''}/></button>
       </div>
     </footer>}

@@ -45,7 +45,7 @@ MatchRadar keeps scores, fixtures and the clubs you follow in a small window tha
 - **Live at a glance.** Follow the Premier League, Champions League, or both. Scores, kick-off times and independent refresh status stay in view.
 - **A proper Match Centre.** Goals, cards and substitutions by half, provider stats with comparison bars, formation lineups, and filtered commentary in the same compact window.
 - **Clubs, not accounts.** Follow a club once across both competitions. Get reminders, match-start alerts and optional goal alerts, with per-match mute when you need quiet.
-- **Tray-first by design.** Both window controls hide to the tray. Toggle with `Ctrl+Shift+M`, pin above other windows, start hidden at sign-in, and recover automatically if a monitor disappears.
+- **Tray-first by design.** The close control hides to the tray. Toggle with `Ctrl+Shift+M`, pin above other windows, start hidden at sign-in, and recover automatically if a monitor disappears.
 - **Private by design.** No account, API key, analytics or telemetry. Preferences and cached data stay on your device; live scores and match details are fetched from ESPN.
 
 <details>
@@ -71,7 +71,7 @@ MatchRadar keeps scores, fixtures and the clubs you follow in a small window tha
 
 The installer is unsigned, so Windows may show a SmartScreen warning. If it does, choose **More info → Run anyway**. The release notes include the installer's SHA-256 checksum. There is no auto-updater yet; future versions install over the current one.
 
-MatchRadar lives in the tray: both window controls hide it, and you can click the tray icon or press `Ctrl+Shift+M` to bring it back. Choose **Quit** in the tray menu to exit fully.
+MatchRadar lives in the tray: the close control hides it, and you can click the tray icon or press `Ctrl+Shift+M` to bring it back. Choose **Quit** in the tray menu to exit fully.
 
 ## Development
 

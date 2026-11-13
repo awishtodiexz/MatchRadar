@@ -23,6 +23,12 @@ export const timeLabel = (date: string) => {
 // Rust normalizes these outcomes to fixed details (provider.rs).
 export const isAbandoned = (match: Match) => match.status === 'cancelled' && match.detail === 'Abandoned';
 export const isForfeit = (match: Match) => match.status === 'fulltime' && match.detail === 'Forfeit';
+export const resultLabel = (match: Match) => {
+  if (isForfeit(match)) return 'FF';
+  if (/\bpen(?:alties|alty|s)?\b/i.test(match.detail)) return 'PEN';
+  if (/\baet\b|after extra time/i.test(match.detail)) return 'AET';
+  return 'FT';
+};
 export const closedNote = (match: Match) => isAbandoned(match) ? 'This match was abandoned.' : 'This match was cancelled.';
 export const matchButtonId = (id:string) => 'match-open-'+encodeURIComponent(id);
 // "Today"/"Tomorrow"/"Yesterday" reads faster than a date for nearby kick-offs.

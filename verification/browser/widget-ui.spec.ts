@@ -9,7 +9,7 @@ async function open(page: Page, width = 320, height = 460) {
   await page.route('https://**/*', route => route.abort());
   await installBridge(page);
   await page.goto('/');
-  await expect(page.getByRole('button', {name: 'Match details: Arsenal versus Chelsea'})).toBeVisible();
+  await expect(page.getByRole('button', {name: /Match details:.*Arsenal.*Chelsea/})).toBeVisible();
 }
 
 test('a new fixture view or competition starts the list at the top', async ({ page }) => {
@@ -38,7 +38,7 @@ test('showing filtered-out matches returns keyboard focus to the first card', as
   const show = page.getByRole('button', {name: 'Show all matches'});
   await show.focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('button', {name: 'Match details: Arsenal versus Chelsea'})).toBeFocused();
+  await expect(page.getByRole('button', {name: /Match details:.*Arsenal.*Chelsea/})).toBeFocused();
 });
 
 test('startup says live status is being checked rather than unavailable', async ({ page }) => {

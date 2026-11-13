@@ -19,10 +19,10 @@ const picker = () => screen.getByRole('button', { name: /Competition: .*Change c
 async function choose(name: string) {
   const label = name === 'Both' ? 'Both competitions' : name;
   fireEvent.click(picker());
-  fireEvent.click(screen.getByRole('option', { name: new RegExp(name) }));
-  await waitFor(() => expect(screen.getByRole('button', { name: `Competition: ${label}. Change competition` })).toBeTruthy());
+  fireEvent.click(screen.getByRole('option', { name: new RegExp(`^${label}`) }));
+  await waitFor(() => expect(screen.getByRole('button', { name: new RegExp(`Competition: ${label}.*Change competition`) })).toBeTruthy());
 }
-const card = (name: string) => screen.queryByRole('button', { name: `Match details: ${name}` });
+const card = (name: string) => screen.queryByRole('button', { name: new RegExp(`Match details:.*${name.split(' versus ').join('.*')}`) });
 
 beforeEach(async () => { await load(structuredClone(mockSnapshotWithUcl)); });
 afterEach(cleanup);
@@ -111,22 +111,30 @@ describe('following filter across competitions', () => {
     filtered.settings.favorites = ['999'];
     await load(filtered);
     const filteredView = render(<App />);
-    expect(screen.getByText(/hide the other Champions League matches/)).toBeTruthy();
+    expect(screen.getByText('No matches involving followed clubs')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Show all matches' })).toBeTruthy();
     filteredView.unmount();
     await load({ ...filtered, matches: [] });
     render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'All' }));
     expect(screen.getByText('No fixtures in this window')).toBeTruthy();
-    expect(screen.queryByText(/hide the other Champions League matches/)).toBeNull();
+    expect(screen.queryByText('No matches involving followed clubs')).toBeNull();
   });
 
-  it('keeps the global Following preference when switching competition', async () => {
+  it('keeps Following selected across competitions while All shows every fixture', async () => {
     await load(followedSnapshot());
     render(<App />);
     await choose('Premier League');
     await choose('Both');
     await choose('Champions League');
-    expect(useApp.getState().snapshot?.settings.followedOnly).toBe(true);
+    expect(screen.getByRole('button', { name: 'Following' }).getAttribute('aria-pressed')).toBe('true');
+    expect(card('Real Madrid versus Bayern Munich')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'All' }));
+    expect(card('Real Madrid versus Bayern Munich')).toBeTruthy();
+    expect(card('Arsenal versus Bayern Munich')).toBeTruthy();
+    await waitFor(() => expect(useApp.getState().snapshot?.settings.followedOnly).toBe(false));
     expect(useApp.getState().snapshot?.settings.competitionView).toBe('championsLeague');
+    fireEvent.click(screen.getByRole('button', { name: 'Following' }));
+    await waitFor(() => expect(useApp.getState().snapshot?.settings.followedOnly).toBe(true));
   });
 });

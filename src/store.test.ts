@@ -30,6 +30,14 @@ beforeEach(async () => {
 });
 
 describe('native snapshot and preference ordering', () => {
+  it('persists system theme without changing the following filter', async()=>{
+    const saving = store.getState().save({theme:'system'});
+    await vi.waitFor(()=>expect(writes).toHaveLength(1));
+    expect(writes[0].settings).toMatchObject({theme:'system',followedOnly:false});
+    writes[0].task.resolve(writes[0].settings);
+    await saving;
+    expect(store.getState().snapshot?.settings).toMatchObject({theme:'system',followedOnly:false});
+  });
   it('clears an obsolete read error on a later successful snapshot without hiding save errors', async()=>{
     const failed=store.getState().load();reads[0].reject(new Error('IPC unavailable'));await failed;
     expect(store.getState().error).toBe('Could not load the widget state.');
@@ -98,11 +106,11 @@ describe('native snapshot and preference ordering', () => {
     await vi.waitFor(() => expect(writes).toHaveLength(1));
     const eventLoad = store.getState().load(); reads[0].resolve(fresh()); await eventLoad;
     writes[0].task.reject(new Error('Disk full'));
-    await failed;
+    expect(await failed).toBe(false);
     expect(store.getState().snapshot).toMatchObject({matches:[{homeScore:4}], updatedAt:'2026-10-28T12:01:00Z', error:'Partial feed failure', settings:{alwaysOnTop:true,theme:'light'}});
     await vi.waitFor(() => expect(writes).toHaveLength(2));
     expect(writes[1].settings.alwaysOnTop).toBe(true);
-    writes[1].task.resolve(writes[1].settings); await later;
+    writes[1].task.resolve(writes[1].settings); expect(await later).toBe(true);
     // The failure reconciliation was started before the later successful save.
     // It may update feed data, but cannot undo that save's preferences.
     reads[1].resolve(fresh());

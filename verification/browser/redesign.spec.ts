@@ -19,7 +19,7 @@ for(const width of [320,390]) for(const theme of ['dark','light'] as const) {
     await installBridge(page,{snapshot:{...mockSnapshot,settings:{...mockSnapshot.settings,theme}},summary});
     await page.goto('/');
     await page.screenshot({path:info.outputPath('fixtures.png')});
-    await page.getByRole('button',{name:'Match details: Arsenal versus Chelsea'}).click();
+    await page.getByRole('button',{name:/Match details:.*Arsenal.*Chelsea/}).click();
     await expect(page.locator('.overview-intro')).toHaveCount(0);
     await expect(page.locator('.match-events .event')).toHaveCount(18);
     await expect(page.getByLabel('Match snapshot')).toHaveCount(0);
@@ -52,7 +52,7 @@ for(const width of [320,390]) for(const theme of ['dark','light'] as const) {
     await page.getByRole('tab',{name:'Overview',exact:true}).click();
     await expect(page.locator('.mini-score')).toHaveCount(0);
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('button',{name:'Match details: Arsenal versus Chelsea'})).toBeFocused();
+    await expect(page.getByRole('button',{name:/Match details:.*Arsenal.*Chelsea/})).toBeFocused();
   });
 }
 
@@ -67,7 +67,7 @@ for(const width of [320,390]) test(`review regressions remain readable at ${widt
       {teamId:match.home.id,playerIn:'Test Player 12',playerOut:'Bench Midfielder',minute:"80'"}]
   };
   await installBridge(page,{summary:data});await page.goto('/');
-  await page.getByRole('button',{name:'Match details: Arsenal versus Chelsea'}).click();
+  await page.getByRole('button',{name:/Match details:.*Arsenal.*Chelsea/}).click();
   await page.getByRole('tab',{name:'Stats',exact:true}).click();
   const row=page.getByRole('row',{name:/Possession/});
   await expect(row).toHaveText('1%Possession99%');

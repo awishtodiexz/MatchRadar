@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App from './App';
 import { mockSnapshot } from './test-fixtures/fixtures';
 import { useApp } from './store';
@@ -10,8 +10,16 @@ vi.mock('@tauri-apps/api/core',()=>({isTauri:()=>false,invoke:vi.fn()}));
 vi.mock('@tauri-apps/api/event',()=>({listen:vi.fn().mockResolvedValue(()=>{})}));
 vi.mock('@tauri-apps/api/window',()=>({getCurrentWindow:vi.fn()}));
 vi.mock('@tauri-apps/plugin-autostart',()=>({isEnabled:vi.fn(),enable:vi.fn(),disable:vi.fn()}));
-const detailName = 'Match details: Arsenal versus Chelsea';
-const inheritName = 'Enable all alerts (using team settings): Arsenal versus Chelsea';
+const detailName = /Match details:.*Arsenal.*Chelsea/;
+const inheritName = 'Match alerts: Arsenal versus Chelsea, Team default';
+it('uses the system-light paint hint before desktop settings load', () => {
+  vi.stubGlobal('localStorage',{getItem:vi.fn(()=> 'system'),setItem:vi.fn()});
+  vi.stubGlobal('matchMedia',vi.fn(()=>({matches:true,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+  useApp.setState({snapshot:null,loading:true,error:null});
+  const {container} = render(<App/>);
+  expect(container.querySelector('.theme-light')).toBeTruthy();
+  vi.unstubAllGlobals();
+});
 async function load(snapshot:Snapshot) {
   useApp.setState({snapshot,loading:false,error:null});
   await useApp.getState().load();
@@ -33,7 +41,7 @@ describe('focused usability refinements',()=>{
     failed.unmount();
     await load({...base,settings:{...base.settings,followedOnly:true,favorites:[]}});
     render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Live'}));
-    expect(screen.getByText('No followed clubs are live')).toBeTruthy();
+    expect(screen.getByRole('button',{name:detailName})).toBeTruthy();
     expect(screen.getByLabelText(/Premier League: .* live matches/)).toBeTruthy();
   });
   it('explains when the Following view has no matching clubs',async()=>{
@@ -85,13 +93,13 @@ describe('focused usability refinements',()=>{
     await load({...structuredClone(mockSnapshot),settings:{...mockSnapshot.settings,favorites:['999']}});
     render(<App/>);
     fireEvent.click(screen.getByRole('button',{name:'Settings'}));
-    expect(screen.getByText(/Unknown club · 999/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button',{name:'Unfollow unknown club 999'}));
+    expect(screen.getByText('Unavailable club')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'Unfollow unavailable club 999'}));
     await waitFor(()=>expect(useApp.getState().snapshot?.settings.favorites).not.toContain('999'));
   });
   it('suppresses surface context menus on cards, icons, details and settings',()=>{
     render(<App/>);
-    expect(fireEvent.contextMenu(screen.getByRole('heading',{name:'Matchday'}))).toBe(false);
+    expect(fireEvent.contextMenu(screen.getByRole('navigation',{name:'Fixture views'}))).toBe(false);
     const card=screen.getByRole('button',{name:detailName});
     expect(fireEvent.contextMenu(card)).toBe(false);
     expect(fireEvent.contextMenu(screen.getByRole('button',{name:inheritName}).querySelector('svg')!)).toBe(false);
@@ -129,20 +137,20 @@ describe('focused usability refinements',()=>{
   it('keeps league-wide live counts when only followed cards are shown and can clear an empty filter',async()=>{
     await load({...structuredClone(mockSnapshot),settings:{...mockSnapshot.settings,favorites:[],followedOnly:true}});
     render(<App/>);
-    expect(screen.getByLabelText('Premier League: 3 live matches').textContent).toBe('3 LIVE');
+    expect(screen.getByLabelText('Premier League: 4 live matches').textContent).toBe('4 LIVE');
     expect(screen.queryByText('NO LIVE MATCHES')).toBeNull();
-    expect(screen.getByRole('heading',{name:'No followed-team matches'})).toBeTruthy();
+    expect(screen.getByRole('heading',{name:'No matches involving followed clubs'})).toBeTruthy();
     expect(screen.queryByRole('button',{name:detailName})).toBeNull();
     fireEvent.click(screen.getByRole('button',{name:'Show all matches'}));
     await waitFor(()=>expect(screen.getByRole('button',{name:detailName})).toBeTruthy());
-    expect(useApp.getState().snapshot?.settings.followedOnly).toBe(false);
-    expect(screen.getByRole('button',{name:'Following only'}).getAttribute('aria-pressed')).toBe('false');
+    await waitFor(()=>expect(useApp.getState().snapshot?.settings.followedOnly).toBe(false));
+    expect(screen.getByRole('button',{name:'All'}).getAttribute('aria-pressed')).toBe('true');
   });
 
   it('keeps saved league scores distinct even when the filter hides every card',async()=>{
     await load({...structuredClone(mockSnapshot),matches:mockSnapshot.matches.map(m=>({...m,scoreStale:true})),settings:{...mockSnapshot.settings,favorites:[],followedOnly:true}});
     render(<App/>);
-    expect(screen.getByLabelText('Premier League: saved scores, awaiting live update').textContent).toBe('SAVED LIVE');
+    expect(screen.getByLabelText(/Premier League: 4 in-progress matches, including saved scores/).textContent).toBe('4 LIVE · SAVED');
     expect(screen.queryByText('NO LIVE MATCHES')).toBeNull();
   });
 
@@ -153,15 +161,17 @@ describe('focused usability refinements',()=>{
     const bell=screen.getByRole('button',{name:inheritName});
     expect(bell.getAttribute('data-alert-state')).toBe('team');
     fireEvent.click(bell);
+    fireEvent.click(screen.getByRole('button',{name:'On'}));
     await waitFor(()=>expect(useApp.getState().snapshot?.settings.matchAlerts['demo-1'].enabled).toBe(true));
-    expect(screen.getByRole('button',{name:'Mute match alerts (all alerts on): Arsenal versus Chelsea'}).getAttribute('data-alert-state')).toBe('on');
+    expect(screen.getByRole('button',{name:'Match alerts: Arsenal versus Chelsea, On'}).getAttribute('data-alert-state')).toBe('on');
+    fireEvent.keyDown(screen.getByRole('dialog',{name:'Match alerts'}),{key:'Escape'});
     fireEvent.click(screen.getByRole('button',{name:detailName}));
     openMatchAlerts();
-    expect(screen.getByText('All alerts on',{exact:true})).toBeTruthy();
-    const reset=screen.getByRole('button',{name:'Use team settings'});reset.focus();fireEvent.click(reset);
+    expect(screen.getByRole('button',{name:'On'}).getAttribute('aria-pressed')).toBe('true');
+    const reset=screen.getByRole('button',{name:'Team default'});reset.focus();fireEvent.click(reset);
     await waitFor(()=>expect(useApp.getState().snapshot?.settings.matchAlerts).toEqual({'demo-2':other}));
-    expect(screen.getByText('Team settings',{exact:true})).toBeTruthy();
-    expect(document.activeElement).toBe(screen.getByRole('heading',{name:'Match alerts'}));
+    expect(screen.getByRole('button',{name:'Team default'}).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.keyDown(screen.getByRole('dialog',{name:'Match alerts'}),{key:'Escape'});
     fireEvent.click(screen.getByRole('button',{name:'Back to matches'}));
     expect(screen.getByRole('button',{name:inheritName}).getAttribute('data-alert-state')).toBe('team');
   });
@@ -169,55 +179,42 @@ describe('focused usability refinements',()=>{
   it('distinguishes explicit mute from team defaults in names, tooltips and visual state',async()=>{
     render(<App/>);
     fireEvent.click(screen.getByRole('button',{name:inheritName}));
-    await waitFor(()=>expect(screen.getByRole('button',{name:'Mute match alerts (all alerts on): Arsenal versus Chelsea'})).toBeTruthy());
-    fireEvent.click(screen.getByRole('button',{name:'Mute match alerts (all alerts on): Arsenal versus Chelsea'}));
-    const muted=await screen.findByRole('button',{name:'Enable all alerts (match muted): Arsenal versus Chelsea'});
+    fireEvent.click(screen.getByRole('button',{name:'Muted'}));
+    const muted=await screen.findByRole('button',{name:'Match alerts: Arsenal versus Chelsea, Muted'});
     expect(muted.getAttribute('data-alert-state')).toBe('muted');
-    expect(muted.title).toContain('even for followed clubs');
-    expect(muted.getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByRole('button',{name:'Match ended: Brighton & Hove Albion versus Everton'}).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText(/even for followed clubs/)).toBeTruthy();
+    expect(screen.getByRole('button',{name:'Muted'}).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.queryByRole('button',{name:/Match alerts: Brighton & Hove Albion versus Everton/})).toBeNull();
   });
 
   it('does not offer ended-match alert actions when no override exists',()=>{
     render(<App/>);
-    fireEvent.click(screen.getByRole('button',{name:'Match details: Brighton & Hove Albion versus Everton'}));
-    openMatchAlerts();
-    expect(screen.getByText('This match has ended.')).toBeTruthy();
-    expect(screen.queryByText(/mute or reset existing alerts/)).toBeNull();
-    expect(screen.queryByRole('button',{name:'Use team settings'})).toBeNull();
-    expect(screen.queryByRole('button',{name:'Notify me about this match'})).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:/Match details:.*Brighton & Hove Albion.*Everton/}));
+    expect(screen.queryByRole('button',{name:/^Match alerts:/})).toBeNull();
   });
 
-  it('offers only applicable actions for ended subscribed and muted matches',async()=>{
+  it('offers no alert actions for ended subscribed matches',async()=>{
     const base=structuredClone(mockSnapshot);
     await load({...base,settings:{...base.settings,matchAlerts:{'demo-5':{enabled:true,expiresAt:'2099-01-01T00:00:00Z'}}}});
-    render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Match details: Brighton & Hove Albion versus Everton'}));
-    openMatchAlerts();
-    expect(screen.getByText('This match has ended. Mute it or use team settings.')).toBeTruthy();
-    const mute=screen.getByRole('button',{name:'Mute this match'});mute.focus();fireEvent.click(mute);
-    await waitFor(()=>expect(screen.getByText('This match has ended. Reset it to use team settings.')).toBeTruthy());
-    expect(document.activeElement).toBe(screen.getByRole('heading',{name:'Match alerts'}));
-    expect(screen.queryByRole('button',{name:'Notify me about this match'})).toBeNull();
-    expect(screen.getByRole('button',{name:'Use team settings'})).toBeTruthy();
+    render(<App/>);fireEvent.click(screen.getByRole('button',{name:/Match details:.*Brighton & Hove Albion.*Everton/}));
+    expect(screen.queryByRole('button',{name:/^Match alerts:/})).toBeNull();
+    expect(useApp.getState().snapshot?.settings.matchAlerts['demo-5'].enabled).toBe(true);
   });
 
   it('labels a cancelled match as cancelled rather than as having ended',()=>{
     render(<App/>);
-    const bell=screen.getByRole('button',{name:'Match cancelled: Everton versus Wolverhampton Wanderers'});
-    expect(bell.hasAttribute('disabled')).toBe(true);
-    fireEvent.click(screen.getByRole('button',{name:'Match details: Everton versus Wolverhampton Wanderers'}));
-    openMatchAlerts();
-    // The Match Centre overview also explains the cancellation; scope this
-    // assertion to the alert dialog it is testing.
-    expect(within(screen.getByRole('dialog')).getByText('This match was cancelled.')).toBeTruthy();
+    expect(screen.queryByRole('button',{name:/Match alerts: Everton versus Wolverhampton Wanderers/})).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:/Match details:.*Everton.*Wolverhampton Wanderers/}));
+    expect(screen.queryByRole('button',{name:/^Match alerts:/})).toBeNull();
+    expect(screen.getAllByText(/cancelled/i).length).toBeGreaterThan(0);
   });
 
   it('explains that a postponed match can alert again after it is rescheduled',()=>{
     render(<App/>);
-    const bell=screen.getByRole('button',{name:'Enable all alerts (using team settings): Wolverhampton Wanderers versus West Ham United'});
-    expect(bell.title).toContain('postponed');
-    expect(bell.title).toContain('resume if it is rescheduled');
+    const bell=screen.getByRole('button',{name:'Match alerts: Wolverhampton Wanderers versus West Ham United, Team default'});
     expect(bell.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(bell);
+    expect(screen.getByText(/postponed; alerts resume if it is rescheduled/)).toBeTruthy();
   });
 
   it('keeps keyboard focus in Settings after resetting all match alerts',async()=>{
@@ -225,6 +222,7 @@ describe('focused usability refinements',()=>{
     await load({...base,settings:{...base.settings,matchAlerts:{'demo-1':{enabled:true,expiresAt:'2099-01-01T00:00:00Z'}}}});
     render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Settings'}));fireEvent.click(screen.getByRole('tab',{name:'Alerts'}));
     const reset=screen.getByRole('button',{name:'Reset match bells to team defaults'});reset.focus();fireEvent.click(reset);
+    fireEvent.click(screen.getByRole('button',{name:'Confirm reset'}));
     await waitFor(()=>expect(screen.queryByRole('button',{name:'Reset match bells to team defaults'})).toBeNull());
     expect(document.activeElement).toBe(screen.getByRole('tabpanel',{name:'Alerts'}));
     fireEvent.keyDown(document.activeElement??document.body,{key:'Escape'});
@@ -310,7 +308,7 @@ describe('focused usability refinements',()=>{
 
   it('explains native-only controls and provides full club names without changing compact on tab switches',async()=>{
     render(<App/>);
-    expect(screen.getByRole('button',{name:'Minimize widget'}).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button',{name:'Hide widget'}).hasAttribute('disabled')).toBe(true);
     expect(screen.getAllByText('Wolverhampton Wanderers')[0].title).toBe('Wolverhampton Wanderers');
     fireEvent.click(screen.getByRole('button',{name:'Settings'}));
     fireEvent.click(screen.getByRole('tab',{name:'Appearance'}));
@@ -325,7 +323,8 @@ describe('focused usability refinements',()=>{
     const broken={...structuredClone(mockSnapshot.matches[0]),kickoff:'not-a-date'};
     await load({...structuredClone(mockSnapshot),matches:[broken]});
     render(<App/>);
-    fireEvent.click(screen.getByRole('button',{name:/Enable all alerts/}));
+    fireEvent.click(screen.getByRole('button',{name:/Match alerts: Arsenal versus Chelsea/}));
+    fireEvent.click(screen.getByRole('button',{name:'On'}));
     await waitFor(()=>expect(useApp.getState().snapshot?.settings.matchAlerts[broken.id]?.enabled).toBe(true));
     expect(useApp.getState().snapshot?.settings.matchAlerts[broken.id]?.expiresAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });

@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
   await page.route('https://**/*', route => route.abort());
   await installBridge(page);
   await page.goto('/');
-  await expect(page.getByRole('button',{name:'Match details: Arsenal versus Chelsea'})).toBeVisible();
+  await expect(page.getByRole('button',{name:/Match details:.*Arsenal.*Chelsea/})).toBeVisible();
 });
 
 test('explores filters, bells, search and details', async ({ page }) => {
@@ -17,13 +17,17 @@ test('explores filters, bells, search and details', async ({ page }) => {
     await expect(page.getByRole('button',{name:/^Match details:/}).first()).toBeVisible();
   }
   await page.getByRole('button',{name:'All',exact:true}).click();
-  await page.getByRole('button',{name:/Enable all alerts.*Arsenal versus Chelsea/}).click();
-  await expect(page.getByRole('button',{name:/Mute match alerts.*Arsenal versus Chelsea/})).toHaveAttribute('aria-pressed','true');
-  await page.getByRole('button',{name:/Mute match alerts.*Arsenal versus Chelsea/}).click();
-  await expect(page.getByRole('button',{name:/Enable all alerts \(match muted\).*Arsenal versus Chelsea/})).toBeVisible();
-  await page.getByRole('button',{name:'Match details: Arsenal versus Chelsea'}).click();
+  await page.getByRole('button',{name:/Match alerts: Arsenal versus Chelsea/}).click();
+  await expect(page.getByRole('button',{name:'Team default',exact:true})).toHaveAttribute('aria-pressed','true');
+  await page.getByRole('button',{name:'On',exact:true}).click();
+  await expect(page.getByRole('button',{name:'On',exact:true})).toHaveAttribute('aria-pressed','true');
+  await page.getByRole('button',{name:'Muted',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Muted',exact:true})).toHaveAttribute('aria-pressed','true');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:/Match details:.*Arsenal.*Chelsea/}).click();
   await page.getByRole('button',{name:/^Match alerts: /}).click();
-  await page.getByRole('button',{name:'Use team settings'}).click();
+  await page.getByRole('button',{name:'Team default',exact:true}).click();
+  await page.keyboard.press('Escape');
   for (const name of ['Overview','Commentary','Stats','Lineups']) {
     await page.getByRole('tab',{name,exact:true}).click();
     await expect(page.getByRole('tabpanel',{name})).toBeVisible();
@@ -34,11 +38,12 @@ test('explores filters, bells, search and details', async ({ page }) => {
   await page.getByRole('tab',{name:'Lineups'}).press('Home');
   await expect(page.getByRole('tab',{name:'Overview'})).toBeFocused();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('button',{name:'Match details: Arsenal versus Chelsea'})).toBeFocused();
+  await expect(page.getByRole('button',{name:/Match details:.*Arsenal.*Chelsea/})).toBeFocused();
   await page.getByRole('button',{name:'Settings',exact:true}).click();
   await page.getByRole('searchbox',{name:'Search clubs'}).fill('no club matches this');
   await expect(page.getByText(/No clubs match/)).toBeVisible();
-  await page.getByRole('button',{name:'Clear search'}).click();
+  await page.getByRole('searchbox',{name:'Search clubs'}).press('Escape');
+  await expect(page.getByRole('searchbox',{name:'Search clubs'})).toHaveValue('');
   await expect(page.getByRole('searchbox',{name:'Search clubs'})).toBeFocused();
   await expect(page.getByRole('button',{name:'Arsenal',exact:true})).toBeVisible();
   await page.getByRole('tab',{name:'Teams'}).press('End');
@@ -46,14 +51,14 @@ test('explores filters, bells, search and details', async ({ page }) => {
   await expect(page.getByRole('region',{name:'Demo controls'})).toHaveCount(0);
   await page.getByRole('button',{name:'Back to matches'}).click();
   await page.getByRole('button',{name:'Upcoming',exact:true}).click();
-  await page.getByRole('button',{name:'Match details: Manchester City versus Manchester United'}).click();
+  await page.getByRole('button',{name:/Match details:.*Manchester City.*Manchester United/}).click();
   await expect(page.getByText('Lineups and live coverage appear closer to kick-off.')).toBeVisible();
-  await expect(page.getByRole('tab',{name:'Stats'})).toHaveAttribute('aria-disabled','true');
+  await page.getByRole('tab',{name:'Stats'}).click();
+  await expect(page.getByRole('tabpanel',{name:'Stats'})).toBeVisible();
 });
 
 test('following-only empty state explains the filter and offers recovery', async ({ page }) => {
   await page.getByRole('button',{name:'Settings',exact:true}).click();
-  await page.getByText('Following only',{exact:true}).click();
   for(const club of ['Arsenal','Chelsea','Liverpool','Manchester City','Manchester United','Tottenham Hotspur']) {
     const button=page.getByRole('button',{name:club,exact:true});
     await expect(button).toHaveAttribute('aria-pressed','true');
@@ -61,10 +66,11 @@ test('following-only empty state explains the filter and offers recovery', async
     await expect(button).toHaveAttribute('aria-pressed','false');
   }
   await page.getByRole('button',{name:'Back to matches'}).click();
-  await expect(page.getByRole('heading',{name:'No followed-team matches'})).toBeVisible();
+  await page.getByRole('button',{name:'Following',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'No matches involving followed clubs'})).toBeVisible();
   await page.getByRole('button',{name:'Show all matches'}).click();
-  await expect(page.getByRole('button',{name:'Match details: Arsenal versus Chelsea'})).toBeVisible();
-  await expect(page.getByRole('button',{name:'Following only'})).toHaveAttribute('aria-pressed','false');
+  await expect(page.getByRole('button',{name:/Match details:.*Arsenal.*Chelsea/})).toBeVisible();
+  await expect(page.getByRole('button',{name:'All',exact:true})).toHaveAttribute('aria-pressed','true');
 });
 
 for (const width of [320,390]) for (const theme of ['dark','light']) for (const compact of [false,true]) {
@@ -87,7 +93,7 @@ for (const width of [320,390]) for (const theme of ['dark','light']) for (const 
       await page.screenshot({path:info.outputPath(`${width}-${theme}-${compact}-${opacity}-settings.png`),animations:'disabled'});
       await page.getByRole('button',{name:'Back to matches'}).click();
       await page.screenshot({path:info.outputPath(`${width}-${theme}-${compact}-${opacity}-home.png`),animations:'disabled'});
-      await page.getByRole('button',{name:'Match details: Arsenal versus Chelsea'}).click();
+      await page.getByRole('button',{name:/Match details:.*Arsenal.*Chelsea/}).click();
       for(const section of ['Commentary','Stats','Lineups']) {
         await page.getByRole('tab',{name:section,exact:true}).click();
         expect(await page.locator('.detail-body').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);

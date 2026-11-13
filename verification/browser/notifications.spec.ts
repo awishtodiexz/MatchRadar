@@ -11,14 +11,14 @@ test('a pending notification opens its match on startup despite hidden league an
  await expect(page.getByRole('tab',{name:'Overview',exact:true})).toHaveAttribute('aria-selected','true');
  await page.getByRole('button',{name:'Back to matches'}).click();
  await expect(page.getByRole('button',{name:/Competition: Champions League/})).toBeVisible();
- await expect(page.getByRole('button',{name:'Following only',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(page.getByRole('button',{name:'Following',exact:true})).toHaveAttribute('aria-pressed','true');
 });
 
 test('notification clicks switch matches and reset an already open match to its Overview',async({page})=>{
  await page.route('https://**/*',route=>route.abort());
  await installBridge(page);
  await page.goto('/');
- await page.getByRole('button',{name:'Match details: Arsenal versus Chelsea'}).click();
+ await page.getByRole('button',{name:/Match details:.*Arsenal.*Chelsea/}).click();
  await page.getByRole('tab',{name:'Stats',exact:true}).click();
  await page.evaluate(id=>window.dispatchEvent(new CustomEvent('test:notification-click',{detail:id})),mockSnapshot.matches[1].id);
  await expect(page.locator('.versus')).toContainText('Liverpool');

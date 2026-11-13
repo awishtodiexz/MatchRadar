@@ -186,14 +186,15 @@ pub enum Theme {
     #[default]
     Dark,
     Light,
+    System,
 }
 impl<'de> Deserialize<'de> for Theme {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let value = serde_json::Value::deserialize(deserializer)?;
-        Ok(if value.as_str() == Some("light") {
-            Self::Light
-        } else {
-            Self::Dark
+        Ok(match value.as_str() {
+            Some("light") => Self::Light,
+            Some("system") => Self::System,
+            _ => Self::Dark,
         })
     }
 }
@@ -625,6 +626,9 @@ mod tests {
         let round_trip: Settings =
             serde_json::from_str(&serde_json::to_string(&light).unwrap()).unwrap();
         assert_eq!(round_trip, light);
+        let system: Settings = serde_json::from_str(r#"{"theme":"system"}"#).unwrap();
+        assert_eq!(system.theme, Theme::System);
+        assert_eq!(serde_json::to_value(&system).unwrap()["theme"], "system");
         assert_eq!(
             serde_json::from_str::<Settings>("{\"opacity\":-1}")
                 .unwrap()

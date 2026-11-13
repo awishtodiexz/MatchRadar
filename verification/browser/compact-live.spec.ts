@@ -17,7 +17,7 @@ for(const width of [320,390]) test(`compact real ESPN summary ${width}`,async({p
  await page.route('https://**/*',route=>route.abort());
  await installBridge(page,{snapshot:{...mockSnapshot,matches:[match]},summary});
  await page.goto('/');
- await page.getByRole('button',{name:'Match details: Brighton & Hove Albion versus Brentford'}).click();
+ await page.getByRole('button',{name:/Match details:.*Brighton & Hove Albion.*Brentford/}).click();
  await expect(page.locator('.match-events .event')).toHaveCount(15);
  await expect(page.locator('.match-events').getByText('Diego G\u00f3mez',{exact:false})).toBeVisible();
  expect(await page.locator('.detail-body').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);

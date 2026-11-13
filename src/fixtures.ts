@@ -1,8 +1,6 @@
 import type { Match } from './types';
 
 export const isLive = (match: Match) => match.status === 'live' || match.status === 'halftime';
-// Mirrors Rust's `active`: a suspended game is still in progress and can resume,
-// so it sits with live games even though it is not counted or styled as live.
 export const isInProgress = (match: Match) => isLive(match) || match.status === 'suspended';
 // A saved kickoff can be structurally valid JSON yet unparseable (damaged disk
 // write, legacy format). Keep that fixture visible under its own group instead
@@ -14,14 +12,16 @@ const kickoffTime = (kickoff: string) => {
 };
 const groupDayLabel = new Intl.DateTimeFormat(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
 
-export function groupFixtures(matches: Match[], favorites: string[], now = new Date()) {
+export function groupFixtures(matches: Match[], favorites: string[], now = new Date(), sort: 'fixtures' | 'results' = 'fixtures') {
   const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
   const followed = (m: Match) => favorites.includes(m.home.id) || favorites.includes(m.away.id);
   const ordered = matches.slice().sort((a, b) =>
     Number(isInProgress(b)) - Number(isInProgress(a)) ||
     // Within the in-progress group, games being played lead paused ones.
     Number(isLive(b)) - Number(isLive(a)) ||
-    (dayKey(new Date(a.kickoff)) === dayKey(new Date(b.kickoff))
+    (sort === 'results'
+      ? (Number.isFinite(Date.parse(a.kickoff)) ? 0 : 1) - (Number.isFinite(Date.parse(b.kickoff)) ? 0 : 1) || kickoffTime(b.kickoff) - kickoffTime(a.kickoff)
+      : dayKey(new Date(a.kickoff)) === dayKey(new Date(b.kickoff))
       ? Number(followed(b)) - Number(followed(a)) || kickoffTime(a.kickoff) - kickoffTime(b.kickoff)
       : kickoffTime(a.kickoff) - kickoffTime(b.kickoff)) || a.id.localeCompare(b.id));
   const groups = new Map<string, { label: string; matches: Match[] }>();

@@ -1,6 +1,6 @@
 import type { Match } from '../types';
 import { Badge } from './WidgetUi';
-import { relativeDay, timeLabel } from '../presentation';
+import { relativeDay, resultLabel, timeLabel } from '../presentation';
 import { teamCode } from '../teams';
 
 // Slim ticker mode: one match, a draggable strip above it, and a single click to expand.
@@ -21,7 +21,7 @@ export function TickerView({match,onExpand}:{match:Match|null;onExpand:()=>void}
       <span className="ticker-meta"><i className="dot"/>{match.status==='halftime'?'HT':(match.detail||'LIVE').toUpperCase()}</span>
     </> : match.status==='fulltime' ? <>
       <strong className="ticker-score">{score}</strong>
-      <span className="ticker-meta">FT</span>
+      <span className="ticker-meta">{resultLabel(match)}</span>
     </> : <>
       <strong className="ticker-score">{timeLabel(match.kickoff)}</strong>
       <span className="ticker-meta">{(match.detail||match.status).toUpperCase()}</span>

@@ -44,4 +44,15 @@ describe('local fixture dates', () => {
     expect(groups.map(g => g.label)).toEqual(['TOMORROW', 'DATE UNAVAILABLE']);
     expect(groups[1].matches.map(m => m.id)).toEqual(['broken']);
   });
+  it('orders results newest first, including within a day, with unknown dates last', () => {
+    const matches = [fixture('early', 29, 9, true), fixture('old', 28, 20), fixture('late', 29, 20), {...fixture('unknown', 29, 12), kickoff:'invalid'}];
+    const groups = groupFixtures(matches, ['followed'], new Date(2026, 9, 30), 'results');
+    expect(groups.map(group => group.matches.map(match => match.id))).toEqual([['late', 'early'], ['old'], ['unknown']]);
+  });
+  it('treats playing, halftime and suspended matches as in progress', () => {
+    for (const status of ['live', 'halftime', 'suspended'] as const) {
+      expect(isInProgress({...fixture(status, 28, 12), status})).toBe(true);
+    }
+    expect(isInProgress(fixture('scheduled', 28, 12))).toBe(false);
+  });
 });

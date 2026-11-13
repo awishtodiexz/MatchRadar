@@ -28,7 +28,7 @@ summary.events.push(...commentary);
 for(const [width,theme] of [[320,'light'],[390,'dark']] as const) test(`comprehensive match details ${width} ${theme}`,async({page},info)=>{
  await page.setViewportSize({width,height:760});await page.route('https://**/*',route=>route.abort());
  await installBridge(page,{snapshot:{...mockSnapshot,matches:[match],settings:{...mockSnapshot.settings,theme}},summary});await page.goto('/');
- await page.getByRole('button',{name:'Match details: Brighton & Hove Albion versus Brentford'}).click();
+ await page.getByRole('button',{name:/Match details:.*Brighton & Hove Albion.*Brentford/}).click();
  await expect(page.locator('.overview-intro')).toHaveCount(0);
  await expect(page.locator('.match-events .summary-icon[aria-label="Substitution"]')).toHaveCount(10);
  await expect(page.locator('.incident-score').last()).toHaveText('2–0');

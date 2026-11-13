@@ -26,7 +26,7 @@ async function open(page: import('@playwright/test').Page, match:Match, data:Mat
   await page.route('https://**/*',route=>route.abort());
   await installBridge(page,{snapshot:{...mockSnapshot,matches:[match],settings:{...mockSnapshot.settings,theme}},summary:data});
   await page.goto('/');
-  await page.getByRole('button',{name:`Match details: ${match.home.name} versus ${match.away.name}`}).click();
+  await page.getByRole('button',{name:new RegExp(`Match details:.*${match.home.name}.*${match.away.name}`)}).click();
 }
 
 test('commentary keeps stoppage time in order and key filters keep period markers',async({page},info)=>{

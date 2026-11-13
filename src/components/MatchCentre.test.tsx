@@ -26,7 +26,7 @@ it('uses the existing tabs to access Stats and Commentary without repeated Overv
  fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getByRole('table',{name:'Team statistics'})).toBeTruthy();
  fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));expect(screen.getByText('Verified provider goal')).toBeTruthy();
 });
-it('omits unavailable sections rather than displaying empty tabs',()=>{const old=state.data;state.data={...old,events:[],statistics:[],players:[]};render(<MatchCentre match={mockSnapshot.matches[0]}/>);expect(screen.queryByRole('tab',{name:'Commentary'})).toBeNull();expect(screen.getByRole('region',{name:'Match information'})).toBeTruthy();state.data=old;});
+it('keeps sections available when their data is empty',()=>{const old=state.data;state.data={...old,events:[],statistics:[],players:[]};render(<MatchCentre match={mockSnapshot.matches[0]}/>);expect(screen.getByRole('tab',{name:'Commentary'})).toBeTruthy();expect(screen.getByRole('region',{name:'Match information'})).toBeTruthy();state.data=old;});
 it('retains visible detail content without inserting a skeleton during a refresh',()=>{
  state.loading=true;render(<MatchCentre match={mockSnapshot.matches[0]}/>);
  expect(screen.queryByLabelText('Loading match details')).toBeNull();
@@ -37,7 +37,7 @@ it('shows a supplied venue and clear pre-match copy without empty tabs',()=>{
  const old=state.data;state.data={...old,venue:'Villa Park',events:[],statistics:[],players:[]};
  render(<MatchCentre match={{...mockSnapshot.matches[0],status:'scheduled'}}/>);
  expect(screen.getByText('Villa Park')).toBeTruthy();expect(screen.getByText('Lineups and live coverage appear closer to kick-off.')).toBeTruthy();
- expect(screen.queryByRole('tab',{name:'Commentary'})).toBeNull();state.data=old;
+ expect(screen.getByRole('tab',{name:'Commentary'})).toBeTruthy();state.data=old;
 });
 
 it('compares each statistic once and distinguishes a missing value from zero',()=>{
@@ -264,12 +264,12 @@ it('explains why a complete starting XI has no formation pitch',()=>{
  expect(screen.getByText('Formation unavailable for this lineup.')).toBeTruthy();
  state.data=old;
 });
-it('shows Lineups and Stats as disabled placeholder tabs before kick-off',()=>{
+it('shows available empty states before kick-off',()=>{
  const old=state.data;state.data={...old,events:[],statistics:[],players:[]};
  render(<MatchCentre match={{...mockSnapshot.matches[0],status:'scheduled'}}/>);
- for(const name of ['Lineups','Stats']){const tab=screen.getByRole('tab',{name});expect(tab.getAttribute('aria-disabled')).toBe('true');expect(tab.getAttribute('title')).toBe('Available closer to kick-off');}
  fireEvent.click(screen.getByRole('tab',{name:'Stats'}));
- expect(screen.getByRole('tab',{name:'Overview'}).getAttribute('aria-selected')).toBe('true');
+ expect(screen.getByRole('tab',{name:'Stats'}).getAttribute('aria-selected')).toBe('true');
+ expect(screen.getByText('Statistics are not available for this match.')).toBeTruthy();
  expect(screen.queryByRole('table',{name:'Team statistics'})).toBeNull();state.data=old;
 });
 it('forces a cache-bypassing details refresh from the Overview freshness line',async()=>{
@@ -375,7 +375,7 @@ it("writes added time as 90+11' in commentary and gives every event its team cre
  expect(screen.getByText("90+11'")).toBeTruthy();expect(screen.queryByText("90'+11'")).toBeNull();
  expect(container.querySelectorAll('.event-team[role="img"]')).toHaveLength(2);
  expect(screen.getByRole('img',{name:'Arsenal'})).toBeTruthy();expect(screen.getByRole('img',{name:'Chelsea'})).toBeTruthy();
- expect(container.textContent).not.toMatch(/\bARS\b|\bCHE\b/);
+ expect(container.querySelectorAll('.event-team')[0].textContent).toBe('ARS');expect(container.querySelectorAll('.event-team')[1].textContent).toBe('CHE');
 });
 it('words the Overview freshness line relatively with the absolute time as a tooltip',()=>{
  const now=new Date(Date.now()-9*60*1000).toISOString();
