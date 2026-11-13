@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dateLabel, matchButtonId, timeLabel } from './presentation';
+import { dateLabel, matchButtonId, timeLabel, timeParts } from './presentation';
 
 // Persisted state is validated structurally, not semantically: a valid JSON
 // snapshot can still carry a damaged timestamp after a partial disk write.
@@ -15,7 +15,15 @@ describe('date labels tolerate damaged timestamps', () => {
   });
   it('formats valid timestamps and builds stable encoded element ids', () => {
     expect(dateLabel('2026-10-31T12:00:00Z')).toMatch(/31/);
-    expect(timeLabel('2026-10-31T12:00:00Z')).toMatch(/\d{2}:\d{2}/);
+    expect(timeLabel('2026-10-31T12:00:00Z')).toMatch(/^\d{1,2}:\d{2}/);
     expect(matchButtonId('abc:123')).toBe('match-open-abc%3A123');
+  });
+});
+
+describe('time labels', () => {
+  it('splits the meridiem from the clock so it can be styled separately', () => {
+    expect(timeParts('2:30 PM')).toEqual(['2:30', ' PM']);
+    expect(timeParts('12:05\u202fam')).toEqual(['12:05', '\u202fam']);
+    expect(timeParts('14:30')).toEqual(['14:30', '']);
   });
 });

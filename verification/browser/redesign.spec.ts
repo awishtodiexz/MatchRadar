@@ -76,7 +76,7 @@ for(const width of [320,390]) test(`review regressions remain readable at ${widt
   await page.getByRole('tab',{name:'Lineups',exact:true}).click();
   const midfielder=page.locator('.lineup-group').filter({has:page.getByRole('heading',{name:'Midfielders',exact:true})});
   await expect(midfielder).toContainText('Test Player 6');
-  const bench=page.locator('.lineup-list li').filter({hasText:'Bench Midfielder'});
+  const bench=page.locator('.lineup-list li').filter({has:page.locator('.bench-name',{hasText:/^Bench Midfielder/})});
   await expect(bench.locator('.sub-marker.on')).toHaveAttribute('title',"Substituted on at 60'");
   await expect(bench.locator('.sub-marker.off')).toHaveAttribute('title',"Substituted off at 80'");
   await bench.scrollIntoViewIfNeeded();

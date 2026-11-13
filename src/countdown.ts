@@ -46,3 +46,14 @@ export function useNow(intervalMs: number, enabled = true): Date {
   }, [intervalMs, enabled]);
   return now;
 }
+
+// One-unit countdown for the narrow score slot of a fixture row: "8d", "5h", "40m".
+export function shortCountdown(kickoff: string, now: Date = new Date()): string | null {
+  const at = new Date(kickoff).getTime();
+  if (Number.isNaN(at)) return null;
+  const diff = at - now.getTime();
+  if (diff <= SOON) return 'Soon';
+  if (diff < HOUR) return `${Math.floor(diff / MINUTE)}m`;
+  if (diff < DAY) return `${Math.floor(diff / HOUR)}h`;
+  return `${Math.floor(diff / DAY)}d`;
+}

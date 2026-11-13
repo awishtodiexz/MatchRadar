@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### UI and UX polish
+
+- Fixture list: tab counts with empty tabs dimmed, "Your clubs" / "Other matches" labels when followed clubs lead a day, "7 matches" group counts, a short countdown in place of the empty score, denser rows, and a Matchday header that collapses on scroll.
+- Times follow the locale without zero padding ("2:30 PM"), added time reads "90+7'", and freshness reads "Updated 2m ago".
+- The global-shortcut conflict notice is shown once and dismisses itself.
+- Match centre: one proportional bar per statistic with a key-stats default; a merged bench list with substitution minutes, dimmed unused subs and pitch badges; one commentary filter with distinct event icons and team crests; labelled VAR moments; a clear red-card colour.
+- Unambiguous team codes (MUN / MCI), "This match" vs "This season" team leaders, "Now" on current-table pills for past matches, themed dropdowns and sentence-case micro-labels.
+
 ## 1.0.0 — 2026-11-12
 
 Initial public release.

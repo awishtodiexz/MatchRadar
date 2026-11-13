@@ -102,7 +102,7 @@ describe('widget controls', () => {
   await useApp.getState().load();
   expect(screen.getByRole('button', {name:'Enable all alerts (match muted): Arsenal versus Chelsea'}).getAttribute('aria-pressed')).toBe('false');
   expect(screen.getByRole('heading', {name:/LIVE NOW/})).toBeTruthy();
-  expect(screen.getByText(/approximately the next 14 days/)).toBeTruthy();
+  expect(screen.getByText(/next 14 days/)).toBeTruthy();
   fireEvent.click(screen.getByRole('button', {name:'Settings'}));
   fireEvent.click(screen.getByText('Alerts', {exact:true}));
   fireEvent.click(screen.getByText('Reset match bells to team defaults'));

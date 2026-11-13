@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Match } from '../types';
 import type { MatchSummary } from '../useMatchSummary';
+import { teamCode } from '../teams';
 
 type Stat = MatchSummary['statistics'][number];
 type Pair = { name:string; home?:Stat; away?:Stat };
@@ -30,6 +31,9 @@ const LABELS: Record<string,string> = {
   foulsCommitted:'Fouls',offsides:'Offsides',yellowCards:'Yellow cards',redCards:'Red cards',
 };
 
+// The curated default view; the full list is one toggle away.
+export const KEY_STATS = ['expectedGoals','possessionPct','totalShots','shotsOnTarget','bigChanceCreated','wonCorners','totalPasses','passPct','foulsCommitted','yellowCards','redCards','offsides'];
+
 const NEGATIVE = new Set(['foulsCommitted','yellowCards','redCards','offsides','duelsLost','aerialsLost','dispossessed','ppda','expectedGoalsOnTargetConceded']);
 
 const numeric = (value?:string) => {
@@ -40,6 +44,9 @@ const numeric = (value?:string) => {
 };
 
 const scale = (name:string, value:number) => name !== 'possessionPct' && name.endsWith('Pct') && value > 0 && value <= 1 ? value * 100 : value;
+
+/** Home share (0–1) of a two-sided bar; an empty 0–0 stat splits evenly. */
+export const statSplit = (home:number, away:number) => home+away>0 ? Math.round(home/(home+away)*10000)/10000 : 0.5;
 
 export const formatStatisticValue = (name:string, stat?:Stat) => {
   if(!stat) return '—';
@@ -55,6 +62,7 @@ export const formatStatisticValue = (name:string, stat?:Stat) => {
 
 export function MatchStats({match,statistics}:{match:Match;statistics:MatchSummary['statistics']}) {
   const [group,setGroup]=useState('All');
+  const [expanded,setExpanded]=useState(false);
   const byName = new Map<string,Pair>();
   for(const stat of statistics) {
     if(stat.teamId!==match.home.id && stat.teamId!==match.away.id) continue;
@@ -72,29 +80,33 @@ export function MatchStats({match,statistics}:{match:Match;statistics:MatchSumma
 
   if(!sections.length) return <p className="field-note">Statistics are not available for this match.</p>;
 
+  const total=byName.size;
+  const keyRows=KEY_STATS.map(key=>byName.get(key)).filter((pair):pair is Pair=>Boolean(pair));
   const active=sections.some(section=>section.title===group)?group:'All';
-  const visibleSections=sections.filter(section=>active==='All'||section.title===active);
+  // Only trim the default view when there is something to hide; a short list shows whole.
+  const curated=active==='All'&&!expanded&&keyRows.length>0&&keyRows.length<total;
+  const visibleSections=curated?[{title:'Key statistics',rows:keyRows}]:sections.filter(section=>active==='All'||section.title===active);
   const visibleCount=visibleSections.reduce((count,section)=>count+section.rows.length,0);
-  return <><div className="stats-toolbar"><span>{active==='All'?`Match totals · ${byName.size} ${byName.size===1?'metric':'metrics'}`:`${active} · ${visibleCount} ${visibleCount===1?'metric':'metrics'}`}</span><select aria-label="Statistic group" value={active} onChange={event=>setGroup(event.target.value)}><option value="All">All statistics</option>{sections.map(section=><option key={section.title}>{section.title}</option>)}</select></div><div className="stat-comparison" role="table" aria-label="Team statistics">
-    <div className="stat-teams" role="row"><strong role="columnheader" aria-label={match.home.name} title={match.home.name}>{match.home.short||match.home.name}</strong><span role="columnheader">Statistic</span><strong role="columnheader" aria-label={match.away.name} title={match.away.name}>{match.away.short||match.away.name}</strong></div>
+  const metrics=(count:number)=>`${count} ${count===1?'metric':'metrics'}`;
+  const summary=curated?`Key statistics · ${visibleCount} of ${total}`:`${active==='All'?'All statistics':active} · ${metrics(visibleCount)}`;
+  return <><div className="stats-toolbar"><span>{summary}</span><select aria-label="Statistic group" value={active} onChange={event=>setGroup(event.target.value)}><option value="All">All categories</option>{sections.map(section=><option key={section.title}>{section.title}</option>)}</select></div><div className="stat-comparison" role="table" aria-label="Team statistics">
+    <div className="stat-teams" role="row"><strong role="columnheader" aria-label={match.home.name} title={match.home.name}>{teamCode(match.home)||match.home.name}</strong><span role="columnheader">Statistic</span><strong role="columnheader" aria-label={match.away.name} title={match.away.name}>{teamCode(match.away)||match.away.name}</strong></div>
     {visibleSections.map(section=><div className="stat-section" role="rowgroup" key={section.title}>
       <div className="stat-section-title" role="row"><span role="columnheader" aria-colspan={3}>{section.title}</span></div>
       {section.rows.map(pair=>{
         const left=numeric(pair.home?.value),right=numeric(pair.away?.value);
         const leftValue=left===null?null:(pair.home?.value.includes('%')?left:scale(pair.name,left)),rightValue=right===null?null:(pair.away?.value.includes('%')?right:scale(pair.name,right));
         const comparable=leftValue!==null&&rightValue!==null&&leftValue>=0&&rightValue>=0;
-        const peak=comparable?Math.max(leftValue,rightValue):0;
-        const leftWidth=comparable&&peak>0?Math.round((leftValue/peak)*100):0;
-        const rightWidth=comparable&&peak>0?Math.round((rightValue/peak)*100):0;
+        const share=comparable?statSplit(leftValue,rightValue):0.5;
         const homeLeads=comparable&&!NEGATIVE.has(pair.name)&&leftValue>rightValue;
         const awayLeads=comparable&&!NEGATIVE.has(pair.name)&&rightValue>leftValue;
         return <div className="stat-row" role="row" key={pair.name}>
           <span role="cell" className={homeLeads?'stat-leading':undefined}>{formatStatisticValue(pair.name,pair.home)}</span>
           <span role="cell">{LABELS[pair.name]||pair.home?.label||pair.away?.label||pair.name}</span>
           <span role="cell" className={awayLeads?'stat-leading':undefined}>{formatStatisticValue(pair.name,pair.away)}</span>
-          {comparable&&<div className="stat-bar" aria-hidden="true"><span className={'bar-home '+(homeLeads?'winning':'')}><i style={{width:`${leftWidth}%`}}/></span><span className={'bar-away '+(awayLeads?'winning':'')}><i style={{width:`${rightWidth}%`}}/></span></div>}
+          {comparable&&<div className="stat-bar" aria-hidden="true" data-home-share={share.toFixed(3)}>{share>0&&<i className={'bar-home'+(homeLeads?' winning':'')} style={{flexGrow:share}}/>}{share<1&&<i className={'bar-away'+(awayLeads?' winning':'')} style={{flexGrow:Math.round((1-share)*10000)/10000}}/>}</div>}
         </div>;
       })}
     </div>)}
-  </div></>;
+  </div>{active==='All'&&keyRows.length>0&&keyRows.length<total&&<button type="button" className="text-button stats-expand" aria-expanded={expanded} onClick={()=>setExpanded(value=>!value)}>{expanded?'Show key statistics':`Show all ${total} statistics`}</button>}</>;
 }

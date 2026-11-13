@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { installBridge } from './bridge';
 import { mockSnapshot } from '../../src/test-fixtures/fixtures';
 
-// Windows users on a 12-hour locale get "07:45 PM" in the narrow kickoff
+// Windows users on a 12-hour locale get "7:45 PM" in the narrow kickoff
 // column. Keep it on one readable line instead of wrapping into two.
 test.use({locale:'en-US'});
 
@@ -21,7 +21,7 @@ test('12-hour kickoff times stay on one line at 320px', async ({ page }) => {
   await installBridge(page, {snapshot:{...mockSnapshot, matches:[match]}});
   await page.goto('/');
   const time = page.locator('.fixture-time > span').first();
-  await expect(time).toHaveText('07:45 PM');
+  await expect(time).toHaveText('7:45 PM');
   const geometry = await time.evaluate(el => ({
     rects: el.getClientRects().length,
     height: el.getBoundingClientRect().height,

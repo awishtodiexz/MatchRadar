@@ -33,9 +33,9 @@ test('commentary keeps stoppage time in order and key filters keep period marker
  await page.setViewportSize({width:320,height:700});
  await open(page,finished,summary);
  await page.getByRole('tab',{name:'Commentary',exact:true}).click();
- await expect(page.locator('.commentary .event time')).toHaveText(["90'+6'","90'+4'","90'+3'","90'+1'","45'+2'","23'"]);
+ await expect(page.locator('.commentary .event time')).toHaveText(["90+6'","90+4'","90+3'","90+1'","45+2'","23'"]);
  await expect(page.getByText('Second half ends.',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Key events'}).click();
+ await page.getByRole('combobox',{name:'Commentary event type'}).selectOption('key');
  await expect(page.getByText('Foul in 90+3.',{exact:true})).toHaveCount(0);
  await expect(page.getByText('Half-time.',{exact:true})).toBeVisible();
  await expect(page.getByText('Second half ends.',{exact:true})).toBeVisible();
@@ -54,7 +54,7 @@ test('statistics name both teams and keep that header while scrolling',async({pa
  await page.setViewportSize({width:320,height:460});
  await open(page,finished,summary);
  await page.getByRole('tab',{name:'Stats',exact:true}).click();
- await expect(page.getByText('Match totals · 6 metrics')).toBeVisible();
+ await expect(page.getByText('All statistics · 6 metrics')).toBeVisible();
  await expect(page.locator('.stat-teams')).toContainText(finished.home.short);
  await expect(page.locator('.stat-teams')).toContainText(finished.away.short);
  await expect(page.getByRole('columnheader',{name:finished.home.name})).toBeVisible();

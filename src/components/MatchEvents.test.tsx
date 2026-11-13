@@ -68,3 +68,30 @@ it('orders stoppage-time events by the displayed minute when provider clocks dis
  render(<MatchEvents match={match} events={stoppage} commentary newestFirst/>);
  expect(text()).toEqual(['Second half ends','Blocked in 90+4','Foul in 90+3','Offside in 90+1']);
 });
+
+it('shows added time as 90+7\' and labels the event team by crest rather than code',()=>{
+ const {container}=render(<MatchEvents match={match} events={[{id:'a',minute:"90'+7'",period:2,seconds:5820,kind:'foul',text:`Levi Colwill (${match.away.name}) wins a free kick.`,teamId:match.home.id}]} commentary/>);
+ expect(screen.getByText("90+7'")).toBeTruthy();
+ expect(container.querySelector('.event-team')?.getAttribute('aria-label')).toBe(match.home.name);
+});
+it('uses the committing side for a foul even when the provider tagged the fouled side',()=>{
+ const text=`Foul by Someone (${match.home.name}).`;
+ const {container}=render(<MatchEvents match={match} events={[{id:'f',minute:"12'",period:1,seconds:720,kind:'foul',text,teamId:match.away.id}]} commentary/>);
+ expect(container.querySelector('.event')?.classList.contains('home')).toBe(true);
+ expect(container.querySelector('.event-team')?.getAttribute('aria-label')).toBe(match.home.name);
+});
+it('draws a different icon for different kinds of event',()=>{
+ const kinds=['goal','shot-on-target','shot-off-target','foul','corner','offside','yellow-card','substitution','var-decision','kickoff','halftime','end-regular-time'];
+ const icons=kinds.map((kind,i)=>{
+  const {container,unmount}=render(<MatchEvents match={match} events={[{id:String(i),minute:"1'",period:1,seconds:60,kind,text:kind,teamId:null}]} commentary/>);
+  const svg=container.querySelector('.event-kind svg');const markup=svg?.innerHTML??'';unmount();return markup;
+ });
+ expect(new Set(icons).size).toBe(kinds.length);
+});
+it('gives a VAR row in compact view a headline and its detail',()=>{
+ render(<MatchEvents match={match} events={[
+  {id:'v',minute:"34'",period:1,seconds:2040,kind:'var-decision',text:'VAR Decision: Goal disallowed Matheus Cunha (Wolves).',teamId:match.home.id,participants:['Matheus Cunha']},
+  {id:'v2',minute:"61'",period:2,seconds:3660,kind:'var-decision',text:'VAR Decision: No penalty.',teamId:match.away.id}]}/>);
+ expect(screen.getByText('VAR · Goal disallowed')).toBeTruthy();expect(screen.getByText('Matheus Cunha')).toBeTruthy();
+ expect(screen.getByText('VAR · No penalty')).toBeTruthy();expect(screen.getByText('VAR Decision: No penalty.')).toBeTruthy();
+});

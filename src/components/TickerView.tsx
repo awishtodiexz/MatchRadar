@@ -1,6 +1,7 @@
 import type { Match } from '../types';
 import { Badge } from './WidgetUi';
 import { relativeDay, timeLabel } from '../presentation';
+import { teamCode } from '../teams';
 
 // Slim ticker mode: one match, a draggable strip above it, and a single click to expand.
 export function TickerView({match,onExpand}:{match:Match|null;onExpand:()=>void}) {
@@ -8,8 +9,8 @@ export function TickerView({match,onExpand}:{match:Match|null;onExpand:()=>void}
     <p className="ticker-empty">No live or upcoming matches</p>
     <button className="ticker-card ticker-card-empty" onClick={onExpand} title="Expand MatchRadar">Open MatchRadar</button>
   </section>;
-  const home = match.home.short || match.home.name;
-  const away = match.away.short || match.away.name;
+  const home = teamCode(match.home) || match.home.name;
+  const away = teamCode(match.away) || match.away.name;
   const score = `${match.homeScore ?? '–'} – ${match.awayScore ?? '–'}`;
   const live = match.status==='live'||match.status==='halftime';
   const centre = match.status==='scheduled' ? <>

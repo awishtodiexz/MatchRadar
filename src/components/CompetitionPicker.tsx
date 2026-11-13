@@ -5,9 +5,9 @@ import { CompetitionMark } from './WidgetUi';
 import type { CompetitionView } from '../types';
 
 const options: Array<{value: CompetitionView; label: string; short: string}> = [
-  {value:'premierLeague', label:'Premier League', short:'ENGLAND'},
-  {value:'championsLeague', label:'Champions League', short:'EUROPE'},
-  {value:'both', label:'Both competitions', short:'ALL FIXTURES'}
+  {value:'premierLeague', label:'Premier League', short:'England'},
+  {value:'championsLeague', label:'Champions League', short:'Europe'},
+  {value:'both', label:'Both competitions', short:'All fixtures'}
 ];
 
 export function CompetitionPicker({value, onChange, disabled=false}: {
@@ -74,7 +74,7 @@ export function CompetitionPicker({value, onChange, disabled=false}: {
         }
       }}>
       <span aria-hidden="true"><CompetitionMark league={value}/></span>
-      <span className="competition-copy"><b><span className="competition-long">{current.label}</span><span className="competition-short">{current.value==='both'?'Both':current.label}</span></b><small aria-hidden="true">{current.short} · MATCH CENTRE</small></span>
+      <span className="competition-copy"><b><span className="competition-long">{current.label}</span><span className="competition-short">{current.value==='both'?'Both':current.label}</span></b><small aria-hidden="true">{current.short} · Match centre</small></span>
       <ChevronDown size={14} aria-hidden="true"/>
     </button>
     {open && <div className="competition-menu" role="listbox" aria-label="Competition">

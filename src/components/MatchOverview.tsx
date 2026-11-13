@@ -4,7 +4,8 @@ import type { Match } from '../types';
 import type { MatchScorer, MatchSummary } from '../useMatchSummary';
 import { MatchEvents } from './MatchEvents';
 import { isGoal, isIncident } from './matchEventKinds';
-import { closedNote, isForfeit } from '../presentation';
+import { closedNote, formatMinute, isForfeit } from '../presentation';
+import { teamCode } from '../teams';
 
 function goalScorers(data:MatchSummary|null):MatchScorer[] {
   const goals=data?.events.filter(event=>isGoal(event.kind))??[];
@@ -50,11 +51,11 @@ export function MatchOverview({match,data}:{match:Match;data:MatchSummary|null})
   const facts=[
     competition&&{key:'competition',icon:<Trophy size={14}/>,label:'Competition',value:competition,sub:competitionSub||undefined},
     data?.venue&&{key:'venue',icon:<MapPin size={14}/>,label:'Stadium',value:data.venue,sub:[data.venueCity,data.capacity&&`Capacity ${data.capacity.toLocaleString()}`].filter(Boolean).join(' · ')},
-    !!broadcasts.length&&{key:'broadcast',icon:<Tv size={14}/>,label:'Broadcast',value:broadcasts.slice(0,3).join(' · '),sub:broadcasts.length>3?`+${broadcasts.length-3} more`:undefined,title:broadcasts.join(' · ')},
+    !!broadcasts.length&&{key:'broadcast',icon:<Tv size={14}/>,label:'Broadcast',value:broadcasts.slice(0,3).join(' · '),sub:broadcasts.length>3?`+${broadcasts.length-3} more`:undefined,title:broadcasts.join(' · '),clamp:true},
     referee&&{key:'referee',icon:<Flag size={14}/>,label:'Referee',value:referee},
     (celsius!==null||condition)&&{key:'weather',icon:weatherIcon,label:'Kick-off weather',value:celsius!==null?`${celsius}°C`:condition,sub:celsius!==null&&condition?condition:undefined},
     data?.attendance!=null&&Number.isFinite(data.attendance)&&{key:'attendance',icon:<Users size={14}/>,label:'Attendance',value:data.attendance.toLocaleString()},
-  ].filter(Boolean) as Array<{key:string;icon:ReactNode;label:string;value:string;sub?:string;title?:string}>;
+  ].filter(Boolean) as Array<{key:string;icon:ReactNode;label:string;value:string;sub?:string;title?:string;clamp?:boolean}>;
   const note=match.status==='scheduled'?'Lineups and live coverage appear closer to kick-off.'
     :match.status==='postponed'?'This match has been postponed.'
     :match.status==='cancelled'?closedNote(match)
@@ -66,12 +67,12 @@ export function MatchOverview({match,data}:{match:Match;data:MatchSummary|null})
       const grouped=new Map<string,string[]>();
       for(const scorer of scorers.filter(scorer=>scorer.teamId===team.id)) {
         const minutes=grouped.get(scorer.name)??[];
-        const minute=scorer.minute?`${scorer.minute.replace(/[′']$/,'')}′`:'Time unavailable';
+        const minute=scorer.minute?formatMinute(scorer.minute):'Time unavailable';
         minutes.push(`${minute}${scorer.penalty?' (pen)':''}${scorer.ownGoal?' (OG)':''}`);
         grouped.set(scorer.name,minutes);
       }
       const score=index===0?match.homeScore:match.awayScore;
-      return <section key={team.id} aria-label={`${team.name} scorers`}><span className="overview-team" title={team.name}>{team.short}</span>
+      return <section key={team.id} aria-label={`${team.name} scorers`}><span className="overview-team" title={team.name}>{teamCode(team)}</span>
         {grouped.size?<ul>{[...grouped].map(([name,minutes])=><li key={name}><strong>{name}</strong><span>{minutes.join(', ')}</span></li>)}</ul>:<p>{score===0?'No goals':'Scorers unavailable'}</p>}
       </section>;
     })}</div>:<p className="overview-goalless">{match.status==='fulltime'?'No goals in this match.':'No goals yet.'}</p>}</OverviewCard>}
@@ -79,7 +80,7 @@ export function MatchOverview({match,data}:{match:Match;data:MatchSummary|null})
     <OverviewCard title="Match information" label="Match information" className="match-information">
       {facts.length?<dl>{facts.map(fact=><div key={fact.key}>
         <dt><span className="ov-icon" aria-hidden="true">{fact.icon}</span>{fact.label}</dt>
-        <dd title={fact.title}><strong>{fact.value}</strong>{fact.sub&&<small>{fact.sub}</small>}</dd>
+        <dd title={fact.title} className={fact.clamp?'ov-clamp':undefined}><strong>{fact.value}</strong>{fact.sub&&<small>{fact.sub}</small>}</dd>
       </div>)}</dl>:<p className="ov-empty">Venue and officials have not been announced yet.</p>}
     </OverviewCard>
   </article>;

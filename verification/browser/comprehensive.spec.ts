@@ -55,7 +55,7 @@ for(const [width,theme] of [[320,'light'],[390,'dark']] as const) test(`comprehe
  expect(await page.locator('.commentary .event time').first().textContent()).not.toBe(oldest);
  await page.getByRole('combobox',{name:'Commentary event type'}).selectOption('shots');
  expect(await page.locator('.commentary .event').count()).toBeGreaterThan(10);
- await page.getByRole('button',{name:'All',exact:true}).click();
+ await page.getByRole('combobox',{name:'Commentary event type'}).selectOption('all');
  expect(await page.locator('.commentary .event').count()).toBeGreaterThan(80);
  expect(await page.locator('.detail-body').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
  await page.screenshot({path:info.outputPath('commentary.png')});

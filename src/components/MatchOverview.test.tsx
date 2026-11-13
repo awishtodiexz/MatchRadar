@@ -31,7 +31,7 @@ it('shows structured incidents instead of repeating the scorer list and excludes
     ]});
   expect(container.querySelectorAll('.match-events .event')).toHaveLength(2);
   expect(container.querySelectorAll('.overview-scorers li')).toHaveLength(0);
-  expect(screen.getByText('23′')).toBeTruthy();
+  expect(screen.getByText("23'")).toBeTruthy();
   expect(screen.getByText("45+2'")).toBeTruthy();
   expect(screen.queryByText('Other Player')).toBeNull();expect(screen.queryByText('Keeper')).toBeNull();
 
@@ -118,4 +118,20 @@ it('reduces ESPN leader strings to the category figure with appearances as conte
  expect(leaderStat('Assists','Matches: 10, Assists: 3')).toEqual({main:'3',apps:'10'});
  expect(leaderStat('Shots','38')).toEqual({main:'38'});
  expect(leaderStat('Rating','n/a')).toEqual({main:'n/a'});
+});
+
+it("writes added time as 90+7' and names VAR rows in key moments",()=>{
+ show(base,{...data,events:[
+  {id:'g',teamId:base.home.id,minute:"90'+7'",period:2,seconds:5820,kind:'goal',text:'Late goal.',participants:['Late Scorer']},
+  {id:'v',teamId:base.away.id,minute:"34'",period:1,seconds:2040,kind:'var-decision',text:'VAR Decision: Goal disallowed Matheus Cunha (Wolves).',participants:['Matheus Cunha']},
+ ]});
+ expect(screen.getByText("90+7'")).toBeTruthy();expect(screen.queryByText("90'+7'")).toBeNull();
+ expect(screen.getByText('VAR · Goal disallowed')).toBeTruthy();expect(screen.getByText('Matheus Cunha')).toBeTruthy();
+});
+
+it('clamps a long broadcast value to two lines with the full list in a tooltip instead of cutting it',()=>{
+ show({...base,competition:'Premier League'},{...data,broadcasts:['USA Network','Telemundo Deportes']});
+ const value=screen.getByText('USA Network · Telemundo Deportes');
+ expect(value.closest('dd')?.classList.contains('ov-clamp')).toBe(true);
+ expect(value.closest('dd')?.getAttribute('title')).toBe('USA Network · Telemundo Deportes');
 });

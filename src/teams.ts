@@ -43,3 +43,8 @@ export function competitionLogoCandidates(league: 'premierLeague' | 'championsLe
   const dark = `/i/leaguelogos/soccer/500-dark/${id}.png`;
   return (theme === 'dark' ? [dark, base] : [base, dark]).map(combined);
 }
+
+const clubCodes = new Map(clubs.map(club => [club.id, club.short]));
+// ESPN abbreviates both Manchester clubs as "MAN" in some feeds; known clubs use
+// their unambiguous three-letter code, anything else keeps the provider's.
+export const teamCode = (team: Team) => clubCodes.get(team.id) ?? team.short;

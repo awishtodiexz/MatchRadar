@@ -26,7 +26,7 @@ for(const width of [320,390]) test(`compact real ESPN summary ${width}`,async({p
  for(const row of await page.locator('.match-events .event').all()) expect((await row.boundingBox())?.height).toBeLessThanOrEqual(54);
  await page.screenshot({path:info.outputPath('summary.png')});
  await page.getByRole('tab',{name:'Lineups',exact:true}).click();
- await expect(page.locator('.coach-row')).toContainText('Not provided by ESPN');
+ await expect(page.locator('.coach-row')).toHaveCount(0);
  await expect(page.locator('.pitch-shirt')).toHaveCount(11);
  await expect(page.locator('.pitch-row').first()).toContainText('Kostoulas');
  await expect(page.locator('.pitch-player img')).toHaveCount(0);

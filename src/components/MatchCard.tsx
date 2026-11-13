@@ -5,6 +5,7 @@ import { isLive } from '../fixtures';
 import type { Match, Settings } from '../types';
 import { Badge } from './WidgetUi';
 import { closedNote, isAbandoned, isForfeit, matchButtonId, timeLabel } from '../presentation';
+import { countdownLabel, shortCountdown } from '../countdown';
 
 const clockText = (detail:string) => {
   const stoppage = detail.match(/^(\d+)'\+(\d+)'?$/);
@@ -35,7 +36,7 @@ function alertPresentation(settings:Settings, match:Match) {
   return {state, ended, cancelled, closed, postponed, description, enabled:state==='on', label:state==='on'?'All alerts on':state==='muted'?'Muted':'Team settings'};
 }
 
-export function MatchCard({match, settings, onOpen, showCompetition=false}: {match:Match; settings:Settings; onOpen:()=>void; showCompetition?:boolean}) {
+export function MatchCard({match, settings, onOpen, showCompetition=false, now}: {match:Match; settings:Settings; onOpen:()=>void; showCompetition?:boolean; now?:Date}) {
   const save = useApp(state=>state.save);
   const alerts = alertPresentation(settings, match);
   const detailId = useId();
@@ -64,7 +65,7 @@ export function MatchCard({match, settings, onOpen, showCompetition=false}: {mat
       </div>)}</div>
       <div className={'match-state '+(isLive(match)&&!match.scoreStale?'is-live':'')} aria-hidden="true">
         <div className={'result '+(match.status==='scheduled'?'scheduled':'')}>
-          {match.status==='scheduled' ? <span className="scheduled-score">–</span>
+          {match.status==='scheduled' ? <span className="scheduled-score" title={countdownLabel(match.kickoff, now)??undefined}>{shortCountdown(match.kickoff, now) ?? '–'}</span>
             : <div className="scores"><strong>{match.homeScore ?? '–'}</strong><strong>{match.awayScore ?? '–'}</strong></div>}
         </div>
       </div><span id={detailId} className="sr-only">{cardDetail}</span><ChevronRight size={13} className="row-arrow" aria-hidden="true"/>
@@ -72,7 +73,7 @@ export function MatchCard({match, settings, onOpen, showCompetition=false}: {mat
     <button className="icon-button match-bell" data-alert-state={alerts.state} aria-label={alerts.ended?`Match ended: ${name}`:alerts.cancelled?`Match ${isAbandoned(match)?'abandoned':'cancelled'}: ${name}`:`${action}: ${name}`} aria-pressed={alerts.enabled}
       title={title} disabled={alerts.closed}
       onClick={()=>void save({matchAlerts:{...settings.matchAlerts,[match.id]:{enabled:!alerts.enabled,expiresAt:alertExpiry(match.kickoff)}}})}>
-      {alerts.enabled?<BellRing size={16}/>:alerts.state==='muted'?<BellOff size={16}/>:<Bell size={16}/>}
+      {alerts.enabled?<BellRing size={16} fill="currentColor"/>:alerts.state==='muted'?<BellOff size={16}/>:<Bell size={16}/>}
     </button>
   </article>;
 }

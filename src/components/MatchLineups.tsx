@@ -1,7 +1,9 @@
 import { useId, useState } from 'react';
-import { ArrowDown, ArrowUp } from 'lucide-react';
 import type { Match } from '../types';
 import type { MatchSummary } from '../useMatchSummary';
+import { formatMinute } from '../presentation';
+import { FootballIcon } from './MatchEvents';
+import { isCard, isGoal } from './matchEventKinds';
 
 const groups = ['Goalkeepers','Defenders','Midfielders','Forwards','Other positions'] as const;
 type Group = typeof groups[number];
@@ -40,16 +42,65 @@ function buildPitch(players:MatchSummary['players'],formation?:string):PitchData
   return cursor===10 ? {lines,keeper,formation} : null;
 }
 
-function LineupPitch({team,pitch}:{team:Match['home'];pitch:PitchData}) {
+type Player = MatchSummary['players'][number];
+type Sub = NonNullable<MatchSummary['substitutions']>[number];
+export interface PlayerMarks { goals:number; yellow:number; red:boolean; off?:string; notes:string[] }
+
+/** Goals, cards and the substitution that took a player off, from the event feed. */
+export function playerMarks(name:string, teamId:string, events:MatchSummary['events'], subs:Sub[]):PlayerMarks {
+  const marks:PlayerMarks={goals:0,yellow:0,red:false,notes:[]};
+  for(const event of events) {
+    if(event.participants?.[0]!==name||(event.teamId&&event.teamId!==teamId)) continue;
+    const minute=formatMinute(event.minute);
+    if(isGoal(event.kind)) {marks.goals++;marks.notes.push(`Goal ${minute}`);}
+    else if(isCard(event.kind)) {
+      if(/red|second-yellow/i.test(event.kind)) {marks.red=true;marks.notes.push(`Red card ${minute}`);}
+      else {marks.yellow++;marks.notes.push(`Yellow card ${minute}`);}
+    }
+  }
+  const off=subs.find(sub=>sub.playerOut===name);
+  if(off) {marks.off=off.minute;marks.notes.push(`Subbed off ${formatMinute(off.minute)}`);}
+  return marks;
+}
+
+function LineupPitch({team,pitch,marksFor}:{team:Match['home'];pitch:PitchData;marksFor:(name:string)=>PlayerMarks}) {
   const lines = [...pitch.lines].reverse().concat([[pitch.keeper]]);
   return <div className="lineup-pitch" aria-hidden="true">
     <span className="pitch-halfway"/><span className="pitch-circle"/>
     <span className="pitch-box pitch-box-top"/><span className="pitch-box pitch-box-bottom"/>
-    {lines.map((line,index)=><div className="pitch-row" key={index}>{line.map(player=><span className="pitch-player" key={player.formationPlace} title={`${team.name} · #${player.jersey||'–'} ${player.name}`}>
-      <span className={'pitch-shirt '+(player===pitch.keeper?'is-keeper':'')}>{player.jersey||'–'}</span>
-      <span className="pitch-name">{player.name.split(' ').slice(-1).join(' ')}</span>
-    </span>)}</div>)}
+    {lines.map((line,index)=><div className="pitch-row" key={index}>{line.map(player=>{
+      const marks=marksFor(player.name);
+      return <span className="pitch-player" key={player.formationPlace} title={`${team.name} · #${player.jersey||'–'} ${player.name}${marks.notes.length?` · ${marks.notes.join(', ')}`:''}`}>
+        <span className="pitch-shirt-wrap">
+          <span className={'pitch-shirt '+(player===pitch.keeper?'is-keeper':'')}>{player.jersey||'–'}</span>
+          {marks.goals>0&&<span className="pitch-badge badge-goal"><FootballIcon size={13}/>{marks.goals>1&&<b>{marks.goals}</b>}</span>}
+          {(marks.yellow>0||marks.red)&&<span className="pitch-badge badge-cards">{marks.yellow>0&&<i className="card-yellow"/>}{marks.red&&<i className="card-red"/>}</span>}
+          {marks.off&&<span className="pitch-badge badge-off">↓{formatMinute(marks.off)}</span>}
+        </span>
+        <span className="pitch-name">{player.name.split(' ').slice(-1).join(' ')}</span>
+      </span>;
+    })}</div>)}
   </div>;
+}
+
+/** Order of introduction: "90'+7'" sorts after "90'". */
+const minuteOrder = (minute:string) => {
+  const match=/(\d+)(?:\D+(\d+))?/.exec(minute);
+  return match?Number(match[1])*100+Number(match[2]??0):Infinity;
+};
+const jerseyOrder = (player:{jersey?:string|null}) => {const n=Number.parseInt(player.jersey??'',10);return Number.isFinite(n)?n:Infinity;};
+export interface BenchRow { key:string; name:string; jersey?:string|null; position:string; on?:Sub; off?:Sub; used:boolean }
+
+/** Used substitutes first in the order they came on, then the unused ones by shirt number. */
+export function benchRows(substitutes:Player[], subs:Sub[], squad:Player[]=substitutes):BenchRow[] {
+  const rows:BenchRow[]=substitutes.map((player,index)=>{
+    const on=subs.find(sub=>sub.playerIn===player.name);
+    return {key:`${player.name}-${index}`,name:player.name,jersey:player.jersey,position:/^sub$/i.test(player.position.trim())?'':player.position,on,off:subs.find(sub=>sub.playerOut===player.name),used:!!on||!!player.subbedIn};
+  });
+  // A substitution whose player is missing from the squad list must not vanish with the old Substitutions section.
+  for(const sub of subs) if(!squad.some(player=>player.name===sub.playerIn)) rows.push({key:`sub-${sub.minute}-${sub.playerIn}`,name:sub.playerIn,position:'',on:sub,off:subs.find(other=>other.playerOut===sub.playerIn),used:true});
+  const rank = (row:BenchRow) => row.on?0:row.used?1:2;
+  return rows.sort((a,b)=>rank(a)-rank(b)||(rank(a)===0?minuteOrder(a.on!.minute)-minuteOrder(b.on!.minute):0)||(rank(a)===2?jerseyOrder(a)-jerseyOrder(b):0)||a.name.localeCompare(b.name));
 }
 
 function PlayerList({players, substitutions}: {players:MatchSummary['players']; substitutions:NonNullable<MatchSummary['substitutions']>}) {
@@ -63,14 +114,14 @@ function PlayerList({players, substitutions}: {players:MatchSummary['players']; 
         return <li key={`${player.name}-${index}`}>
           {player.jersey && <span className="jersey">#{player.jersey}</span>}
           <span>{player.name}</span>
-          <small>{player.position}{off&&<span className="sub-marker off" title={`Substituted off at ${off.minute}`}> ↓ {off.minute}</span>}{on&&<span className="sub-marker on" title={`Substituted on at ${on.minute}`}> ↑ {on.minute}</span>}{!on&&!off&&player.subbedOut?' · off':!on&&!off&&player.subbedIn?' · on':''}</small>
+          <small>{player.position}{off&&<span className="sub-marker off" title={`Substituted off at ${formatMinute(off.minute)}`}> ↓ {formatMinute(off.minute)}</span>}{on&&<span className="sub-marker on" title={`Substituted on at ${formatMinute(on.minute)}`}> ↑ {formatMinute(on.minute)}</span>}{!on&&!off&&player.subbedOut?' · off':!on&&!off&&player.subbedIn?' · on':''}</small>
         </li>;
       })}</ul>
     </div> : null;
   })}</>;
 }
 
-export function MatchLineups({match,players,substitutions=[],formations={},coaches=[]}: {match:Match;players:MatchSummary['players'];substitutions?:MatchSummary['substitutions'];formations?:Record<string,string>;coaches?:MatchSummary['coaches']}) {
+export function MatchLineups({match,players,substitutions=[],formations={},coaches=[],events=[]}: {match:Match;players:MatchSummary['players'];substitutions?:MatchSummary['substitutions'];formations?:Record<string,string>;coaches?:MatchSummary['coaches'];events?:MatchSummary['events']}) {
   const sectionId = useId();
   const teams = [match.home, match.away];
   const [teamId,setTeamId] = useState<string|null>(null);
@@ -86,6 +137,8 @@ export function MatchLineups({match,players,substitutions=[],formations={},coach
   // ESPN sometimes omits the team on a substitution; infer it from the players
   // instead of showing the same substitution under both teams.
   const teamSubs = substitutions.filter(sub => (sub.teamId || playerTeam(sub.playerIn) || playerTeam(sub.playerOut)) === active.id);
+  const coachNames=coaches.filter(coach=>coach.teamId===active.id&&coach.name.trim()).map(coach=>coach.name).join(', ');
+  const bench=benchRows(substitutes,teamSubs,selected);
   return <div className="lineups">
     <div className="lineup-tabs" role="tablist" aria-label="Lineups by team">
       {teams.map(team=><button key={team.id} role="tab" id={sectionId+'-tab-'+team.id} aria-selected={active.id===team.id}
@@ -105,22 +158,16 @@ export function MatchLineups({match,players,substitutions=[],formations={},coach
     </div>
     <div role="tabpanel" id={sectionId+'-panel'} aria-labelledby={sectionId+'-tab-'+active.id} tabIndex={0}>
       <div className="lineup-heading"><h3>{active.name}</h3>{formation&&<span className="formation">{formation}</span>}</div>
-      <div className="coach-row"><span>Coach</span><strong>{coaches.filter(coach=>coach.teamId===active.id).map(coach=>coach.name).join(', ')||'Not provided by ESPN'}</strong></div>
-      {pitch&&<LineupPitch team={active} pitch={pitch}/>}
+      {coachNames&&<div className="coach-row"><span>Coach</span><strong>{coachNames}</strong></div>}
+      {pitch&&<LineupPitch team={active} pitch={pitch} marksFor={name=>playerMarks(name,active.id,events,teamSubs)}/>}
       {!pitch&&starters.length===11&&<p className="field-note">Formation unavailable for this lineup.</p>}
       {!selected.length&&<p className="field-note">Lineup unavailable</p>}
       {starters.length>0&&<><h4>Starting XI <small className="kickoff-note">at kickoff</small></h4><PlayerList players={starters} substitutions={teamSubs}/></>}
       {starters.length===0&&selected.length>0&&<><h4>Squad</h4><PlayerList players={selected} substitutions={teamSubs}/></>}
-      {substitutes.length>0&&<><h4>Substitutes</h4><ul className="lineup-list">{substitutes.sort(byPlace).map((player,index)=>{
-        const on=teamSubs.find(sub=>sub.playerIn===player.name);
-        const off=teamSubs.find(sub=>sub.playerOut===player.name);
-        return <li key={`${player.name}-${index}`}>
-          {player.jersey&&<span className="jersey">#{player.jersey}</span>}<span>{player.name}</span><small>{player.position}{on&&<span className="sub-marker on" title={`Substituted on at ${on.minute}`}> ↑ {on.minute}</span>}{!on&&player.subbedIn?' · on':''}{off&&<span className="sub-marker off" title={`Substituted off at ${off.minute}`}> ↓ {off.minute}</span>}{!off&&player.subbedOut?' · off':''}</small>
-        </li>;
-      })}</ul></>}
-      {!!teamSubs.length&&<><h4>Substitutions</h4><ul className="subs-list">{teamSubs.map(sub=><li key={`${sub.minute}-${sub.playerIn}-${sub.playerOut}`}>
-        <time>{sub.minute}</time>
-        <div><span className="sub-in"><ArrowUp size={11} aria-hidden="true"/>{sub.playerIn}</span><span className="sub-out"><ArrowDown size={11} aria-hidden="true"/>for {sub.playerOut}</span></div>
+      {bench.length>0&&<><h4>Substitutes</h4><ul className="lineup-list bench-list">{bench.map(row=><li key={row.key} className={row.used?undefined:'is-unused'}>
+        {row.jersey&&<span className="jersey">#{row.jersey}</span>}
+        <span className="bench-name">{row.name}{row.on&&<small className="sub-for">for {row.on.playerOut}</small>}</span>
+        <small>{row.position}{row.on&&<span className="sub-marker on" title={`Substituted on at ${formatMinute(row.on.minute)}`}>↑ {formatMinute(row.on.minute)}</span>}{!row.on&&row.used&&' · on'}{row.off&&<span className="sub-marker off" title={`Substituted off at ${formatMinute(row.off.minute)}`}>↓ {formatMinute(row.off.minute)}</span>}</small>
       </li>)}</ul></>}
     </div>
   </div>;

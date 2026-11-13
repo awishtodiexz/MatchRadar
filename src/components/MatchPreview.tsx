@@ -2,6 +2,7 @@ import type { Match, Team } from '../types';
 import type { MatchSummary } from '../useMatchSummary';
 import { Badge } from './WidgetUi';
 import { OverviewCard } from './MatchOverview';
+import { teamCode } from '../teams';
 
 type Leader = NonNullable<MatchSummary['leaders']>[number];
 type FormGame = NonNullable<MatchSummary['form']>[string][number];
@@ -90,7 +91,7 @@ function FormRow({team,games}:{team:Team;games:FormGame[]}) {
   const {w,d,l}=tally(games);
   return <div className="form-row">
     <Badge team={team}/>
-    <div className="form-name"><strong title={team.name}>{team.short}</strong>
+    <div className="form-name"><strong title={team.name}>{teamCode(team)}</strong>
       {latest&&<small>Last: {latest.atHome?'vs':'@'} {latest.opponent} {latest.score&&formScore(latest.score,latest.atHome)}</small>}
     </div>
     <div className="form-side">
@@ -130,20 +131,20 @@ export function MatchPreview({match,data}:{match:Match;data:MatchSummary|null}) 
     {shares&&match.status==='scheduled'&&data?.predictor&&<OverviewCard title="Matchup predictor" label="Matchup predictor"
       note="ESPN projection">
       <div className="predictor-labels">
-        <span className="predictor-home"><Badge team={match.home}/><b>{match.home.short}</b><strong>{shares[0]}%</strong></span>
+        <span className="predictor-home"><Badge team={match.home}/><b>{teamCode(match.home)}</b><strong>{shares[0]}%</strong></span>
         <span className="predictor-draw">Draw <strong>{shares[1]}%</strong></span>
-        <span className="predictor-away"><strong>{shares[2]}%</strong><b>{match.away.short}</b><Badge team={match.away}/></span>
+        <span className="predictor-away"><strong>{shares[2]}%</strong><b>{teamCode(match.away)}</b><Badge team={match.away}/></span>
       </div>
       <div className="predictor-bar" role="img" aria-label={`${match.home.name} ${shares[0]}%, draw ${shares[1]}%, ${match.away.name} ${shares[2]}%`}>
         <i className="home" style={{flexGrow:shares[0],minWidth:shares[0]?2:0}}/><i className="draw" style={{flexGrow:shares[1],minWidth:shares[1]?2:0}}/><i className="away" style={{flexGrow:shares[2],minWidth:shares[2]?2:0}}/>
       </div>
     </OverviewCard>}
-    {!!formTeams.length&&<OverviewCard title="Form" note="Last five · latest right" label="Form">
+    {!!formTeams.length&&<OverviewCard title="Form" note="Last five · newest on the right" label="Form">
       <div className="form-list">{formTeams.map(team=><FormRow key={team.id} team={team} games={data?.form?.[team.id]??[]}/>)}</div>
     </OverviewCard>}
-    {!!categories.length&&<OverviewCard title="Team leaders" note="This season" label="Team leaders">
+    {!!categories.length&&<OverviewCard title="Team leaders" note={match.status==='scheduled'?'This season':'This match'} label="Team leaders">
       <div className="leader-teams" aria-hidden="true">
-        <span><Badge team={match.home}/>{match.home.short}</span><span>{match.away.short}<Badge team={match.away}/></span>
+        <span><Badge team={match.home}/>{teamCode(match.home)}</span><span>{teamCode(match.away)}<Badge team={match.away}/></span>
       </div>
       <ul className="leader-rows">{rows.map(({category,home,away})=>{
         const homeValue=home?numeric(leaderStat(category,home.value).main):NaN;
