@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup,render,screen } from '@testing-library/react';
+import { cleanup,fireEvent,render,screen } from '@testing-library/react';
 import { afterEach,expect,it,vi } from 'vitest';
 import { MatchDetails } from './MatchDetails';
 import { defaults,mockMatches } from '../test-fixtures/fixtures';
@@ -7,6 +7,17 @@ import { dateLabel,timeLabel } from '../presentation';
 const summary = vi.hoisted(()=>({data:null as unknown}));
 vi.mock('../useMatchSummary',()=>({useMatchSummary:()=>({data:summary.data,loading:false,error:null,retry:vi.fn()})}));
 afterEach(()=>{cleanup();summary.data=null;});
+
+it('uses a compact scoreboard for lineups and restores the full header on Overview',()=>{
+ const match=mockMatches[4];
+ render(<MatchDetails match={match} settings={defaults} back={()=>{}}/>);
+ fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));
+ expect(document.querySelector('.detail-hero')?.hasAttribute('hidden')).toBe(true);
+ expect(document.querySelector('.mini-score')?.getAttribute('aria-label')).toContain(match.home.name);
+ expect(document.querySelector('.mini-score small')?.textContent).toBe('FULL-TIME');
+ fireEvent.click(screen.getByRole('tab',{name:'Overview'}));
+ expect(document.querySelector('.detail-hero')?.hasAttribute('hidden')).toBe(false);
+});
 
 it.each([['FT','FULL-TIME'],['AET','AFTER EXTRA TIME'],['PEN','AFTER PENALTIES'],['Forfeit','FORFEIT']])('identifies a completed %s result in Match Centre', (detail,label)=>{
  render(<MatchDetails match={{...mockMatches[0],status:'fulltime',detail}} settings={defaults} back={()=>{}}/>);

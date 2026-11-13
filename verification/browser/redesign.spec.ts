@@ -74,6 +74,7 @@ for(const width of [320,390]) test(`review regressions remain readable at ${widt
   await expect(row.locator('.stat-leading')).toHaveText('99%');
   await page.screenshot({path:info.outputPath('low-possession.png')});
   await page.getByRole('tab',{name:'Lineups',exact:true}).click();
+  await page.locator('.lineup-roster summary').click();
   const midfielder=page.locator('.lineup-group').filter({has:page.getByRole('heading',{name:'Midfielders',exact:true})});
   await expect(midfielder).toContainText('Test Player 6');
   const bench=page.locator('.lineup-list li').filter({has:page.locator('.bench-name',{hasText:/^Bench Midfielder/})});

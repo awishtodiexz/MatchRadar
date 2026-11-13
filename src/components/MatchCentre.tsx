@@ -19,7 +19,7 @@ export function MatchCentre({match}:{match:Match}) {
 }
 
 /** Match centre driven by a summary the parent already owns (one poller per match). */
-export function MatchCentreView({match,summary}:{match:Match;summary:MatchSummaryState}) {
+export function MatchCentreView({match,summary,onSectionChange}:{match:Match;summary:MatchSummaryState;onSectionChange?:(section:string)=>void}) {
   const {loading,error,retry}=summary;
   const data=summary.data;
   const [selected,setSelected]=useState('Overview');
@@ -34,7 +34,12 @@ export function MatchCentreView({match,summary}:{match:Match;summary:MatchSummar
   const resetFilters=()=>setEventType('all');
   const select=(name:string)=>{
     setSelected(name);
-    requestAnimationFrame(()=>document.querySelector<HTMLElement>('.detail-body')?.scrollTo({top:0}));
+    onSectionChange?.(name);
+    requestAnimationFrame(()=>{
+      const body=document.querySelector<HTMLElement>('.detail-body');
+      const centre=body?.querySelector<HTMLElement>('.match-centre');
+      if(body)body.scrollTo({top:name==='Lineups'&&centre?body.scrollTop+centre.getBoundingClientRect().top-body.getBoundingClientRect().top:0});
+    });
   };
   return <section className="match-centre" aria-label="Match centre" aria-busy={loading}>
     <div className="centre-tabs scoped-tabs" role="tablist" aria-label="Match centre sections">{tabs.map((name,index)=><button key={name} role="tab" id={sectionId+'-'+name} aria-controls={sectionId+'-panel'} aria-selected={tab===name} tabIndex={tab===name?0:-1} onClick={()=>select(name)} onKeyDown={event=>{
@@ -42,13 +47,13 @@ export function MatchCentreView({match,summary}:{match:Match;summary:MatchSummar
       if(next===undefined)return;event.preventDefault();select(tabs[next]);document.getElementById(sectionId+'-'+tabs[next])?.focus();
     }}>{name}</button>)}</div>
     <div className="centre-panel" role="tabpanel" id={sectionId+'-panel'} aria-labelledby={sectionId+'-'+tab} tabIndex={0}>
+    {data&&<div className="detail-freshness"><span title={Number.isNaN(Date.parse(data.updatedAt))?undefined:`${dateLabel(data.updatedAt)} ${timeLabel(data.updatedAt)}`}>{data.stale?'Saved details · updated':'Match details updated'} {relativeAge(data.updatedAt)}</span><button type="button" className="icon-button refresh-details" aria-label="Refresh match details" title="Refresh lineups, statistics and commentary" onClick={()=>void summary.refresh()} disabled={summary.refreshing||loading} aria-busy={summary.refreshing}><RefreshCw size={13} className={summary.refreshing?'spin':''}/></button></div>}
     {loading&&!data&&<div className="skeletons" role="status" aria-label="Loading match details"><div/></div>}
     {error&&<p role="status">{error} <button className="text-button" onClick={retry}>Retry details</button></p>}
 
     {tab==='Overview'&&(!loading||data)&&<>
       <MatchOverview match={match} data={data}/>
       <MatchPreview match={match} data={data}/>
-      {data&&<div className="overview-freshness"><span title={Number.isNaN(Date.parse(data.updatedAt))?undefined:`${dateLabel(data.updatedAt)} ${timeLabel(data.updatedAt)}`}>{data.stale?'Saved details · updated':'Match details updated'} {relativeAge(data.updatedAt)}</span><button type="button" className="icon-button refresh-details" aria-label="Refresh match details" title="Refresh match details" onClick={()=>void summary.refresh()} disabled={summary.refreshing} aria-busy={summary.refreshing}><RefreshCw size={12} className={summary.refreshing?'spin':''}/></button></div>}
     </>}
     {tab==='Commentary'&&(!loading||data)&&<>
       <div className="timeline-toolbar">

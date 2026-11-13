@@ -131,5 +131,5 @@ MatchRadar is released under the [MIT License](LICENSE). Match data, club crests
 ---
 
 <p align="center">
-  <sub><a href="CHANGELOG.md">Changelog</a> · <a href="https://github.com/awishtodiexz/MatchRadar/releases">Releases</a> · <a href="https://github.com/awishtodiexz/MatchRadar/issues">Issues</a> · <a href=".github/SECURITY.md">Security</a> · <a href="LICENSE">License</a></sub>
+  <sub><a href="https://github.com/awishtodiexz/MatchRadar/releases">Releases</a> · <a href="https://github.com/awishtodiexz/MatchRadar/issues">Issues</a> · <a href=".github/SECURITY.md">Security</a> · <a href="LICENSE">License</a></sub>
 </p>

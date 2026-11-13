@@ -14,11 +14,15 @@ vi.mock('../useMatchSummary',async(importOriginal)=>{const actual=await importOr
 const initial=structuredClone(state.data);
 afterEach(()=>{cleanup();state.data=structuredClone(initial);state.loading=false;state.error=null;state.real=false;bridge.invoke.mockReset();});
 it('offers available sections and displays explicit zero stats and player names',()=>{render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));expect(screen.getByText("45+2'")).toBeTruthy();expect(screen.getByText('Verified provider goal')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getByText('0')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));expect(screen.getByText('A long player name')).toBeTruthy();});
-it('keeps the details freshness line on Overview instead of repeating it above every tab',()=>{
+it('offers one details freshness line and refresh action in every section',()=>{
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);
- expect(screen.getByText(/Match details updated/)).toBeTruthy();
- fireEvent.click(screen.getByRole('tab',{name:'Stats'}));
- expect(screen.queryByText(/Match details updated/)).toBeNull();
+ for(const name of ['Overview','Stats','Lineups','Commentary']) {
+  fireEvent.click(screen.getByRole('tab',{name}));
+  expect(screen.getAllByText(/Match details updated/)).toHaveLength(1);
+  const refresh=screen.getByRole('button',{name:'Refresh match details'});
+  fireEvent.click(refresh);
+  expect(state.refresh).toHaveBeenCalled();
+ }
 });
 it('uses the existing tabs to access Stats and Commentary without repeated Overview links',()=>{
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);
@@ -145,7 +149,7 @@ it('draws the selected team formation and changes the pitch with its tab',()=>{
  fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));
  const pitch=document.querySelector('.lineup-pitch');
  expect(pitch).toBeTruthy();
- expect(pitch?.getAttribute('aria-hidden')).toBe('true');
+ expect(pitch?.getAttribute('aria-label')).toBe('Arsenal starting XI at kickoff');
  expect(pitch?.querySelectorAll('.pitch-shirt')).toHaveLength(11);
  expect(pitch?.textContent).toContain('1');
  fireEvent.click(screen.getByRole('tab',{name:/Chelsea/}));
@@ -355,7 +359,8 @@ it('badges pitch players with goals, cards and the minute they were subbed off',
  expect(player(11).getAttribute('title')).toContain("Goal 23'");
  expect(player(3).querySelector('.card-yellow')).toBeTruthy();expect(player(3).querySelector('.card-red')).toBeNull();
  expect(player(4).querySelector('.card-red')).toBeTruthy();
- expect(player(9).querySelector('.badge-off')?.textContent).toBe("↓74'");
+  expect(player(9).querySelector('.badge-off')?.textContent).toBe("74'");
+  expect(player(9).getAttribute('aria-label')).toContain("Subbed off 74'");
  expect(player(5).querySelector('.pitch-badge')).toBeNull();
  expect(player(1).querySelector('.pitch-badge')).toBeNull();
 });

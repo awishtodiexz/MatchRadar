@@ -59,7 +59,7 @@ try {
         throw "Windows validation for $head has not succeeded. Wait for CI before publishing."
     }
 
-    $notes = "Unsigned Windows x64 installer for MatchRadar $version.`n`nSee CHANGELOG.md for details.`n`nSHA-256: $hash`n`nRequires 64-bit Windows 10/11 with the WebView2 runtime. Quit MatchRadar from the tray before installing. There is no auto-updater; future updates install over this version. If Windows shows a SmartScreen warning, choose More info, then Run anyway."
+    $notes = "Unsigned Windows x64 installer for MatchRadar $version.`n`nSHA-256: $hash`n`nRequires 64-bit Windows 10/11 with the WebView2 runtime. Quit MatchRadar from the tray before installing. There is no auto-updater; future updates install over this version. If Windows shows a SmartScreen warning, choose More info, then Run anyway."
     $notesPath = Join-Path $installer.DirectoryName "release-notes.txt"
     [IO.File]::WriteAllText($notesPath, $notes, [Text.UTF8Encoding]::new($false))
     gh release create $Tag "$($installer.FullName)#MatchRadar $version installer" `

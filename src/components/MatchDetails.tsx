@@ -36,6 +36,7 @@ function TablePill({team, standings, current}:{team:Team; standings?:MatchSummar
 export function MatchDetails({match, settings, back}: {match:Match; settings:Settings; back:()=>void}) {
   const save = useApp(state=>state.save);
   const [collapsed,setCollapsed] = useState(false);
+  const [lineupView,setLineupView] = useState(false);
   const hero = useRef<HTMLDivElement>(null);
   const live = isLive(match);
   // Single summary owner for the page: the hero reads standings, the centre reads everything else.
@@ -56,11 +57,11 @@ export function MatchDetails({match, settings, back}: {match:Match; settings:Set
     <div className="detail-route">
       <button className="back-link" onClick={back} aria-label="Back to matches" title="Back to matches (Esc)"><ArrowLeft size={16}/>Matches</button>
       <h2 className="sr-only" data-view-heading tabIndex={-1}>Match details</h2>
-      {collapsed?<div className="mini-score" aria-label={`${match.home.name} ${score} ${match.away.name}, ${statusText}`}><span>{teamCode(match.home)}</span><strong>{score}</strong><span>{teamCode(match.away)}</span></div>:<div className="detail-league"><CompetitionMark league={match.league}/><span>{match.competition}</span></div>}
+      {collapsed||lineupView?<div className="mini-score" aria-label={`${match.home.name} ${score} ${match.away.name}, ${statusText}`}><Badge team={match.home}/><span>{teamCode(match.home)}</span><div><strong>{score}</strong><small>{statusText}</small></div><span>{teamCode(match.away)}</span><Badge team={match.away}/></div>:<div className="detail-league"><CompetitionMark league={match.league}/><span>{match.competition}</span></div>}
       <MatchAlertsButton match={match} settings={settings}/>
     </div>
-    <div className="detail-body" onScroll={event=>setCollapsed(event.currentTarget.scrollTop >= (hero.current?.offsetHeight??180)-24)}>
-      <div className={'detail-hero'+(live?' is-live':'')} ref={hero}>
+    <div className="detail-body" onScroll={event=>{if(!lineupView)setCollapsed(event.currentTarget.scrollTop >= (hero.current?.offsetHeight??180)-24);}}>
+      <div className={'detail-hero'+(live?' is-live':'')} ref={hero} hidden={lineupView}>
       <div className="versus">
         <div className={winner==='away'?'is-beaten':undefined}><span className="crest-ring"><Badge team={match.home}/></span><b title={match.home.name}>{match.home.name}</b><small>Home</small><FollowTeam team={match.home} settings={settings} save={save}/><TablePill team={match.home} standings={summary.data?.standings} current={!scheduled&&!live}/></div>
         <div className="detail-score">
@@ -71,7 +72,7 @@ export function MatchDetails({match, settings, back}: {match:Match; settings:Set
       </div>
       <p className="detail-date">{scheduled?<Countdown kickoff={match.kickoff}/>:<time dateTime={match.kickoff}>{dateLabel(match.kickoff)}{showKickoff?'':` · ${timeLabel(match.kickoff)}`}</time>}{context&&<> · {context}</>}</p>
       </div>
-      <MatchCentreView key={match.id} match={match} summary={summary}/>
+      <MatchCentreView key={match.id} match={match} summary={summary} onSectionChange={section=>{setLineupView(section==='Lineups');setCollapsed(false);}}/>
     </div>
   </>;
 }

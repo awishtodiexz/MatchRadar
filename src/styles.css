@@ -122,10 +122,11 @@ select option {background-color:var(--surface-solid);color:var(--text);}
 .settings-tabs {padding:0 var(--gutter);}
 .lineup-tabs {display:flex;gap:6px;}
 .lineup-tab {min-width:0;min-height:32px;padding:6px 10px;border-radius:var(--radius-control);background:var(--surface);color:var(--muted);font-size:var(--font-body);}
-.lineup-tab {display:flex;align-items:center;gap:8px;flex:1;}
-.lineup-tab span {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.lineup-tab small {margin-left:auto;font-size:var(--font-xs);}
-.lineup-tab[aria-selected=true] {background:var(--accent-soft);color:var(--accent);}
+.lineup-tab {display:flex;align-items:center;gap:7px;flex:1;border:1px solid transparent;}
+.lineup-tab .lineup-team-name {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lineup-tab .badge {width:20px;height:20px;flex:none;font-size:8px;}
+.lineup-tab small {font-size:var(--font-xs);color:var(--muted);}
+.lineup-tab[aria-selected=true] {background:var(--accent-soft);border-color:var(--accent-border);color:var(--accent);}
 
 /* Native settings and preference controls. */
 .subhead {display:flex;align-items:center;gap:8px;padding:12px var(--gutter);}
@@ -189,6 +190,10 @@ select option {background-color:var(--surface-solid);color:var(--text);}
 .mini-score {display:flex;align-items:center;justify-content:center;gap:6px;flex:1;min-width:0;font-size:var(--font-xs);color:var(--muted);}
 .mini-score span {max-width:48px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .mini-score strong {color:var(--text);font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.mini-score .badge {width:19px;height:19px;flex:none;font-size:8px;}
+.mini-score .badge:not(.has-crest) {display:none;}
+.mini-score > div {display:flex;flex-direction:column;align-items:center;min-width:0;}
+.mini-score small {max-width:100%;font-size:8px;line-height:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .match-centre {font-size:var(--font-body);min-height:100%;}
 .match-centre > .centre-tabs {position:sticky;top:0;z-index:10;padding:0 var(--gutter);background:rgb(var(--panel-rgb));}
 .centre-panel {padding:4px var(--gutter) 20px;}
@@ -265,14 +270,33 @@ select option {background-color:var(--surface-solid);color:var(--text);}
 .stat-bar .winning i {background:var(--accent);}
 
 /* A complete selected-team formation, readable at widget widths. */
-.lineup-tabs {margin-top:12px;}
-.lineup-pitch {position:relative;display:flex;flex-direction:column;justify-content:space-around;gap:18px;min-height:350px;padding:20px 8px;border:1px solid var(--pitch-line);border-radius:var(--radius-control);background:var(--pitch-bg);overflow:hidden;}
+.lineup-tabs {position:sticky;top:calc(var(--tabs-height) + 1px);z-index:9;margin-top:0;padding:6px 0;background:rgb(var(--panel-rgb));}
+.lineup-pitch {position:relative;display:flex;flex-direction:column;justify-content:space-around;gap:4px;min-height:320px;padding:10px 8px;border:1px solid var(--pitch-line);border-radius:var(--radius-panel);background:repeating-linear-gradient(180deg,transparent 0,transparent 12.5%,var(--surface-soft) 12.5%,var(--surface-soft) 25%),var(--pitch-bg);overflow:hidden;}
 .lineup-pitch:before {content:'';position:absolute;inset:9px;border:1px solid var(--pitch-line);pointer-events:none;}
 .pitch-row {display:flex;justify-content:space-around;gap:4px;position:relative;z-index:1;}
-.pitch-player {display:flex;flex:1;min-width:0;flex-direction:column;align-items:center;gap:4px;}
+.pitch-player {display:flex;flex:1;min-width:0;flex-direction:column;align-items:center;gap:4px;padding:0 2px;border-radius:var(--radius-control);color:var(--text);}
+.pitch-player:hover,.pitch-player:focus-visible {background:none;}
+.pitch-player:focus-visible {outline:none;}
+.pitch-player:focus-visible .pitch-shirt {outline:2px solid var(--accent);outline-offset:3px;}
+.pitch-player:hover .pitch-shirt {border-color:var(--accent);}
 .pitch-shirt {display:grid;place-items:center;min-width:25px;height:25px;padding:0 4px;border-radius:var(--radius-control);background:var(--accent-soft);border:1px solid var(--accent-border);color:var(--accent);font-size:var(--font-sm);font-weight:650;font-variant-numeric:tabular-nums;}
 .pitch-shirt.is-keeper {color:var(--warning);background:var(--warning-bg);border-color:var(--warning-border);}
-.pitch-name {max-width:100%;font-size:var(--font-sm);line-height:14px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pitch-name {display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;max-width:100%;height:24px;font-size:var(--font-sm);line-height:12px;text-align:center;overflow:hidden;overflow-wrap:anywhere;}
+.pitch-inspection {position:absolute;z-index:2;bottom:4px;left:4px;right:4px;padding:6px 8px;background:var(--surface-solid);border:1px solid var(--border-strong);border-radius:var(--radius-control);font-size:var(--font-sm);pointer-events:none;overflow-wrap:anywhere;}
+.pitch-inspection strong,.pitch-inspection span {display:block;}
+.pitch-inspection span,.pitch-legend {color:var(--muted);font-size:var(--font-xs);}
+.pitch-legend {margin-top:6px;}
+.lineup-heading .kickoff-note {margin-left:6px;white-space:nowrap;}
+.lineups .lineup-heading {margin:0 0 8px;padding:4px 0;background:none;letter-spacing:.03em;}
+.lineups h4 {margin:16px 0 4px;padding:6px 0;background:none;letter-spacing:.04em;}
+.lineup-help {margin-top:8px;color:var(--muted);font-size:var(--font-sm);}
+.lineup-help summary {width:fit-content;min-height:28px;padding:5px 0;cursor:pointer;}
+.lineup-help p {padding:4px 0;line-height:1.5;}
+.lineup-roster {margin-top:12px;}
+.lineup-roster summary {min-height:36px;padding:8px;border:1px solid var(--border-strong);border-radius:var(--radius-control);font-size:var(--font-body);cursor:pointer;}
+.lineup-roster summary small {float:right;color:var(--muted);font-size:var(--font-xs);}
+.lineup-roster summary:focus-visible {outline:2px solid var(--accent);outline-offset:2px;}
+.player-event-notes {display:block;color:var(--muted);font-size:var(--font-xs);}
 .pitch-halfway {position:absolute;left:9px;right:9px;top:50%;border-top:1px solid var(--pitch-line);}
 .pitch-circle {position:absolute;left:calc(50% - 34px);top:calc(50% - 34px);width:68px;height:68px;border:1px solid var(--pitch-line);border-radius:50%;}
 .pitch-box {position:absolute;left:30%;width:40%;height:13%;border:1px solid var(--pitch-line);}
@@ -368,7 +392,7 @@ footer {min-height:44px;display:flex;align-items:center;justify-content:space-be
 @keyframes shimmer {to {background-position:-200% 0;}}
 .reduced * {animation:none!important;transition:none!important;}
 @media(prefers-reduced-motion:reduce) {* {animation:none!important;transition:none!important;}}
-.pitch-shirt {width:38px;height:38px;padding:0;}
+.pitch-shirt {width:28px;height:28px;padding:0;font-size:var(--font-body);border-radius:8px;}
 .coach-row {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 0 10px;font-size:var(--font-sm);color:var(--muted);}
 .coach-row strong {font-weight:500;text-align:right;color:var(--text);}
 
@@ -428,7 +452,10 @@ footer {min-height:44px;display:flex;align-items:center;justify-content:space-be
 .overview-scorers li span {display:block;margin-top:1px;color:var(--muted);font-size:var(--font-sm);font-variant-numeric:tabular-nums;}
 .overview-scorers p,.overview-goalless {color:var(--muted);font-size:var(--font-body);margin:6px 0 0;}
 .overview-goalless {margin:0;}
-.overview-freshness {color:var(--muted);font-size:var(--font-xs);margin:14px 0 0;text-align:center;}
+.detail-freshness {display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:28px;color:var(--muted);font-size:var(--font-sm);}
+.detail-freshness .refresh-details {width:28px;min-width:28px;height:28px;}
+.detail-freshness:has([aria-busy=true]) {color:var(--accent);}
+.detail-hero[hidden] {display:none;}
 
 /* Form: one row per side, pills right-aligned, latest result outlined. */
 .form-list {display:grid;}
@@ -506,7 +533,6 @@ footer {min-height:44px;display:flex;align-items:center;justify-content:space-be
 .match-centre > .centre-tabs.scoped-tabs {gap:4px;}
 .centre-tabs button.tab-upcoming {opacity:.4;cursor:not-allowed;}
 .centre-tabs button.tab-upcoming:hover {color:var(--muted);}
-.overview-freshness {display:flex;align-items:center;justify-content:center;gap:4px;}
 .refresh-details {width:22px;height:22px;border-radius:6px;}
 .refresh-details:hover:not(:disabled) {color:var(--accent);}
 .alert-trigger[data-alert-state=on] {background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent-border);}
@@ -578,7 +604,7 @@ footer {min-height:44px;display:flex;align-items:center;justify-content:space-be
 .event-team .badge {width:16px;height:16px;}
 .event.red .event-kind svg,.red .summary-icon {color:var(--card-red);}
 .event.yellow .event-kind svg,.yellow .summary-icon {color:var(--card-yellow);}
-.pitch-shirt-wrap {position:relative;display:inline-flex;}
+.pitch-shirt-wrap {position:relative;display:inline-flex;height:42px;}
 .pitch-badge {position:absolute;display:inline-flex;align-items:center;line-height:1;font-size:9px;font-weight:700;pointer-events:none;}
 .badge-goal {top:-6px;right:-9px;}
 .badge-goal b {margin-left:1px;color:var(--text);font-size:9px;}
@@ -586,8 +612,9 @@ footer {min-height:44px;display:flex;align-items:center;justify-content:space-be
 .badge-cards i {display:block;width:7px;height:10px;border-radius:1.5px;border:1px solid #0006;}
 .badge-cards .card-yellow {background:var(--card-yellow);}
 .badge-cards .card-red {background:var(--card-red);}
-.badge-off {bottom:-4px;left:-11px;padding:1px 4px;border-radius:7px;background:var(--surface-solid);border:1px solid var(--border-strong);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;}
-.bench-list li.is-unused {opacity:.55;}
+.badge-off {top:29px;left:50%;transform:translateX(-50%);gap:2px;padding:1px 3px;border-radius:5px;background:var(--surface-solid);border:1px solid var(--border-strong);color:var(--text);font-size:10px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.badge-off svg {flex:none;color:var(--warning);}
+.bench-list li.is-unused .bench-name {color:var(--muted);}
 .bench-name {display:flex;flex-direction:column;gap:1px;}
 .lineup-list .sub-for {display:block;font-size:var(--font-xs);color:var(--muted);}
 .match-information dd.ov-clamp {min-width:0;}
