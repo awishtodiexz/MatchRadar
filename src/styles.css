@@ -185,7 +185,7 @@ h1,h2,h3,h4,h5,p {margin:0;}
 .mini-score span {max-width:48px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .mini-score strong {color:var(--text);font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap;}
 .match-centre {font-size:12px;min-height:100%;}
-.match-centre > .centre-tabs {position:sticky;top:0;z-index:10;padding:0 var(--gutter);background:rgba(var(--panel-rgb),.99);}
+.match-centre > .centre-tabs {position:sticky;top:0;z-index:10;padding:0 var(--gutter);background:rgb(var(--panel-rgb));}
 .centre-panel {padding:4px var(--gutter) 20px;}
 .centre-panel:focus-visible,.settings-body:focus-visible {outline-offset:-3px;}
 .match-centre h3 {justify-content:flex-start;}
