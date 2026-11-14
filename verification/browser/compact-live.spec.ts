@@ -29,7 +29,7 @@ for(const width of [320,390]) for(const theme of ['dark','light'] as const) test
  await page.getByRole('tab',{name:'Lineups',exact:true}).click();
  await expect(page.locator('.detail-hero')).toBeHidden();
  await expect(page.locator('.mini-score')).toBeVisible();
- await expect(page.getByRole('button',{name:'Refresh match details'})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Refresh',exact:true})).toBeVisible();
  await expect(page.locator('.lineup-help')).not.toHaveAttribute('open');
  await expect(page.locator('.badge-off')).toHaveText("83'");
  const marker=await page.locator('.badge-off').boundingBox();

@@ -71,8 +71,10 @@ test('ticker prioritizes followed clubs, cycles, locks across updates, and fits 
   await lock.click();
   await expect(lock).toHaveAttribute('aria-pressed','false');
   await expect(page.locator('.ticker-team.home')).toHaveText('ARS');
-  await page.getByTitle('Expand MatchRadar').click();
+  // The ticker card opens the match it shows; Back returns to the list.
+  await page.getByTitle('Open this match in MatchRadar').click();
   await page.setViewportSize({width:320,height:460});
+  await page.getByRole('button',{name:'Back to matches',exact:true}).click();
   await expect(page.getByRole('navigation',{name:'Fixture views'})).toBeVisible();
 });
 

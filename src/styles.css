@@ -105,6 +105,16 @@ select option {background-color:var(--surface-solid);color:var(--text);}
 .team-name {min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 /* Finished matches: the losing side steps back so the result reads at a glance. */
 .team-line.is-beaten .team-name,.scores strong.is-beaten {color:var(--muted);font-weight:400;}
+/* A score that changed in the last few minutes: a quiet tint plus a marker on the side that scored. */
+.match-card.score-changed {background:var(--accent-soft);}
+.scores strong.just-changed {position:relative;color:var(--accent);}
+.scores strong.just-changed::before {content:"";position:absolute;left:-9px;top:50%;width:5px;height:5px;margin-top:-2.5px;border-radius:50%;background:var(--accent);}
+.shell:not(.reduced) .match-card.score-changed {animation:score-flash 1.2s ease-out 1;}
+@keyframes score-flash {from {background:var(--accent-border);} to {background:var(--accent-soft);}}
+.card-menu {position:fixed;z-index:40;display:grid;min-width:200px;max-width:calc(100vw - 16px);padding:4px;border:1px solid var(--border-strong);border-radius:var(--radius-panel);background:var(--surface-solid);box-shadow:0 10px 30px rgba(0,0,0,.35);}
+.card-menu button {display:flex;align-items:center;gap:8px;min-height:32px;padding:6px 10px;border-radius:var(--radius-control);text-align:left;font-size:var(--font-body);color:var(--text);}
+.card-menu button span {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.card-menu button:hover,.card-menu button:focus-visible {background:var(--accent-soft);color:var(--accent);outline:none;}
 .badge {flex:none;width:20px;height:20px;display:grid;place-items:center;border-radius:var(--radius-sm);background:var(--badge-bg);color:var(--text);font-size:8px;font-weight:700;}
 .badge.has-crest {background:transparent;}
 .badge img {width:100%;height:100%;object-fit:contain;}

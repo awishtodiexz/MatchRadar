@@ -202,6 +202,7 @@ export function SettingsPanel({settings, save, back, matches, backLabel}: {
         <div className="about"><CircleHelp size={17}/><p>Scores use ESPN’s unofficial endpoints and may be unavailable or change. MatchRadar is not affiliated with ESPN, the Premier League, or UEFA.</p></div>
         <button className="outline-button" onClick={()=>void copyDiagnostics()} title="Copy version, settings summary and feed status for a bug report"><ClipboardCopy size={15}/>Copy diagnostics</button>
         <p className="field-note">MatchRadar lives in the system tray. The X button hides it there; click the tray icon or press Ctrl+Shift+M anywhere to show it again, and choose Quit in the tray to exit.</p>
+        <p className="field-note">Keyboard: 1–4 switch views · R refreshes · / finds a club · [ and ] step through matches · Esc goes back. Right-click a match for more actions.</p>
       </>}
       {notice&&<p className="notice" role="status">{notice}</p>}
     </div>

@@ -32,6 +32,8 @@ const VIEWS = ['All','Live','Upcoming','Results'] as const;
 // repeating it on every launch only costs vertical space. Show it once.
 const SHORTCUT_NOTICE_KEY = 'matchradar.shortcutNoticeShown';
 const SHORTCUT_MESSAGE = 'Ctrl+Shift+M is used by another app, so the MatchRadar shortcut is off. Open the widget from the tray icon instead.';
+const SCORE_CHANGE_MS = 3 * 60_000;
+type ScoreChange = {at:number;home:boolean;away:boolean};
 const followsTeam = (match:Match, favorites:string[]) => favorites.includes(match.home.id)||favorites.includes(match.away.id);
 
 export default function App() {
@@ -57,6 +59,10 @@ export default function App() {
   const previousView = useRef(view);
   const notificationFocus = useRef(0);
   const recoveryFocus = useRef(false);
+  const focusClubSearch = useRef(false);
+  // Scores seen on the previous snapshot, to flag a change for a few minutes.
+  const previousScores = useRef(new Map<string,[number|null|undefined,number|null|undefined]>());
+  const [scoreChanges,setScoreChanges] = useState<Record<string,ScoreChange>>({});
   const day = useLocalDay();
   const now = useNow(30_000);
   const native = isTauri();
@@ -123,6 +129,17 @@ export default function App() {
     });
   },[allMatches]);
   useEffect(()=>{
+    if(!allMatches) return;
+    const changed:Record<string,ScoreChange>={};
+    for(const match of allMatches) {
+      const previous=previousScores.current.get(match.id);
+      if(previous&&previous[0]!=null&&previous[1]!=null&&match.homeScore!=null&&match.awayScore!=null&&(previous[0]!==match.homeScore||previous[1]!==match.awayScore))
+        changed[match.id]={at:Date.now(),home:previous[0]!==match.homeScore,away:previous[1]!==match.awayScore};
+      previousScores.current.set(match.id,[match.homeScore,match.awayScore]);
+    }
+    if(Object.keys(changed).length) setScoreChanges(current=>({...current,...changed}));
+  },[allMatches]);
+  useEffect(()=>{
     setTickerPinned(current=>{
       if(!current)return current;
       return allMatches?.find(match=>match.id===current.id)??(isInProgress(current)&&!current.scoreStale?{...current,scoreStale:true}:current);
@@ -144,6 +161,9 @@ export default function App() {
     if(view==='home') {
       const list=root.current?.querySelector('.match-list');if(list) list.scrollTop=homeScroll.current;
       (document.getElementById(restoreFocus.current)??document.getElementById('settings-control'))?.focus({preventScroll:true});
+    } else if(view==='settings'&&focusClubSearch.current) {
+      focusClubSearch.current=false;
+      root.current?.querySelector<HTMLElement>('.settings-body input[type="search"]')?.focus();
     } else root.current?.querySelector<HTMLElement>('[data-view-heading]')?.focus();
   },[view]);
   // The shortcut notice is informational; do not let it hold space for the whole session.
@@ -296,11 +316,30 @@ export default function App() {
         // Best effort: never leave the window stuck at the ticker's minimum height.
         if(next) void win.setMinSize(new LogicalSize(320,460)).catch(()=>{});
         useApp.setState({error:'Could not resize the widget.'});
-        return;
+        return false;
       }
     }
     setTicker(next);
     if(!next)requestAnimationFrame(()=>root.current?.querySelector<HTMLElement>(view==='detail'?'.match-centre > .centre-tabs [aria-selected="true"]':'[aria-label="Ticker mode"]')?.focus({preventScroll:true}));
+    return true;
+  };
+  // Clicking the ticker's match expands straight into that match.
+  const openFromTicker = async () => {
+    const match=tickerMatch;
+    if(!await toggleTicker()||!match) return;
+    restoreFocus.current=matchButtonId(match.id);
+    setSelected(match);
+    setView('detail');
+  };
+  // Step through the list the detail view was opened from, in on-screen order.
+  const stepMatch = (direction:1|-1) => {
+    const ordered=groups.flatMap(group=>group.matches);
+    const index=ordered.findIndex(match=>match.id===selected?.id);
+    const next=index<0?undefined:ordered[index+direction];
+    if(!next) return false;
+    restoreFocus.current=matchButtonId(next.id);
+    setSelected(next);
+    return true;
   };
   const contextMenu = (event:MouseEvent) => {
     const target = event.target;
@@ -314,10 +353,20 @@ export default function App() {
   type KeyInput = {key:string;defaultPrevented:boolean;target:EventTarget|null;preventDefault:()=>void;ctrlKey:boolean;altKey:boolean;metaKey:boolean};
   const keyDown = (event:KeyInput) => {
     if(event.key==='Escape'&&!event.defaultPrevented&&!(event.target instanceof HTMLSelectElement)) {
-      if(root.current?.querySelector('.alert-menu')) {event.preventDefault();return;}
+      if(root.current?.querySelector('.alert-menu, .card-menu')) {event.preventDefault();return;}
       if(ticker) {event.preventDefault();void toggleTicker();}
       else if(view!=='home') {event.preventDefault();back();}
+      return;
     }
+    // Single-key shortcuts never fire while typing, choosing, or inside a popover.
+    if(event.defaultPrevented||event.ctrlKey||event.altKey||event.metaKey||ticker) return;
+    if(event.target instanceof Element&&event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
+    if(root.current?.querySelector('.alert-menu, .card-menu')) return;
+    const key=event.key;
+    if(view==='home'&&/^[1-4]$/.test(key)) {event.preventDefault();selectMatchView(VIEWS[Number(key)-1]);}
+    else if((key==='r'||key==='R')&&!refreshBusy) {event.preventDefault();refreshCurrent();}
+    else if(key==='/'&&view!=='settings') {event.preventDefault();focusClubSearch.current=true;openSettings();}
+    else if(view==='detail'&&(key==='['||key===']')) {if(stepMatch(key===']'?1:-1))event.preventDefault();}
   };
   // With focus on the page itself (for example after clicking a non-focusable
   // area) key events never reach <main>. Route only those through the same handler.
@@ -335,10 +384,10 @@ export default function App() {
         {ticker&&<button className="icon-button ticker-lock" aria-label="Lock ticker match" aria-pressed={!!tickerPinned} title={tickerPinned?'Unlock · automatically choose a match':'Lock this match in the ticker'} disabled={!tickerMatch} onClick={()=>setTickerPinned(tickerPinned?null:tickerMatch)}>{tickerPinned?<Lock size={15}/>:<Unlock size={15}/>}</button>}
         <button className="icon-button" title={settings?.alwaysOnTop?'Always on top is on · unpin widget':'Always on top is off · keep widget above other windows'} disabled={!settings} onClick={()=>void toggleAlwaysOnTop()} aria-label="Always on top" aria-pressed={!!settings?.alwaysOnTop}><Pin size={15} fill={settings?.alwaysOnTop?'currentColor':'none'}/></button>
         <button className="icon-button" title={ticker?'Expand the full widget':'Collapse to a slim match ticker'} onClick={()=>void toggleTicker()} aria-label="Ticker mode" aria-pressed={ticker}>{ticker?<Maximize2 size={15}/>:<Minimize2 size={15}/>}</button>
-        <button className="icon-button close" title={native?'Hide to system tray':'Hide is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().hide().catch(()=>useApp.setState({error:'Could not hide the widget.'}))} aria-label="Hide widget"><X size={16}/></button>
+        <button className="icon-button close" title={native?'Hide to system tray · Ctrl+Shift+M shows it again':'Hide is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().hide().catch(()=>useApp.setState({error:'Could not hide the widget.'}))} aria-label="Hide widget"><X size={16}/></button>
       </div>
     </header>
-    {ticker?<TickerView match={tickerMatch} onExpand={()=>void toggleTicker()} navigation={{canCycle:tickerChoices.length>1,onPrevious:()=>cycleTicker(-1),onNext:()=>cycleTicker(1)}}/>
+    {ticker?<TickerView match={tickerMatch} onExpand={()=>void toggleTicker()} onOpen={()=>void openFromTicker()} navigation={{canCycle:tickerChoices.length>1,onPrevious:()=>cycleTicker(-1),onNext:()=>cycleTicker(1)}}/>
       :view==='settings'&&settings?<SettingsPanel settings={settings} matches={allMatches??[]} save={save} back={back} backLabel={settingsReturn.current==='detail'?'Back to match':'Back to matches'}/>
       :view==='detail'&&selected&&settings?<MatchDetails ref={detailRefresh} onBusyChange={setDetailBusy} sessions={matchSessions.current} key={`${selected.id}:${notificationRequest}`} match={detailMatch??selected} settings={settings} back={back}/>
       :<>
@@ -357,7 +406,7 @@ export default function App() {
               const followed=followsTeam(match,settings.favorites);
               const split=!historyView&&key!=='live'&&!settings.followedOnly&&items.some(m=>followsTeam(m,settings.favorites))&&items.some(m=>!followsTeam(m,settings.favorites));
               const heading=split&&(index===0||followsTeam(items[index-1],settings.favorites)!==followed)?<p className="group-subtitle" key={match.id+'-heading'}>{followed?'Your clubs':'Other matches'}</p>:null;
-              return [heading,<MatchCard key={match.id} match={match} settings={settings} now={now} onOpen={()=>openMatch(match)} showCompetition={competitionView==='both'}/>];
+              return [heading,<MatchCard key={match.id} match={match} settings={settings} now={now} onOpen={()=>openMatch(match)} showCompetition={competitionView==='both'} scoreChange={scoreChanges[match.id]&&now.getTime()-scoreChanges[match.id].at<SCORE_CHANGE_MS?scoreChanges[match.id]:undefined}/>];
             })}</section>)}
           {/* Marks a complete list, so a short one does not read as still loading. */}
           {!waiting&&!!matches.length&&<p className="list-end">{historyView?'That’s every result from the last 14 days':`That’s everything in the next ${windowLabel} days`}</p>}

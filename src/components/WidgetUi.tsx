@@ -17,12 +17,13 @@ function useCrestTheme(): 'light'|'dark' {
   return preference==='system'?system:preference;
 }
 
-export function Badge({team}: {team: Team}) {
+export function Badge({team, fallback=true}: {team: Team; fallback?: boolean}) {
   const theme = useCrestTheme();
   const candidates = useMemo(() => crestCandidates(team, theme), [team.id, team.logo, theme]);
   const [index, setIndex] = useState(0);
   useEffect(() => setIndex(0), [team.id, team.logo, theme]);
   const src = candidates[index];
+  if (!src && !fallback) return null;
   return <span className={'badge '+(src?'has-crest':'')} aria-hidden="true">
     {src ? <img src={src} loading="lazy" decoding="async" onError={() => setIndex(i => i + 1)} alt="" /> : <span>{(team.short || team.name.slice(0,3)).slice(0,3).toUpperCase()}</span>}
   </span>;

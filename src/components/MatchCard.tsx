@@ -1,5 +1,6 @@
-import { Bell, BellOff, BellRing, ChevronRight, Star } from 'lucide-react';
+import { Bell, BellOff, BellRing, ChevronRight, ClipboardCopy, PanelRightOpen, Star } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useApp } from '../store';
 import { isLive } from '../fixtures';
 import type { Match, Settings } from '../types';
@@ -42,18 +43,27 @@ function alertPresentation(settings:Settings, match:Match) {
   return {defaultDescription, state, ended, cancelled, closed, postponed, description, enabled:state==='on', label:state==='on'?'On':state==='muted'?'Muted':'Team default'};
 }
 
-export function MatchCard({match, settings, onOpen, showCompetition=false, now}: {match:Match; settings:Settings; onOpen:()=>void; showCompetition?:boolean; now?:Date}) {
+export function MatchCard({match, settings, onOpen, showCompetition=false, now, scoreChange}: {match:Match; settings:Settings; onOpen:()=>void; showCompetition?:boolean; now?:Date; scoreChange?:{home:boolean;away:boolean}}) {
   const alerts = alertPresentation(settings, match);
   const detailId = useId();
+  const openButton = useRef<HTMLButtonElement>(null);
+  const [menu,setMenu] = useState<{x:number;y:number}|null>(null);
   const awaitingUpdate=match.status==='scheduled'&&awaitingKickoffUpdate(match.kickoff,now);
   const cardDetail = (match.status==='scheduled'
     ? `Kick-off ${timeLabel(match.kickoff)}${awaitingUpdate?', awaiting match update':''}`
     : `${match.homeScore ?? '–'} to ${match.awayScore ?? '–'}, ${isLive(match) ? (match.status==='halftime' ? 'half-time' : clockText(match.detail||'live')) : (match.detail || match.status)}${match.scoreStale?' (saved)':''}`)
-    + (showCompetition ? `, ${match.league==='championsLeague'?'Champions League':'Premier League'}` : '');
+    + (showCompetition ? `, ${match.league==='championsLeague'?'Champions League':'Premier League'}` : '')
+    + (scoreChange ? ', score just changed' : '');
   const loser = match.status==='fulltime'&&match.homeScore!=null&&match.awayScore!=null&&match.homeScore!==match.awayScore
     ? (match.homeScore<match.awayScore?match.home.id:match.away.id) : null;
-  return <article className="match-row match-card" data-match-id={match.id} aria-labelledby={matchButtonId(match.id)}>
-    <button id={matchButtonId(match.id)} className="match-open" onClick={onOpen} aria-describedby={detailId} title="View match details">
+  const openMenu = (event:ReactMouseEvent) => {
+    event.preventDefault();
+    // The keyboard context-menu key reports 0,0; anchor to the card instead.
+    const card = openButton.current?.getBoundingClientRect();
+    setMenu(event.clientX||event.clientY?{x:event.clientX,y:event.clientY}:{x:(card?.left??0)+24,y:(card?.bottom??0)-8});
+  };
+  return <article className={'match-row match-card'+(scoreChange?' score-changed':'')} data-match-id={match.id} aria-labelledby={matchButtonId(match.id)} onContextMenu={openMenu}>
+    <button ref={openButton} id={matchButtonId(match.id)} className="match-open" onClick={onOpen} aria-describedby={detailId} title={scoreChange?'Score just changed · view match details':'View match details · right-click for more'}>
       <span className="sr-only">Match details: </span>
       <div className={'fixture-time '+(isLive(match)&&!match.scoreStale?'is-live':'')}>
         <span>{match.status==='scheduled'?timeLabel(match.kickoff):isLive(match)?match.status==='halftime'?'HT':clockText(match.detail||'LIVE'):match.status==='fulltime'?resultLabel(match):match.detail||match.status}</span>
@@ -68,13 +78,61 @@ export function MatchCard({match, settings, onOpen, showCompetition=false, now}:
       <div className={'match-state '+(isLive(match)&&!match.scoreStale?'is-live':'')}>
         <div className={'result '+(match.status==='scheduled'?'scheduled':'')}>
           {match.status==='scheduled' ? <span className="scheduled-score" title={countdownLabel(match.kickoff, now)??undefined}>{shortCountdown(match.kickoff, now) ?? '–'}</span>
-            : <div className="scores"><strong className={match.home.id===loser?'is-beaten':undefined}>{match.homeScore ?? '–'}</strong><strong className={match.away.id===loser?'is-beaten':undefined}>{match.awayScore ?? '–'}</strong></div>}
+            : <div className="scores"><strong className={[match.home.id===loser&&'is-beaten',scoreChange?.home&&'just-changed'].filter(Boolean).join(' ')||undefined}>{match.homeScore ?? '–'}</strong><strong className={[match.away.id===loser&&'is-beaten',scoreChange?.away&&'just-changed'].filter(Boolean).join(' ')||undefined}>{match.awayScore ?? '–'}</strong></div>}
         </div>
       </div><ChevronRight size={13} className="row-arrow" aria-hidden="true"/>
     </button>
     <span id={detailId} className="sr-only">{cardDetail}</span>
     {!alerts.closed&&<MatchAlertsButton match={match} settings={settings} list/>}
+    {menu&&<CardMenu match={match} settings={settings} at={menu} onOpen={onOpen} close={(refocus)=>{setMenu(null);if(refocus)openButton.current?.focus();}}/>}
   </article>;
+}
+
+const scoreLine = (match:Match) => match.status==='scheduled'
+  ? `${match.home.name} v ${match.away.name}, ${match.competition}, kick-off ${timeLabel(match.kickoff)}`
+  : `${match.home.name} ${match.homeScore ?? '–'}–${match.awayScore ?? '–'} ${match.away.name} (${match.status==='fulltime'?resultLabel(match):isLive(match)?(match.status==='halftime'?'HT':clockText(match.detail||'live')):match.detail||match.status}), ${match.competition}`;
+
+/** Right-click (or context-menu key) shortcuts for one card: open, follow either club, copy the score. */
+function CardMenu({match, settings, at, onOpen, close}: {match:Match; settings:Settings; at:{x:number;y:number}; onOpen:()=>void; close:(refocus:boolean)=>void}) {
+  const save = useApp(state=>state.save);
+  const menu = useRef<HTMLDivElement>(null);
+  const [position,setPosition] = useState({top:at.y,left:at.x});
+  useLayoutEffect(()=>{
+    const bounds = menu.current?.getBoundingClientRect();
+    if(!bounds) return;
+    setPosition({top:Math.max(8,Math.min(at.y,window.innerHeight-bounds.height-8)),left:Math.max(8,Math.min(at.x,window.innerWidth-bounds.width-8))});
+    menu.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({preventScroll:true});
+  },[at]);
+  const latestClose = useRef(close);
+  useEffect(()=>{latestClose.current=close;},[close]);
+  useEffect(()=>{
+    const outside = (event:Event) => {if(!(event.target instanceof Node)||!menu.current?.contains(event.target))latestClose.current(false);};
+    const blurred = () => latestClose.current(false);
+    document.addEventListener('mousedown',outside);
+    document.addEventListener('focusin',outside);
+    window.addEventListener('blur',blurred);
+    return ()=>{document.removeEventListener('mousedown',outside);document.removeEventListener('focusin',outside);window.removeEventListener('blur',blurred);};
+  },[]);
+  const run = (action:()=>void) => () => {close(true);action();};
+  const follow = (teamId:string) => {
+    const following = settings.favorites.includes(teamId);
+    void save({favorites:following?settings.favorites.filter(id=>id!==teamId):[...settings.favorites,teamId]});
+  };
+  const items = [
+    {label:'Open match details', icon:<PanelRightOpen size={14}/>, action:onOpen},
+    ...[match.home,match.away].map(team=>({label:`${settings.favorites.includes(team.id)?'Unfollow':'Follow'} ${team.name}`, icon:<Star size={14} fill={settings.favorites.includes(team.id)?'currentColor':'none'}/>, action:()=>follow(team.id)})),
+    {label:match.status==='scheduled'?'Copy fixture':'Copy score', icon:<ClipboardCopy size={14}/>, action:()=>{void navigator.clipboard?.writeText(scoreLine(match)).catch(()=>useApp.setState({error:'Could not copy to the clipboard.'}));}},
+  ];
+  return <div ref={menu} className="card-menu" role="menu" aria-label={`${match.home.name} versus ${match.away.name}`} style={position}
+    onKeyDown={event=>{
+      const entries=[...(menu.current?.querySelectorAll<HTMLElement>('[role="menuitem"]')??[])];
+      const index=entries.indexOf(document.activeElement as HTMLElement);
+      if(event.key==='Escape'||event.key==='Tab'){event.preventDefault();event.stopPropagation();close(true);}
+      else if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();entries[(index+(event.key==='ArrowDown'?1:entries.length-1))%entries.length]?.focus();}
+      else if(event.key==='Home'||event.key==='End'){event.preventDefault();entries[event.key==='Home'?0:entries.length-1]?.focus();}
+    }}>
+    {items.map(item=><button key={item.label} type="button" role="menuitem" tabIndex={-1} onClick={run(item.action)}>{item.icon}<span>{item.label}</span></button>)}
+  </div>;
 }
 
 export function MatchAlertsButton({match, settings, list=false}: {match:Match; settings:Settings; list?:boolean}) {
