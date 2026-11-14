@@ -46,6 +46,7 @@ MatchRadar keeps scores, fixtures and the clubs you follow in a small window tha
 - **A proper Match Centre.** Goals, cards and substitutions by half, provider stats with comparison bars, formation lineups, and filtered commentary in the same compact window.
 - **Clubs, not accounts.** Follow a club once across both competitions. Get reminders, match-start alerts and optional goal alerts, with per-match mute when you need quiet.
 - **Tray-first by design.** The close control hides to the tray. Toggle with `Ctrl+Shift+M`, pin above other windows, start hidden at sign-in, and recover automatically if a monitor disappears.
+- **Keyboard friendly.** `1`–`4` switch views, `R` refreshes, `/` finds a club, `[` and `]` step through matches, and right-click a match to follow a club or copy the score.
 - **Private by design.** No account, API key, analytics or telemetry. Preferences and cached data stay on your device; live scores and match details are fetched from ESPN.
 
 <details>

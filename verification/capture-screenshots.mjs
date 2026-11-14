@@ -329,7 +329,7 @@ try {
   for (const theme of ['dark', 'light']) {
     const page = await openWidget(browser, theme);
     await page.screenshot({ path: join(screenshots, `widget-${theme}.png`), omitBackground: true });
-    await page.getByRole('button', { name: /Match details: Arsenal versus Leeds United/ }).click();
+    await page.locator('[data-match-id="401879268"] .match-open').click();
     await page.getByRole('tab', { name: 'Stats', exact: true }).waitFor();
     await settle(page);
     const suffix = theme === 'dark' ? '' : '-light';
