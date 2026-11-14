@@ -44,3 +44,14 @@ it('changes the followed team list from match details',()=>{
  fireEvent.click(screen.getByRole('button',{name:`Follow ${match.away.name}`}));
  expect(save).toHaveBeenLastCalledWith({favorites:[match.home.id,match.away.id]});
 });
+
+it('explains what team defaults mean for this fixture',()=>{
+ const match=mockMatches[2];
+ const {rerender}=render(<MatchAlertsButton match={match} settings={{...defaults,favorites:[]}}/>);
+ fireEvent.click(screen.getByRole('button',{name:/Match alerts:/}));
+ expect(screen.getByText(/No alerts: you don’t follow either team/)).toBeTruthy();
+ rerender(<MatchAlertsButton match={match} settings={{...defaults,favorites:[match.home.id],reminders:false,starts:false,goals:false}}/>);
+ expect(screen.getByText(/all team alert types are off/)).toBeTruthy();
+ rerender(<MatchAlertsButton match={match} settings={{...defaults,favorites:[match.home.id],reminders:false,starts:false,goals:true}}/>);
+ expect(screen.getByText(`Alerts for goals because you follow ${match.home.name}.`)).toBeTruthy();
+});
