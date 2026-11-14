@@ -80,6 +80,7 @@ select option {background-color:var(--surface-solid);color:var(--text);}
 .detail-body {padding:0;}
 .schedule-context {display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0 0;color:var(--muted);font-size:var(--font-sm);}
 .schedule-note,.filter-label {font-size:var(--font-sm);color:var(--muted);}
+.list-end {margin:14px 0 8px;text-align:center;color:var(--muted);font-size:var(--font-xs);opacity:.8;}
 .following-filter {display:flex;align-items:center;gap:5px;flex:none;min-height:32px;padding:4px 9px;border:1px solid var(--border-strong);border-radius:var(--radius-control);color:var(--muted);font-size:var(--font-sm);}
 .following-filter[aria-pressed=true] {color:var(--accent);background:var(--accent-soft);border-color:var(--accent-border);}
 .following-filter:hover:not(:disabled) {border-color:var(--accent);}
@@ -94,7 +95,7 @@ select option {background-color:var(--surface-solid);color:var(--text);}
 .match-row {display:flex;align-items:center;width:100%;border-bottom:1px solid var(--border);}
 .match-row:hover {background:var(--surface-hover);}
 .match-card {height:72px;}
-.match-open {display:grid;grid-template-columns:60px minmax(0,1fr) 24px;align-items:center;gap:9px;flex:1;min-width:0;height:100%;padding:9px 0;text-align:left;border-radius:var(--radius-sm);}
+.match-open {display:grid;grid-template-columns:46px minmax(0,1fr) 24px;align-items:center;gap:9px;flex:1;min-width:0;height:100%;padding:9px 0;text-align:left;border-radius:var(--radius-sm);}
 .fixture-time {overflow:hidden;overflow-wrap:anywhere;display:flex;flex-direction:column;align-items:flex-start;gap:3px;color:var(--muted);font-size:var(--font-xs);line-height:16px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}
 .fixture-time > span {white-space:normal;overflow-wrap:anywhere;}
 .fixture-time.is-live {color:var(--accent);}
@@ -102,8 +103,20 @@ select option {background-color:var(--surface-solid);color:var(--text);}
 .teams {display:grid;gap:7px;min-width:0;}
 .team-line {display:flex;align-items:center;gap:7px;min-height:20px;min-width:0;font-size:var(--font-body);line-height:18px;font-weight:500;}
 .team-name {min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* Finished matches: the losing side steps back so the result reads at a glance. */
+.team-line.is-beaten .team-name,.scores strong.is-beaten {color:var(--muted);font-weight:400;}
+/* A score that changed in the last few minutes: a quiet tint plus a marker on the side that scored. */
+.match-card.score-changed {background:var(--accent-soft);}
+.scores strong.just-changed {position:relative;color:var(--accent);}
+.scores strong.just-changed::before {content:"";position:absolute;left:-9px;top:50%;width:5px;height:5px;margin-top:-2.5px;border-radius:50%;background:var(--accent);}
+.shell:not(.reduced) .match-card.score-changed {animation:score-flash 1.2s ease-out 1;}
+@keyframes score-flash {from {background:var(--accent-border);} to {background:var(--accent-soft);}}
+.card-menu {position:fixed;z-index:40;display:grid;min-width:200px;max-width:calc(100vw - 16px);padding:4px;border:1px solid var(--border-strong);border-radius:var(--radius-panel);background:var(--surface-solid);box-shadow:0 10px 30px rgba(0,0,0,.35);}
+.card-menu button {display:flex;align-items:center;gap:8px;min-height:32px;padding:6px 10px;border-radius:var(--radius-control);text-align:left;font-size:var(--font-body);color:var(--text);}
+.card-menu button span {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.card-menu button:hover,.card-menu button:focus-visible {background:var(--accent-soft);color:var(--accent);outline:none;}
 .badge {flex:none;width:20px;height:20px;display:grid;place-items:center;border-radius:var(--radius-sm);background:var(--badge-bg);color:var(--text);font-size:8px;font-weight:700;}
-.badge.has-crest {background:transparent;}
+.badge.has-crest,.badge.badge-blank {background:transparent;}
 .badge img {width:100%;height:100%;object-fit:contain;}
 .fav {color:var(--accent);flex:none;}
 .match-state {text-align:center;}
@@ -180,6 +193,7 @@ select option {background-color:var(--surface-solid);color:var(--text);}
 .outline-button.compact {min-height:30px;padding:4px 8px;}
 .about {display:flex;gap:8px;padding:12px 0;margin-top:12px;border-top:1px solid var(--border);color:var(--muted);font-size:var(--font-body);}
 .about svg {flex:none;}
+.setting-row + .about,.notice + .about {border-top:0;margin-top:0;}
 .version {font-size:var(--font-sm);color:var(--accent);margin-left:5px;}
 
 /* Match header, compact score strip and sticky section navigation. */
@@ -256,7 +270,7 @@ select option {background-color:var(--surface-solid);color:var(--text);}
 
 /* Stats keep their accessible table columns and center-origin comparison bars. */
 .stat-section-title {text-align:left;}
-.stat-teams {position:sticky;top:40px;z-index:6;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr);align-items:center;gap:8px;padding:7px 0 8px;border-bottom:1px solid var(--border);background:rgba(var(--panel-rgb),.99);color:var(--muted);font-size:var(--font-xs);letter-spacing:normal;text-align:center;text-transform:none;}
+.stat-teams {position:sticky;top:40px;z-index:6;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr);align-items:center;gap:8px;padding:7px 0 8px;border-bottom:1px solid var(--border);background:rgb(var(--panel-rgb));color:var(--muted);font-size:var(--font-xs);letter-spacing:normal;text-align:center;text-transform:none;}
 .stat-teams strong {min-width:0;color:var(--text);font-size:var(--font-xs);font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .stat-teams strong:first-child {text-align:left;}
 .stat-teams strong:last-child {text-align:right;}
@@ -310,6 +324,7 @@ select option {background-color:var(--surface-solid);color:var(--text);}
 .lineup-list .jersey {width:25px;flex:none;color:var(--muted);font-size:var(--font-sm);font-variant-numeric:tabular-nums;}
 .lineup-list li > span:not(.jersey) {min-width:0;flex:1;overflow-wrap:anywhere;}
 .lineup-list small {flex:none;font-size:var(--font-sm);color:var(--muted);}
+.lineup-list abbr[title] {text-decoration:none;cursor:help;}
 .sub-marker {display:block;font-size:var(--font-xs);}
 .sub-marker.on {color:var(--accent);}
 .sub-marker.off {color:var(--muted);}
@@ -382,7 +397,7 @@ footer {min-height:44px;display:flex;align-items:center;justify-content:space-be
  .live-pill {font-size:9px;}
  .competition-long {display:none;}
  .competition-short {display:inline;}
- .match-open {grid-template-columns:52px minmax(0,1fr) 20px;gap:6px;}
+ .match-open {grid-template-columns:42px minmax(0,1fr) 20px;gap:6px;}
  .team-line {gap:5px;}
  .match-bell {width:24px;}
  .centre-tabs button {font-size:var(--font-sm);}
@@ -410,8 +425,8 @@ footer {min-height:44px;display:flex;align-items:center;justify-content:space-be
 .versus > div.is-beaten {opacity:.8;}
 .versus b {overflow-wrap:anywhere;font-weight:650;line-height:1.25;}
 .versus > div > small {margin-top:-4px;color:var(--muted);font-size:var(--font-xs);letter-spacing:normal;text-transform:none;}
-.crest-ring {display:grid;place-items:center;width:60px;height:60px;border-radius:50%;background:var(--surface-soft);border:1px solid var(--border);}
-.versus .badge {width:40px;height:40px;font-size:var(--font-sm);border-radius:50%;}
+.crest-ring {display:grid;place-items:center;width:50px;height:50px;border-radius:50%;background:var(--surface-soft);border:1px solid var(--border);}
+.versus .badge {width:34px;height:34px;font-size:var(--font-sm);border-radius:50%;}
 .detail-score {display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-width:0;min-height:60px;}
 .detail-score > span {font-size:36px;line-height:1;font-weight:750;letter-spacing:-1.2px;font-variant-numeric:tabular-nums;white-space:nowrap;}
 .detail-score > span.is-time {font-size:30px;letter-spacing:-.8px;}
@@ -455,7 +470,7 @@ footer {min-height:44px;display:flex;align-items:center;justify-content:space-be
 .overview-scorers p,.overview-goalless {color:var(--muted);font-size:var(--font-body);margin:6px 0 0;}
 .overview-goalless {margin:0;}
 .detail-freshness {display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:28px;color:var(--muted);font-size:var(--font-sm);}
-.detail-freshness .refresh-details {width:28px;min-width:28px;height:28px;}
+.detail-freshness .refresh-details {display:inline-flex;align-items:center;gap:4px;min-height:28px;padding:0 6px;}
 .detail-freshness:has([aria-busy=true]) {color:var(--accent);}
 .detail-hero[hidden] {display:none;}
 
@@ -614,8 +629,11 @@ footer {min-height:44px;display:flex;align-items:center;justify-content:space-be
 .stat-bar > i.winning {background:var(--accent);opacity:1;}
 .stats-expand {display:block;margin:10px auto 4px;min-height:0;padding:6px 10px;font-size:var(--font-body);text-decoration:underline;}
 .event-team {display:inline-flex;align-items:center;gap:4px;margin-left:auto;white-space:nowrap;}
-.follow-team {display:inline-flex;align-items:center;justify-content:center;gap:4px;min-height:28px;font-size:var(--font-sm);}
-.versus>div>b {min-height:2.6em;display:flex;align-items:center;justify-content:center;}
+.versus-name {display:flex;align-items:center;justify-content:center;gap:2px;min-width:0;max-width:100%;}
+.versus-name b {min-width:0;}
+.follow-team {flex:none;width:26px;min-width:26px;height:26px;color:var(--muted);}
+.follow-team[aria-pressed=true] {color:var(--accent);}
+.versus-name {min-height:2.6em;}
 .event-team .badge {width:16px;height:16px;}
 .event.red .event-kind svg,.red .summary-icon {color:var(--card-red);}
 .event.yellow .event-kind svg,.yellow .summary-icon {color:var(--card-yellow);}

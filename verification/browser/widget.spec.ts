@@ -133,7 +133,7 @@ for (const [width, theme] of [[320, 'dark'], [390, 'light']] as const) {
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
     await page.getByRole('combobox', { name: 'Theme', exact: true }).selectOption(theme);
-    await page.getByText('Compact view', { exact: true }).click();
+    await page.getByText('Compact layout', { exact: true }).click();
     for (const name of ['Teams', 'Appearance', 'Alerts', 'App']) {
       await page.getByRole('tab', { name, exact: true }).click();
       await expect(page.getByRole('tabpanel', { name })).toBeVisible();

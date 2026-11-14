@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react';
+import type { CSSProperties, MouseEvent } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { LogicalSize } from '@tauri-apps/api/dpi';
@@ -32,6 +32,8 @@ const VIEWS = ['All','Live','Upcoming','Results'] as const;
 // repeating it on every launch only costs vertical space. Show it once.
 const SHORTCUT_NOTICE_KEY = 'matchradar.shortcutNoticeShown';
 const SHORTCUT_MESSAGE = 'Ctrl+Shift+M is used by another app, so the MatchRadar shortcut is off. Open the widget from the tray icon instead.';
+const SCORE_CHANGE_MS = 3 * 60_000;
+type ScoreChange = {at:number;home:boolean;away:boolean};
 const followsTeam = (match:Match, favorites:string[]) => favorites.includes(match.home.id)||favorites.includes(match.away.id);
 
 export default function App() {
@@ -57,6 +59,10 @@ export default function App() {
   const previousView = useRef(view);
   const notificationFocus = useRef(0);
   const recoveryFocus = useRef(false);
+  const focusClubSearch = useRef(false);
+  // Scores seen on the previous snapshot, to flag a change for a few minutes.
+  const previousScores = useRef(new Map<string,[number|null|undefined,number|null|undefined]>());
+  const [scoreChanges,setScoreChanges] = useState<Record<string,ScoreChange>>({});
   const day = useLocalDay();
   const now = useNow(30_000);
   const native = isTauri();
@@ -123,6 +129,17 @@ export default function App() {
     });
   },[allMatches]);
   useEffect(()=>{
+    if(!allMatches) return;
+    const changed:Record<string,ScoreChange>={};
+    for(const match of allMatches) {
+      const previous=previousScores.current.get(match.id);
+      if(previous&&previous[0]!=null&&previous[1]!=null&&match.homeScore!=null&&match.awayScore!=null&&(previous[0]!==match.homeScore||previous[1]!==match.awayScore))
+        changed[match.id]={at:Date.now(),home:previous[0]!==match.homeScore,away:previous[1]!==match.awayScore};
+      previousScores.current.set(match.id,[match.homeScore,match.awayScore]);
+    }
+    if(Object.keys(changed).length) setScoreChanges(current=>({...current,...changed}));
+  },[allMatches]);
+  useEffect(()=>{
     setTickerPinned(current=>{
       if(!current)return current;
       return allMatches?.find(match=>match.id===current.id)??(isInProgress(current)&&!current.scoreStale?{...current,scoreStale:true}:current);
@@ -144,6 +161,9 @@ export default function App() {
     if(view==='home') {
       const list=root.current?.querySelector('.match-list');if(list) list.scrollTop=homeScroll.current;
       (document.getElementById(restoreFocus.current)??document.getElementById('settings-control'))?.focus({preventScroll:true});
+    } else if(view==='settings'&&focusClubSearch.current) {
+      focusClubSearch.current=false;
+      root.current?.querySelector<HTMLElement>('.settings-body input[type="search"]')?.focus();
     } else root.current?.querySelector<HTMLElement>('[data-view-heading]')?.focus();
   },[view]);
   // The shortcut notice is informational; do not let it hold space for the whole session.
@@ -241,6 +261,8 @@ export default function App() {
     : (liveEmpty&&liveStatusUnavailable||listError ? 'retry' : null);
   const waiting = historyView?recent.loading&&!matches.length:!allMatches?.length&&(loading||!!snapshot?.refreshing&&!viewStatus.updatedAt&&!viewStatus.fixtureUpdatedAt&&!viewStatus.error);
   const busy = refreshing||!!snapshot?.refreshing;
+  // Only claim completeness for windowed views whose data is confirmed fresh.
+  const listComplete = !waiting&&!!matches.length&&matchView!=='Live'&&!listError&&(historyView?!recent.loading:!viewStatus.partial);
   const refreshBusy = view==='detail'?busy||detailBusy:view==='home'&&historyView?recent.loading:busy;
   const refreshLabel = view==='detail'?'Refresh match details and scores':view==='home'&&historyView?'Refresh results':'Refresh fixtures and scores';
   const status = updateStatus(snapshot,competitionView);
@@ -296,11 +318,32 @@ export default function App() {
         // Best effort: never leave the window stuck at the ticker's minimum height.
         if(next) void win.setMinSize(new LogicalSize(320,460)).catch(()=>{});
         useApp.setState({error:'Could not resize the widget.'});
-        return;
+        return false;
       }
     }
     setTicker(next);
     if(!next)requestAnimationFrame(()=>root.current?.querySelector<HTMLElement>(view==='detail'?'.match-centre > .centre-tabs [aria-selected="true"]':'[aria-label="Ticker mode"]')?.focus({preventScroll:true}));
+    return true;
+  };
+  // Clicking the ticker's match expands straight into that match.
+  const openFromTicker = async () => {
+    const match=tickerMatch;
+    if(!await toggleTicker()||!match) return;
+    restoreFocus.current=matchButtonId(match.id);
+    setSelected(match);
+    setView('detail');
+  };
+  // Step through the list the detail view was opened from, in on-screen order.
+  const stepMatch = (direction:1|-1) => {
+    const ordered=groups.flatMap(group=>group.matches);
+    const index=ordered.findIndex(match=>match.id===selected?.id);
+    const next=index<0?undefined:ordered[index+direction];
+    if(!next) return false;
+    restoreFocus.current=matchButtonId(next.id);
+    setSelected(next);
+    // The details view remounts for the new match; keep keyboard focus in it.
+    setTimeout(()=>(root.current?.querySelector<HTMLElement>('.match-centre [role="tab"][aria-selected="true"]')??root.current?.querySelector<HTMLElement>('[data-view-heading]'))?.focus({preventScroll:true}),0);
+    return true;
   };
   const contextMenu = (event:MouseEvent) => {
     const target = event.target;
@@ -311,13 +354,33 @@ export default function App() {
     }
     event.preventDefault();
   };
-  const keyDown = (event:KeyboardEvent) => {
+  type KeyInput = {key:string;defaultPrevented:boolean;target:EventTarget|null;preventDefault:()=>void;ctrlKey:boolean;altKey:boolean;metaKey:boolean};
+  const keyDown = (event:KeyInput) => {
     if(event.key==='Escape'&&!event.defaultPrevented&&!(event.target instanceof HTMLSelectElement)) {
-      if(root.current?.querySelector('.alert-menu')) {event.preventDefault();return;}
+      if(root.current?.querySelector('.alert-menu, .card-menu')) {event.preventDefault();return;}
       if(ticker) {event.preventDefault();void toggleTicker();}
       else if(view!=='home') {event.preventDefault();back();}
+      return;
     }
+    // Single-key shortcuts never fire while typing, choosing, or inside a popover.
+    if(event.defaultPrevented||event.ctrlKey||event.altKey||event.metaKey||ticker) return;
+    if(event.target instanceof Element&&event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
+    if(root.current?.querySelector('.alert-menu, .card-menu')) return;
+    const key=event.key;
+    if(view==='home'&&/^[1-4]$/.test(key)) {event.preventDefault();selectMatchView(VIEWS[Number(key)-1]);}
+    else if((key==='r'||key==='R')&&!refreshBusy) {event.preventDefault();refreshCurrent();}
+    else if(key==='/'&&view!=='settings') {event.preventDefault();focusClubSearch.current=true;openSettings();}
+    else if(view==='detail'&&(key==='['||key===']')) {if(stepMatch(key===']'?1:-1))event.preventDefault();}
   };
+  // With focus on the page itself (for example after clicking a non-focusable
+  // area) key events never reach <main>. Route only those through the same handler.
+  const latestKeyDown = useRef(keyDown);
+  latestKeyDown.current = keyDown;
+  useEffect(()=>{
+    const unfocused = (event:globalThis.KeyboardEvent) => {if(event.target===document.body||event.target===document.documentElement) latestKeyDown.current(event);};
+    window.addEventListener('keydown',unfocused);
+    return ()=>window.removeEventListener('keydown',unfocused);
+  },[]);
   return <main ref={root} onKeyDown={keyDown} onContextMenu={contextMenu} className={'shell theme-'+(settings?.theme==='system'?systemTheme:settings?.theme??themeHint)+' '+(panelOpacity<85?'transparent-panel ':'')+(settings?.compact?'compact-view ':'')+(settings?.reducedMotion?'reduced ':'')+(ticker?'ticker-mode':'')} style={{'--panel-opacity':panelOpacity/100} as CSSProperties}>
     <header className="header" data-tauri-drag-region>
       <div className="brand" data-tauri-drag-region><span className="brand-icon"><img src={logo} alt=""/></span><div data-tauri-drag-region><h1>match<span>radar</span></h1></div></div>
@@ -325,19 +388,18 @@ export default function App() {
         {ticker&&<button className="icon-button ticker-lock" aria-label="Lock ticker match" aria-pressed={!!tickerPinned} title={tickerPinned?'Unlock · automatically choose a match':'Lock this match in the ticker'} disabled={!tickerMatch} onClick={()=>setTickerPinned(tickerPinned?null:tickerMatch)}>{tickerPinned?<Lock size={15}/>:<Unlock size={15}/>}</button>}
         <button className="icon-button" title={settings?.alwaysOnTop?'Always on top is on · unpin widget':'Always on top is off · keep widget above other windows'} disabled={!settings} onClick={()=>void toggleAlwaysOnTop()} aria-label="Always on top" aria-pressed={!!settings?.alwaysOnTop}><Pin size={15} fill={settings?.alwaysOnTop?'currentColor':'none'}/></button>
         <button className="icon-button" title={ticker?'Expand the full widget':'Collapse to a slim match ticker'} onClick={()=>void toggleTicker()} aria-label="Ticker mode" aria-pressed={ticker}>{ticker?<Maximize2 size={15}/>:<Minimize2 size={15}/>}</button>
-        <button className="icon-button close" title={native?'Hide to system tray':'Hide is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().hide().catch(()=>useApp.setState({error:'Could not hide the widget.'}))} aria-label="Hide widget"><X size={16}/></button>
+        <button className="icon-button close" title={native?'Hide to system tray · Ctrl+Shift+M shows it again':'Hide is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().hide().catch(()=>useApp.setState({error:'Could not hide the widget.'}))} aria-label="Hide widget"><X size={16}/></button>
       </div>
     </header>
-    {ticker?<TickerView match={tickerMatch} onExpand={()=>void toggleTicker()} navigation={{canCycle:tickerChoices.length>1,onPrevious:()=>cycleTicker(-1),onNext:()=>cycleTicker(1)}}/>
-      :view==='settings'&&settings?<SettingsPanel settings={settings} matches={allMatches??[]} save={save} back={back} backLabel={settingsReturn.current==='detail'?'Back to match':'Back to matches'} refresh={()=>void doRefresh()} refreshing={busy}/>
+    {ticker?<TickerView match={tickerMatch} onExpand={()=>void toggleTicker()} onOpen={()=>void openFromTicker()} navigation={{canCycle:tickerChoices.length>1,onPrevious:()=>cycleTicker(-1),onNext:()=>cycleTicker(1)}}/>
+      :view==='settings'&&settings?<SettingsPanel settings={settings} matches={allMatches??[]} save={save} back={back} backLabel={settingsReturn.current==='detail'?'Back to match':'Back to matches'}/>
       :view==='detail'&&selected&&settings?<MatchDetails ref={detailRefresh} onBusyChange={setDetailBusy} sessions={matchSessions.current} key={`${selected.id}:${notificationRequest}`} match={detailMatch??selected} settings={settings} back={back}/>
       :<>
-        <div className="summary"><CompetitionPicker value={competitionView} onChange={value=>void save({competitionView:value})} disabled={!settings}/><span className={'live-pill '+(!live?'quiet':'')} aria-label={`${competitionTitle}: ${liveAriaLabel}`} title="In-progress matches, including half-time and suspended games."><i className="dot"/>{live?`${live} ${savedLive?'LIVE · SAVED':'LIVE'}`:savedLive?'SAVED LIVE':liveChecking?'CHECKING LIVE':liveUnknown?'LIVE UNAVAILABLE':'NO LIVE MATCHES'}</span></div>
+        <div className="summary"><CompetitionPicker value={competitionView} onChange={value=>void save({competitionView:value})} disabled={!settings}/><span className={'live-pill '+(!live?'quiet':'')} aria-label={`${competitionTitle}: ${liveAriaLabel}${settings?.followedOnly?', all clubs':''}`} title={`In-progress matches${settings?.followedOnly?' for all clubs, not only followed ones':''}, including half-time and suspended games.`}><i className="dot"/>{live?`${live} ${savedLive?'LIVE · SAVED':'LIVE'}`:savedLive?'SAVED LIVE':liveChecking?'CHECKING LIVE':liveUnknown?'LIVE UNAVAILABLE':'NO LIVE MATCHES'}</span></div>
         <div className="match-list">
-          <nav className="centre-tabs" aria-label="Fixture views">{VIEWS.map(name=>{const count=viewCounts[name];return <button key={name} aria-pressed={matchView===name} className={count===0?'is-empty':undefined} title={count===undefined?undefined:`${count} ${count===1?'match':'matches'}`} onClick={()=>selectMatchView(name)}>{name}{count!==undefined&&<span className="tab-count" aria-hidden="true">{count}</span>}</button>;})}</nav>
-          <div className="schedule-context"><div><time dateTime={day.toISOString()}>{dateLabel(day.toISOString())}</time><p className="schedule-note">{historyView?'Results · latest first':`Next ${windowLabel} days`}</p></div><button className="following-filter" aria-label="Following only" title="Show only followed clubs in this view" aria-pressed={!!settings?.followedOnly} disabled={!settings} onClick={()=>void save({followedOnly:!settings?.followedOnly})}><Star size={12} fill={settings?.followedOnly?'currentColor':'none'} aria-hidden="true"/>Following only</button></div>
+          <nav className="centre-tabs" aria-label="Fixture views">{VIEWS.map(name=>{const count=viewCounts[name];return <button key={name} aria-pressed={matchView===name} className={count===0?'is-empty':undefined} title={count===undefined?(name==='Results'?'Open to load recent results':undefined):`${count} ${count===1?'match':'matches'}`} onClick={()=>selectMatchView(name)}>{name}{count!==undefined&&<span className="tab-count" aria-hidden="true">{count}</span>}</button>;})}</nav>
+          <div className="schedule-context"><div><time dateTime={day.toISOString()}>{dateLabel(day.toISOString())}</time><p className="schedule-note" title={historyView&&viewResults.updatedAt?`Results checked ${dateLabel(viewResults.updatedAt)} ${timeLabel(viewResults.updatedAt)}`:undefined}>{historyView?(viewResults.updatedAt?`Latest first · checked ${relativeAge(viewResults.updatedAt,now.getTime())}`:'Latest first'):`Next ${windowLabel} days`}</p></div><button className="following-filter" aria-label="Following only" title="Show only followed clubs in this view" aria-pressed={!!settings?.followedOnly} disabled={!settings} onClick={()=>void save({followedOnly:!settings?.followedOnly})}><Star size={12} fill={settings?.followedOnly?'currentColor':'none'} aria-hidden="true"/>Following only</button></div>
           {listError&&!!sourceMatches?.length&&<div className="offline-banner" role="status" title={listError}><span>{historyView?'Results update failed · cached results retained':viewStatus.partial?'Partial update · some data may be stale':'Update failed · saved data is unchanged'}</span><button onClick={retryFeed} disabled={historyView?recent.loading:busy}>Retry</button></div>}
-          {historyView&&viewResults.updatedAt&&<p className="field-note">Results checked {`${dateLabel(viewResults.updatedAt)} ${timeLabel(viewResults.updatedAt)}`}</p>}
           {waiting?<div className="skeletons" role="status" aria-label="Loading fixtures"><div/><div/><div/></div>
             :!matches.length?<div className="empty" role={feedUnavailable?'alert':undefined}><Radio size={25}/><h2>{emptyTitle}</h2>
               <p>{emptyMessage}</p>
@@ -348,8 +410,10 @@ export default function App() {
               const followed=followsTeam(match,settings.favorites);
               const split=!historyView&&key!=='live'&&!settings.followedOnly&&items.some(m=>followsTeam(m,settings.favorites))&&items.some(m=>!followsTeam(m,settings.favorites));
               const heading=split&&(index===0||followsTeam(items[index-1],settings.favorites)!==followed)?<p className="group-subtitle" key={match.id+'-heading'}>{followed?'Your clubs':'Other matches'}</p>:null;
-              return [heading,<MatchCard key={match.id} match={match} settings={settings} now={now} onOpen={()=>openMatch(match)} showCompetition={competitionView==='both'}/>];
+              return [heading,<MatchCard key={match.id} match={match} settings={settings} now={now} onOpen={()=>openMatch(match)} showCompetition={competitionView==='both'} scoreChange={scoreChanges[match.id]&&now.getTime()-scoreChanges[match.id].at<SCORE_CHANGE_MS?scoreChanges[match.id]:undefined}/>];
             })}</section>)}
+          {/* Marks a complete list, so a short one does not read as still loading. */}
+          {listComplete&&<p className="list-end">{historyView?`That’s every result${settings?.followedOnly?' for followed clubs':''} from the last 14 days`:`That’s everything${settings?.followedOnly?' for followed clubs':''} in the next ${windowLabel} days`}</p>}
         </div>
       </>}
     {error&&!feedUnavailable&&<div className="error-banner" role="alert"><span data-copyable>{error}</span><button className="icon-button" aria-label="Dismiss message" title="Dismiss message" onClick={()=>useApp.setState({error:null})}><X size={14}/></button></div>}

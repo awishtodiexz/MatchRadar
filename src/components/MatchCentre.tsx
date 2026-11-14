@@ -53,7 +53,8 @@ export function MatchCentreView({match,summary,onSectionChange,memory}:{match:Ma
       if(next===undefined)return;event.preventDefault();select(tabs[next]);document.getElementById(sectionId+'-'+tabs[next])?.focus();
     }}>{name}</button>)}</div>
     <div className="centre-panel" role="tabpanel" id={sectionId+'-panel'} aria-labelledby={sectionId+'-'+tab} tabIndex={0}>
-    {data&&<div className="detail-freshness"><span title={Number.isNaN(Date.parse(data.updatedAt))?undefined:`${dateLabel(data.updatedAt)} ${timeLabel(data.updatedAt)}`}>{data.stale?'Saved details · updated':'Match details updated'} {relativeAge(data.updatedAt)}</span><button type="button" className="icon-button refresh-details" aria-label="Refresh match details" title="Refresh lineups, statistics and commentary" onClick={()=>void summary.refresh()} disabled={summary.refreshing||loading} aria-busy={summary.refreshing}><RefreshCw size={13} className={summary.refreshing?'spin':''}/></button></div>}
+    {/* The footer refresh already refreshes details; only saved (stale) details get their own retry. */}
+    {data&&<div className="detail-freshness"><span title={Number.isNaN(Date.parse(data.updatedAt))?undefined:`${dateLabel(data.updatedAt)} ${timeLabel(data.updatedAt)}`}>{data.stale?'Saved details · updated':'Match details updated'} {relativeAge(data.updatedAt)}</span>{data.stale&&<button type="button" className="text-button refresh-details" aria-label="Refresh match details" title="Refresh lineups, statistics and commentary" onClick={()=>void summary.refresh()} disabled={summary.refreshing||loading} aria-busy={summary.refreshing}><RefreshCw size={13} className={summary.refreshing?'spin':''}/>Retry</button>}</div>}
     {loading&&!data&&<div className="skeletons" role="status" aria-label="Loading match details"><div/></div>}
     {error&&<p role="status">{error} <button className="text-button" onClick={retry}>Retry details</button></p>}
 
@@ -63,7 +64,7 @@ export function MatchCentreView({match,summary,onSectionChange,memory}:{match:Ma
     </>}
     {tab==='Commentary'&&(!loading||data)&&(events.length?<>
       <div className="timeline-toolbar">
-        <span>{newestFirst?'Latest first':'Oldest first'} · {filtered?`${visibleEvents.length} of ${events.length} events`:`${events.length} ${events.length===1?'event':'events'}`}</span>
+        <span>{filtered?`${visibleEvents.length} of ${events.length} events`:`${events.length} ${events.length===1?'event':'events'}`}</span>
       </div>
       <div className="commentary-options"><select aria-label="Commentary event type" value={eventType} onChange={event=>setEventType(event.target.value)}><option value="all">All event types</option><option value="key">Key events</option><option value="goals">Goals</option><option value="cards">Cards</option><option value="substitutions">Substitutions</option><option value="shots">Shots &amp; chances</option><option value="stoppages">VAR &amp; stoppages</option></select><select aria-label="Commentary order" value={newestFirst?'newest':'oldest'} onChange={event=>setView(current=>({...current,newestFirst:event.target.value==='newest'}))}><option value="newest">Latest first</option><option value="oldest">Oldest first</option></select></div>
       {visibleEvents.length?<MatchEvents match={match} events={visibleEvents} commentary newestFirst={newestFirst}/>:<p className="field-note commentary-empty">No events match this filter. <button type="button" className="text-button" onClick={resetFilters}>Clear filters</button></p>}

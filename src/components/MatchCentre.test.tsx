@@ -14,13 +14,20 @@ vi.mock('../useMatchSummary',async(importOriginal)=>{const actual=await importOr
 const initial=structuredClone(state.data);
 afterEach(()=>{cleanup();state.data=structuredClone(initial);state.loading=false;state.error=null;state.real=false;bridge.invoke.mockReset();});
 it('offers available sections and displays explicit zero stats and player names',()=>{render(<MatchCentre match={mockSnapshot.matches[0]}/>);fireEvent.click(screen.getByRole('tab',{name:'Commentary'}));expect(screen.getByText("45+2'")).toBeTruthy();expect(screen.getByText('Verified provider goal')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Stats'}));expect(screen.getByText('0')).toBeTruthy();fireEvent.click(screen.getByRole('tab',{name:'Lineups'}));expect(screen.getByText('A long player name')).toBeTruthy();});
-it('offers one details freshness line and refresh action in every section',()=>{
- render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+it('offers one details freshness line in every section and a retry only for saved details',()=>{
+ const {unmount}=render(<MatchCentre match={mockSnapshot.matches[0]}/>);
  for(const name of ['Overview','Stats','Lineups','Commentary']) {
   fireEvent.click(screen.getByRole('tab',{name}));
   expect(screen.getAllByText(/Match details updated/)).toHaveLength(1);
-  const refresh=screen.getByRole('button',{name:'Refresh match details'});
-  fireEvent.click(refresh);
+  // Fresh details are refreshed from the footer; no second refresh control in the panel.
+  expect(screen.queryByRole('button',{name:'Refresh match details'})).toBeNull();
+ }
+ unmount();
+ state.data={...state.data,stale:true};
+ render(<MatchCentre match={mockSnapshot.matches[0]}/>);
+ for(const name of ['Overview','Stats','Lineups','Commentary']) {
+  fireEvent.click(screen.getByRole('tab',{name}));
+  fireEvent.click(screen.getByRole('button',{name:'Refresh match details'}));
   expect(state.refresh).toHaveBeenCalled();
  }
 });
@@ -276,11 +283,11 @@ it('shows available empty states before kick-off',()=>{
  expect(screen.getByText('Statistics are not available for this match.')).toBeTruthy();
  expect(screen.queryByRole('table',{name:'Team statistics'})).toBeNull();state.data=old;
 });
-it('forces a cache-bypassing details refresh from the Overview freshness line',async()=>{
+it('forces a cache-bypassing details refresh from the saved-details retry',async()=>{
  const id=mockSnapshot.matches[0].id;state.real=true;
- bridge.invoke.mockResolvedValue({...structuredClone(initial),matchId:id,stale:false,error:null});
+ bridge.invoke.mockResolvedValue({...structuredClone(initial),matchId:id,stale:true,error:null});
  render(<MatchCentre match={mockSnapshot.matches[0]}/>);
- await screen.findByText(/Match details updated/);
+ await screen.findByText(/Saved details · updated/);
  bridge.invoke.mockClear();
  const refresh=screen.getByRole('button',{name:'Refresh match details'});
  fireEvent.click(refresh);

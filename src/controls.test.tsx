@@ -116,7 +116,7 @@ describe('widget controls', () => {
   render(<App/>); expect(screen.queryByRole('button', {name:'Minimize widget'})).toBeNull(); fireEvent.click(screen.getByRole('button', {name:'Hide widget'}));
   expect(bridge.hide).toHaveBeenCalledOnce(); expect(bridge.minimize).not.toHaveBeenCalled(); expect(useApp.getState().snapshot?.settings.compact).toBe(false);
   fireEvent.click(screen.getByRole('button', {name:'Settings'})); fireEvent.click(screen.getByText('Appearance'));
-  expect(screen.getByLabelText(/Compact view/)).toBeTruthy();
+  expect(screen.getByLabelText(/Compact layout/)).toBeTruthy();
  });
  it('keeps start-hidden unavailable until launch at sign-in is on', async () => {
   bridge.native = true; vi.mocked(isEnabled).mockResolvedValueOnce(true);
@@ -192,7 +192,7 @@ describe('widget controls', () => {
   render(<App/>);
   fireEvent.click(screen.getByRole('button', {name:'Settings'}));
   fireEvent.click(screen.getByText('Appearance'));
-  fireEvent.click(screen.getByRole('checkbox', {name:/Compact view/}));
+  fireEvent.click(screen.getByRole('checkbox', {name:/Compact layout/}));
   fireEvent.change(screen.getByLabelText('Theme'), {target:{value:'light'}});
   await waitFor(() => expect(persisted.settings).toMatchObject({compact:true, theme:'light'}));
   await useApp.getState().load();

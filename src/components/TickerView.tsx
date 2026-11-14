@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { awaitingKickoffUpdate } from '../countdown';
 
 // Slim ticker mode: one match, a draggable strip above it, and a single click to expand.
-export function TickerView({match,onExpand,navigation}:{match:Match|null;onExpand:()=>void;navigation?:{canCycle:boolean;onPrevious:()=>void;onNext:()=>void}}) {
+export function TickerView({match,onExpand,onOpen,navigation}:{match:Match|null;onExpand:()=>void;onOpen?:()=>void;navigation?:{canCycle:boolean;onPrevious:()=>void;onNext:()=>void}}) {
   if(!match) return <section className="ticker" aria-label="Match ticker" data-tauri-drag-region>
     <p className="ticker-empty">No live or upcoming matches</p>
     <button className="ticker-card ticker-card-empty" onClick={onExpand} title="Expand MatchRadar">Open MatchRadar</button>
@@ -32,12 +32,13 @@ export function TickerView({match,onExpand,navigation}:{match:Match|null;onExpan
   return <section className="ticker" aria-label="Match ticker" data-tauri-drag-region>
     <div className="ticker-stage">
     {navigation&&<button className="ticker-step" aria-label="Previous ticker match" title="Previous match · locks your selection" disabled={!navigation.canCycle} onClick={navigation.onPrevious}><ChevronLeft size={14}/></button>}
-    <button className="ticker-card" onClick={onExpand} title="Expand MatchRadar">
-      <Badge team={match.home}/>
+    <button className="ticker-card" onClick={onOpen??onExpand} title={onOpen?'Open this match in MatchRadar':'Expand MatchRadar'}>
+      {/* The team code sits beside the crest, so a missing crest shows nothing rather than the code twice. */}
+      <Badge team={match.home} fallback={false}/>
       <span className="ticker-team home">{home}</span>
       <span className={'ticker-centre'+(live&&!match.scoreStale?' is-live':'')}>{centre}</span>
       <span className="ticker-team away">{away}</span>
-      <Badge team={match.away}/>
+      <Badge team={match.away} fallback={false}/>
     </button>
     {navigation&&<button className="ticker-step" aria-label="Next ticker match" title="Next match · locks your selection" disabled={!navigation.canCycle} onClick={navigation.onNext}><ChevronRight size={14}/></button>}
     </div>

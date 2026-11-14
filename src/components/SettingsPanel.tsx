@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { isTauri, invoke } from '@tauri-apps/api/core';
 import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
-import { Bell, Check, ChevronDown, CircleHelp, RefreshCw, Search } from 'lucide-react';
+import { Bell, Check, ChevronDown, CircleHelp, ClipboardCopy, Search } from 'lucide-react';
 import { clubs } from '../teams';
 import type { Match, Settings, Team } from '../types';
 import { Badge, Toggle, ViewHeading } from './WidgetUi';
@@ -11,10 +11,12 @@ import { useApp } from '../store';
 
 const sections = ['Teams','Appearance','Alerts','App'] as const;
 type Section = typeof sections[number];
+const PREMIER_LEAGUE_CLUBS = 20;
 
-export function SettingsPanel({settings, save, back, matches, refresh, refreshing, backLabel}: {
-  settings:Settings; save:(s:Partial<Settings>)=>Promise<unknown>; back:()=>void; matches:Match[]; refresh:()=>void; refreshing:boolean;backLabel?:string;
+export function SettingsPanel({settings, save, back, matches, backLabel}: {
+  settings:Settings; save:(s:Partial<Settings>)=>Promise<unknown>; back:()=>void; matches:Match[]; backLabel?:string;
 }) {
+  const snapshot = useApp(state=>state.snapshot);
   const [section,setSection] = useState<Section>('Teams');
   const [query,setQuery] = useState('');
   const [showOtherClubs,setShowOtherClubs] = useState(false);
@@ -48,10 +50,12 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
   const byId = useMemo(()=>new Map(availableClubs.map(team=>[team.id,team])),[availableClubs]);
   const favoriteIds = useMemo(()=>[...new Set(settings.favorites)],[settings.favorites]);
   const favoriteSet = useMemo(()=>new Set(favoriteIds),[favoriteIds]);
+  // The bundled list spans promotion candidates, so it holds more than 20 clubs.
+  // Once the fixture window covers a full matchweek the feed is the authority;
+  // before that (cold start, international break) fall back to the bundled list.
   const plIds = useMemo(()=>{
-    const ids = new Set(clubs.map(team=>team.id));
-    matches.filter(m=>m.league==='premierLeague').flatMap(m=>[m.home,m.away]).forEach(team=>ids.add(team.id));
-    return ids;
+    const seen = new Set(matches.filter(m=>m.league==='premierLeague').flatMap(m=>[m.home.id,m.away.id]));
+    return seen.size>=PREMIER_LEAGUE_CLUBS ? seen : new Set([...clubs.map(team=>team.id),...seen]);
   },[matches]);
   const followedClubs = favoriteIds.map(id=>byId.get(id)).filter((club): club is Team => !!club).sort((a,b)=>a.name.localeCompare(b.name));
   const unknownFavoriteIds = favoriteIds.filter(id=>!byId.has(id));
@@ -116,6 +120,19 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
     if(next===undefined) return;
     event.preventDefault();activate(sections[next]);document.getElementById('settings-tab-'+sections[next])?.focus();
   };
+  // Everything a bug report needs, nothing personal: no club names or match ids.
+  const copyDiagnostics = async () => {
+    const report = [
+      `MatchRadar ${APP_VERSION} (${native?'desktop':'browser preview'})`,
+      `User agent: ${navigator.userAgent}`,
+      `Time zone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`,
+      `Settings: theme=${settings.theme} view=${settings.competitionView} compact=${settings.compact} onTop=${settings.alwaysOnTop} followed=${settings.favorites.length} bells=${Object.keys(settings.matchAlerts).length}`,
+      `Snapshot: matches=${snapshot?.matches.length??0} updated=${snapshot?.updatedAt??'never'} partial=${!!snapshot?.partial} rateLimitedUntil=${snapshot?.rateLimitedUntil??'none'}`,
+      ...Object.entries(snapshot?.leagueStatus??{}).map(([league,status])=>`${league}: scores=${status.updatedAt??'never'} fixtures=${status.fixtureUpdatedAt??'never'} results=${status.recentUpdatedAt??'never'}${status.scoreError?` scoreError="${status.scoreError}"`:''}${status.fixtureError?` fixtureError="${status.fixtureError}"`:''}${status.recentError?` resultsError="${status.recentError}"`:''}`),
+    ].join('\n');
+    try {await navigator.clipboard.writeText(report);setNotice('Diagnostics copied. Paste them into a bug report.');}
+    catch {setNotice('Could not copy diagnostics to the clipboard.');}
+  };
   const test = async () => {
     setTesting(true);
     try {if(native) await invoke('test_notification');setNotice(native?'Test notification requested. Check Windows notification settings if it does not appear.':'Notifications are available in the desktop app.');}
@@ -156,7 +173,7 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
       {section==='Appearance'&&<>
         <div className="section-intro"><h3>Appearance</h3><p>Theme, density and desktop visibility.</p></div>
         <label className="select-row">Theme<select aria-label="Theme" value={settings.theme} onChange={e=>{const theme=e.target.value;if(theme==='light'||theme==='dark'||theme==='system') update({theme});}}><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label>
-        <Toggle label="Compact view" description="Start smaller and remember your expanded size. You can still resize the window." value={settings.compact} onChange={compact=>update({compact})}/>
+        <Toggle label="Compact layout" description="Tighter spacing and a smaller window. For a one-match strip, use ticker mode in the header." value={settings.compact} onChange={compact=>update({compact})}/>
         {!native&&<p className="field-note">Browser preview changes spacing only. The desktop app also resizes the window.</p>}
         <Toggle label="Always on top" description="Keep the widget above other windows" value={settings.alwaysOnTop} onChange={alwaysOnTop=>update({alwaysOnTop})}/>
         <Toggle label="Reduce motion" description="Use fewer transitions and animations" value={settings.reducedMotion} onChange={reducedMotion=>update({reducedMotion})}/>
@@ -174,7 +191,7 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
         <Toggle label="Match starting" value={settings.starts} onChange={starts=>update({starts})}/>
         <Toggle label="Goals" description="For followed clubs; match bells can enable goals separately" value={settings.goals} onChange={goals=>update({goals})}/>
         <button className="outline-button" onClick={()=>void test()} disabled={testing} aria-busy={testing}><Bell size={15}/>{testing?'Requesting notification…':'Send test notification'}</button>
-        <p className="field-note">Open match details to mute a game or return to team defaults.</p>
+        <p className="field-note">Use the bell on a match, in the list or in match details, to turn alerts on, mute a game, or return to team defaults.</p>
         {!!Object.keys(settings.matchAlerts).length&&(confirmReset?<div role="group" aria-label="Confirm reset match bells"><p>Reset all match bells to team defaults?</p><button ref={resetConfirmation} className="text-button" onClick={()=>{setConfirmReset(false);panel.current?.focus();update({matchAlerts:{}});}}>Confirm reset</button><button className="text-button" onClick={()=>{setConfirmReset(false);requestAnimationFrame(()=>resetTrigger.current?.focus());}}>Cancel</button></div>:<button ref={resetTrigger} className="text-button reset-all" onClick={()=>setConfirmReset(true)}>Reset match bells to team defaults</button>)}
       </>}
       {section==='App'&&<>
@@ -183,8 +200,9 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
         <Toggle label="Start hidden in tray" description={!native?'Available in the desktop app':autostart!==true?'Enable Launch with Windows to use this setting':'Launch with Windows without opening the widget'} disabled={!native||autostart!==true} value={settings.startHidden} onChange={startHidden=>update({startHidden})}/>
         {startupError&&<p className="notice" role="status">Could not read the Windows startup setting. Reopen Settings to try again.</p>}
         <div className="about"><CircleHelp size={17}/><p>Scores use ESPN’s unofficial endpoints and may be unavailable or change. MatchRadar is not affiliated with ESPN, the Premier League, or UEFA.</p></div>
-        <button className="outline-button" onClick={refresh} disabled={refreshing}><RefreshCw size={15}/>Refresh data</button>
+        <button className="outline-button" onClick={()=>void copyDiagnostics()} title="Copy version, settings summary and feed status for a bug report"><ClipboardCopy size={15}/>Copy diagnostics</button>
         <p className="field-note">MatchRadar lives in the system tray. The X button hides it there; click the tray icon or press Ctrl+Shift+M anywhere to show it again, and choose Quit in the tray to exit.</p>
+        <p className="field-note">Keyboard: 1–4 switch views · R refreshes · / finds a club · [ and ] step through matches · Esc goes back. Right-click a match for more actions.</p>
       </>}
       {notice&&<p className="notice" role="status">{notice}</p>}
     </div>

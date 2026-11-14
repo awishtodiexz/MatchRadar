@@ -18,6 +18,22 @@ export function positionGroup(position:string):Group {
   if(/^(F|FW|ST|CF|SS|LW|RW)$/.test(code)) return 'Forwards';
   return 'Other positions';
 }
+const POSITION_NAMES: Record<string,string> = {
+  G:'Goalkeeper',GK:'Goalkeeper',D:'Defender',DF:'Defender',CB:'Centre-back',CD:'Centre-back',LB:'Left-back',RB:'Right-back',LWB:'Left wing-back',RWB:'Right wing-back',SW:'Sweeper',
+  M:'Midfielder',MF:'Midfielder',CM:'Central midfielder',DM:'Defensive midfielder',CDM:'Defensive midfielder',AM:'Attacking midfielder',CAM:'Attacking midfielder',LM:'Left midfielder',RM:'Right midfielder',AML:'Left attacking midfielder',AMR:'Right attacking midfielder',
+  F:'Forward',FW:'Forward',ST:'Striker',CF:'Centre-forward',SS:'Second striker',LW:'Left winger',RW:'Right winger',
+};
+/** "CD-R" → "Centre-back (right)"; unknown codes have no expansion. */
+export function positionName(position:string):string|undefined {
+  const [code,side] = position.trim().toUpperCase().replace(/\s+/g,'').split('-');
+  const name = POSITION_NAMES[code];
+  if(!name) return undefined;
+  return side==='L'?`${name} (left)`:side==='R'?`${name} (right)`:side==='C'?`${name} (centre)`:name;
+}
+function Position({position}:{position:string}) {
+  const name = positionName(position);
+  return name&&name.toUpperCase()!==position.trim().toUpperCase()?<abbr title={name}>{position}</abbr>:<>{position}</>;
+}
 const byPlace = (a:MatchSummary['players'][number], b:MatchSummary['players'][number]) =>
   (a.formationPlace ?? 99) - (b.formationPlace ?? 99) || a.name.localeCompare(b.name);
 type PitchData = { lines:MatchSummary['players'][]; keeper:MatchSummary['players'][number]; formation:string };
@@ -142,7 +158,7 @@ function PlayerList({players, substitutions,marksFor}: {players:MatchSummary['pl
         return <li key={`${player.name}-${index}`}>
           {player.jersey && <span className="jersey">#{player.jersey}</span>}
           <span>{player.name}<PlayerEventNotes marks={marksFor(player.name)}/></span>
-          <small>{player.position}{off&&<span className="sub-marker off" title={`Substituted off at ${formatMinute(off.minute)}`}> ↓ {formatMinute(off.minute)}</span>}{on&&<span className="sub-marker on" title={`Substituted on at ${formatMinute(on.minute)}`}> ↑ {formatMinute(on.minute)}</span>}{!on&&!off&&player.subbedOut?' · off':!on&&!off&&player.subbedIn?' · on':''}</small>
+          <small><Position position={player.position}/>{off&&<span className="sub-marker off" title={`Substituted off at ${formatMinute(off.minute)}`}> ↓ {formatMinute(off.minute)}</span>}{on&&<span className="sub-marker on" title={`Substituted on at ${formatMinute(on.minute)}`}> ↑ {formatMinute(on.minute)}</span>}{!on&&!off&&player.subbedOut?' · off':!on&&!off&&player.subbedIn?' · on':''}</small>
         </li>;
       })}</ul>
     </div> : null;
@@ -153,7 +169,7 @@ function BenchList({rows,marksFor}:{rows:BenchRow[];marksFor:(name:string)=>Play
   return <ul className="lineup-list bench-list">{rows.map(row=><li key={row.key} className={row.used?undefined:'is-unused'}>
     {row.jersey&&<span className="jersey">#{row.jersey}</span>}
     <span className="bench-name">{row.name}{row.on&&<small className="sub-for">for {row.on.playerOut}</small>}<PlayerEventNotes marks={marksFor(row.name)}/></span>
-    <small>{row.position}{row.on&&<span className="sub-marker on" title={`Substituted on at ${formatMinute(row.on.minute)}`}>↑ {formatMinute(row.on.minute)}</span>}{!row.on&&row.used&&' · on'}{row.off&&<span className="sub-marker off" title={`Substituted off at ${formatMinute(row.off.minute)}`}>↓ {formatMinute(row.off.minute)}</span>}</small>
+    <small><Position position={row.position}/>{row.on&&<span className="sub-marker on" title={`Substituted on at ${formatMinute(row.on.minute)}`}>↑ {formatMinute(row.on.minute)}</span>}{!row.on&&row.used&&' · on'}{row.off&&<span className="sub-marker off" title={`Substituted off at ${formatMinute(row.off.minute)}`}>↓ {formatMinute(row.off.minute)}</span>}</small>
   </li>)}</ul>;
 }
 
@@ -207,12 +223,13 @@ export function MatchLineups({match,players,substitutions=[],formations={},coach
       </button>)}
     </div>
     <div role="tabpanel" id={sectionId+'-panel'} aria-labelledby={sectionId+'-tab-'+active.id} tabIndex={0}>
-      <div className="lineup-heading"><h3>{pitch?'Starting XI':active.name}</h3>{pitch&&<small className="kickoff-note">at kickoff</small>}{formation&&<span className="formation">{formation}</span>}</div>
+      {/* Without a pitch the selected team tab already names the side; the list has its own Starting XI heading. */}
+      {pitch&&<div className="lineup-heading"><h3>Starting XI</h3>{pitch&&<small className="kickoff-note">at kickoff</small>}{formation&&<span className="formation">{formation}</span>}</div>}
       {coachNames.length>0&&<div className="coach-row"><span>{coachNames.length===1?'Coach':'Coaches'}</span><strong>{coachNames.join(', ')}</strong></div>}
       {pitch&&<><LineupPitch key={active.id} team={active} pitch={pitch} marksFor={marksFor}/><details className="lineup-help"><summary>About this lineup</summary><p>Starting positions, not a live tactical view. Tap or focus a player for details.</p><p>Ball = goal · cards = bookings · down arrow = substituted off</p></details></>}
       {!pitch&&starters.length===11&&<p className="field-note">Formation unavailable for this lineup.</p>}
       {!selected.length&&<p className="field-note">Lineup unavailable</p>}
-      {starters.length>0&&(pitch?<details className="lineup-roster" key={active.id}><summary>Full starting XI <small>{starters.length} players</small></summary><PlayerList players={starters} substitutions={teamSubs} marksFor={marksFor}/></details>:<><h4>Starting XI <small className="kickoff-note">at kickoff</small></h4><PlayerList players={starters} substitutions={teamSubs} marksFor={marksFor}/></>)}
+      {starters.length>0&&(pitch?<details className="lineup-roster" key={active.id}><summary>Full starting XI <small>{starters.length} players</small></summary><PlayerList players={starters} substitutions={teamSubs} marksFor={marksFor}/></details>:<><h4>Starting XI <small className="kickoff-note">at kickoff</small>{formation&&<span className="formation">{formation}</span>}</h4><PlayerList players={starters} substitutions={teamSubs} marksFor={marksFor}/></>)}
       {starters.length===0&&selected.length>0&&<><h4>Squad</h4><PlayerList players={selected} substitutions={teamSubs} marksFor={marksFor}/></>}
       {bench.length>0&&<><h4>Substitutes</h4>{usedBench.length>0&&<><h5>Used substitutes · {usedBench.length}</h5><BenchList rows={usedBench} marksFor={marksFor}/></>}{unusedBench.length>0&&<><h5>Unused bench · {unusedBench.length}</h5><BenchList rows={unusedBench} marksFor={marksFor}/></>}</>}
     </div>

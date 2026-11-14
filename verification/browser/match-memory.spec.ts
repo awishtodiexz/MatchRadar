@@ -39,7 +39,7 @@ test('commentary keeps its filter, order, and scroll through Settings, ticker mo
   await page.getByRole('button',{name:'Ticker mode'}).click();
   await page.setViewportSize({width:320,height:112});
   await expect(page.getByRole('region',{name:'Match ticker'})).toBeVisible();
-  await page.getByTitle('Expand MatchRadar').click();
+  await page.getByTitle('Open this match in MatchRadar').click();
   await page.setViewportSize({width:320,height:460});
   await expect(page.getByRole('tab',{name:'Commentary',exact:true})).toHaveAttribute('aria-selected','true');
   await expect(page.getByRole('tab',{name:'Commentary',exact:true})).toBeFocused();
@@ -126,7 +126,7 @@ test('unconfirmed kickoff changes from Starting soon to Awaiting update after th
   await page.screenshot({path:'verification/artifacts/qol1-awaiting-update.png',animations:'disabled'});
   await page.getByRole('button',{name:'Ticker mode'}).click();
   await expect(page.getByText('Awaiting update',{exact:true})).toBeVisible();
-  await page.getByTitle('Expand MatchRadar').click();
+  await page.getByTitle('Open this match in MatchRadar').click();
   await page.getByRole('button',{name:'Back to matches',exact:true}).click();
   await expect(page.getByText('Awaiting update',{exact:true})).toBeVisible();
   await expect(page.getByText('Soon',{exact:true})).toHaveCount(0);

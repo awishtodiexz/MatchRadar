@@ -10,7 +10,7 @@ afterEach(cleanup);
 function show(settings: Settings = defaults) {
   const save = vi.fn<(patch: Partial<Settings>) => Promise<void>>(async () => {});
   const onKeyDown = vi.fn();
-  const view = render(<div onKeyDown={onKeyDown}><SettingsPanel settings={settings} save={save} back={()=>{}} matches={mockMatches} refresh={()=>{}} refreshing={false}/></div>);
+  const view = render(<div onKeyDown={onKeyDown}><SettingsPanel settings={settings} save={save} back={()=>{}} matches={mockMatches}/></div>);
   return {save,onKeyDown,...view};
 }
 
@@ -48,7 +48,7 @@ describe('settings audit', () => {
     fireEvent.click(screen.getByRole('tab', {name:'Alerts'}));
     expect((screen.getByRole('combobox', {name:'Reminder time'}) as HTMLSelectElement).disabled).toBe(true);
     expect(screen.getByText(/Turn on kick-off reminders or a match bell/)).toBeTruthy();
-    rerender(<div><SettingsPanel settings={{...defaults,reminders:false,matchAlerts:{game:{enabled:true,expiresAt:'2030-01-01'}}}} save={async()=>{}} back={()=>{}} matches={mockMatches} refresh={()=>{}} refreshing={false}/></div>);
+    rerender(<div><SettingsPanel settings={{...defaults,reminders:false,matchAlerts:{game:{enabled:true,expiresAt:'2030-01-01'}}}} save={async()=>{}} back={()=>{}} matches={mockMatches}/></div>);
     expect((screen.getByRole('combobox', {name:'Reminder time'}) as HTMLSelectElement).disabled).toBe(false);
   });
 
