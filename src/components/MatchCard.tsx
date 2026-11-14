@@ -128,14 +128,14 @@ export function MatchAlertsButton({match, settings, list=false}: {match:Match; s
       <p className="field-note">{match.home.name} vs {match.away.name}</p>
       {alerts.postponed&&<p className="field-note">{alerts.description}</p>}
       <div className="alert-options">
-        <button className="outline-button" aria-label="Team default" aria-pressed={alerts.state==='team'} onClick={reset}>
-          <strong>Team default</strong><small>{alerts.defaultDescription}</small>
+        <button className="outline-button" aria-labelledby={`${menuId}-team`} aria-describedby={`${menuId}-team-description`} aria-pressed={alerts.state==='team'} onClick={reset}>
+          <strong id={`${menuId}-team`}>Team default</strong><small id={`${menuId}-team-description`}>{alerts.defaultDescription}</small>
         </button>
-        <button className="outline-button" aria-label="On" aria-pressed={alerts.state==='on'} onClick={()=>change(true)}>
-          <strong>On — all match alerts</strong><small>Reminders, match start and goals, even if you don’t follow either team.</small>
+        <button className="outline-button" aria-labelledby={`${menuId}-on`} aria-describedby={`${menuId}-on-description`} aria-pressed={alerts.state==='on'} onClick={()=>change(true)}>
+          <strong id={`${menuId}-on`}>On</strong><small id={`${menuId}-on-description`}>Reminders, match start and goals, even if you don’t follow either team.</small>
         </button>
-        <button className="outline-button" aria-label="Muted" aria-pressed={alerts.state==='muted'} onClick={()=>change(false)}>
-          <strong>Muted — no match alerts</strong><small>No alerts for this match, even for followed clubs.</small>
+        <button className="outline-button" aria-labelledby={`${menuId}-muted`} aria-describedby={`${menuId}-muted-description`} aria-pressed={alerts.state==='muted'} onClick={()=>change(false)}>
+          <strong id={`${menuId}-muted`}>Muted</strong><small id={`${menuId}-muted-description`}>No alerts for this match, even for followed clubs.</small>
         </button>
       </div>
       <p className="field-note alert-feedback" role="status">{feedback}</p>
