@@ -94,7 +94,8 @@ export function MatchStats({match,statistics,selection}:{match:Match;statistics:
   return <><div className="stats-toolbar"><span>{summary}</span><select aria-label="Statistic group" value={active} onChange={event=>selection?selection.onChange({group:event.target.value,expanded}):setGroup(event.target.value)}><option value="All">All categories</option>{sections.map(section=><option key={section.title}>{section.title}</option>)}</select></div><div className="stat-comparison" role="table" aria-label="Team statistics">
     <div className="stat-teams" role="row"><strong role="columnheader" aria-label={match.home.name} title={match.home.name}>{teamCode(match.home)||match.home.name}</strong><span role="columnheader">Statistic</span><strong role="columnheader" aria-label={match.away.name} title={match.away.name}>{teamCode(match.away)||match.away.name}</strong></div>
     {visibleSections.map(section=><div className="stat-section" role="rowgroup" key={section.title}>
-      <div className="stat-section-title" role="row"><span role="columnheader" aria-colspan={3}>{section.title}</span></div>
+      {/* The curated view is a single section already named by the toolbar summary. */}
+      {!curated&&<div className="stat-section-title" role="row"><span role="columnheader" aria-colspan={3}>{section.title}</span></div>}
       {section.rows.map(pair=>{
         const left=numeric(pair.home?.value),right=numeric(pair.away?.value);
         const leftValue=left===null?null:(pair.home?.value.includes('%')?left:scale(pair.name,left)),rightValue=right===null?null:(pair.away?.value.includes('%')?right:scale(pair.name,right));

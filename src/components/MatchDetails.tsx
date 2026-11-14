@@ -86,12 +86,12 @@ export function MatchDetails({match, settings, back, ref, onBusyChange, sessions
     <div className="detail-body" ref={body} onScroll={event=>{if(restoredSection.current===section)memory.scroll[section]=event.currentTarget.scrollTop;if(!lineupView)setCollapsed(event.currentTarget.scrollTop>0&&event.currentTarget.scrollTop >= (hero.current?.offsetHeight??180)-24);}}>
       <div className={'detail-hero'+(live?' is-live':'')} ref={hero} hidden={lineupView}>
       <div className="versus">
-        <div className={winner==='away'?'is-beaten':undefined}><span className="crest-ring"><Badge team={match.home}/></span><b title={match.home.name}>{match.home.name}</b><small>Home</small><FollowTeam team={match.home} settings={settings} save={save}/><TablePill team={match.home} standings={summary.data?.standings} current={!scheduled&&!live}/></div>
+        <div className={winner==='away'?'is-beaten':undefined}><span className="crest-ring"><Badge team={match.home}/></span><span className="versus-name"><b title={`${match.home.name} · home`}>{match.home.name}</b><FollowTeam team={match.home} settings={settings} save={save}/></span><small className="sr-only">Home</small><TablePill team={match.home} standings={summary.data?.standings} current={!scheduled&&!live}/></div>
         <div className="detail-score">
           <span className={showKickoff?'is-time':undefined}>{clock}{meridiem&&<small>{meridiem}</small>}</span>
           <small className={'detail-status '+match.status+(match.scoreStale?' saved':'')}>{live&&!match.scoreStale&&<i className="dot"/>}{statusText}</small>
         </div>
-        <div className={winner==='home'?'is-beaten':undefined}><span className="crest-ring"><Badge team={match.away}/></span><b title={match.away.name}>{match.away.name}</b><small>Away</small><FollowTeam team={match.away} settings={settings} save={save}/><TablePill team={match.away} standings={summary.data?.standings} current={!scheduled&&!live}/></div>
+        <div className={winner==='home'?'is-beaten':undefined}><span className="crest-ring"><Badge team={match.away}/></span><span className="versus-name"><b title={`${match.away.name} · away`}>{match.away.name}</b><FollowTeam team={match.away} settings={settings} save={save}/></span><small className="sr-only">Away</small><TablePill team={match.away} standings={summary.data?.standings} current={!scheduled&&!live}/></div>
       </div>
       <p className="detail-date">{scheduled?<Countdown kickoff={match.kickoff}/>:<time dateTime={match.kickoff}>{dateLabel(match.kickoff)}{showKickoff?'':` · ${timeLabel(match.kickoff)}`}</time>}{context&&<> · {context}</>}</p>
       </div>
@@ -106,5 +106,5 @@ export function MatchDetails({match, settings, back, ref, onBusyChange, sessions
 
 function FollowTeam({team,settings,save}:{team:Team;settings:Settings;save:ReturnType<typeof useApp.getState>['save']}) {
   const following=settings.favorites.includes(team.id);
-  return <button type="button" className="text-button follow-team" aria-pressed={following} aria-label={`${following?'Unfollow':'Follow'} ${team.name}`} onClick={()=>void save({favorites:following?settings.favorites.filter(id=>id!==team.id):[...settings.favorites,team.id]})}><Star size={13} aria-hidden="true" fill={following?'currentColor':'none'}/>{following?'Unfollow':'Follow'}</button>;
+  return <button type="button" className="icon-button follow-team" aria-pressed={following} aria-label={`${following?'Unfollow':'Follow'} ${team.name}`} title={following?`Following ${team.name} · click to unfollow`:`Follow ${team.name}`} onClick={()=>void save({favorites:following?settings.favorites.filter(id=>id!==team.id):[...settings.favorites,team.id]})}><Star size={14} aria-hidden="true" fill={following?'currentColor':'none'}/></button>;
 }

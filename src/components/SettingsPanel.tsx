@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { isTauri, invoke } from '@tauri-apps/api/core';
 import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
-import { Bell, Check, ChevronDown, CircleHelp, RefreshCw, Search } from 'lucide-react';
+import { Bell, Check, ChevronDown, CircleHelp, ClipboardCopy, Search } from 'lucide-react';
 import { clubs } from '../teams';
 import type { Match, Settings, Team } from '../types';
 import { Badge, Toggle, ViewHeading } from './WidgetUi';
@@ -13,9 +13,10 @@ const sections = ['Teams','Appearance','Alerts','App'] as const;
 type Section = typeof sections[number];
 const PREMIER_LEAGUE_CLUBS = 20;
 
-export function SettingsPanel({settings, save, back, matches, refresh, refreshing, backLabel}: {
-  settings:Settings; save:(s:Partial<Settings>)=>Promise<unknown>; back:()=>void; matches:Match[]; refresh:()=>void; refreshing:boolean;backLabel?:string;
+export function SettingsPanel({settings, save, back, matches, backLabel}: {
+  settings:Settings; save:(s:Partial<Settings>)=>Promise<unknown>; back:()=>void; matches:Match[]; backLabel?:string;
 }) {
+  const snapshot = useApp(state=>state.snapshot);
   const [section,setSection] = useState<Section>('Teams');
   const [query,setQuery] = useState('');
   const [showOtherClubs,setShowOtherClubs] = useState(false);
@@ -119,6 +120,19 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
     if(next===undefined) return;
     event.preventDefault();activate(sections[next]);document.getElementById('settings-tab-'+sections[next])?.focus();
   };
+  // Everything a bug report needs, nothing personal: no club names or match ids.
+  const copyDiagnostics = async () => {
+    const report = [
+      `MatchRadar ${APP_VERSION} (${native?'desktop':'browser preview'})`,
+      `User agent: ${navigator.userAgent}`,
+      `Time zone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`,
+      `Settings: theme=${settings.theme} view=${settings.competitionView} compact=${settings.compact} onTop=${settings.alwaysOnTop} followed=${settings.favorites.length} bells=${Object.keys(settings.matchAlerts).length}`,
+      `Snapshot: matches=${snapshot?.matches.length??0} updated=${snapshot?.updatedAt??'never'} partial=${!!snapshot?.partial} rateLimitedUntil=${snapshot?.rateLimitedUntil??'none'}`,
+      ...Object.entries(snapshot?.leagueStatus??{}).map(([league,status])=>`${league}: scores=${status.updatedAt??'never'} fixtures=${status.fixtureUpdatedAt??'never'} results=${status.recentUpdatedAt??'never'}${status.scoreError?` scoreError="${status.scoreError}"`:''}${status.fixtureError?` fixtureError="${status.fixtureError}"`:''}${status.recentError?` resultsError="${status.recentError}"`:''}`),
+    ].join('\n');
+    try {await navigator.clipboard.writeText(report);setNotice('Diagnostics copied. Paste them into a bug report.');}
+    catch {setNotice('Could not copy diagnostics to the clipboard.');}
+  };
   const test = async () => {
     setTesting(true);
     try {if(native) await invoke('test_notification');setNotice(native?'Test notification requested. Check Windows notification settings if it does not appear.':'Notifications are available in the desktop app.');}
@@ -186,7 +200,7 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
         <Toggle label="Start hidden in tray" description={!native?'Available in the desktop app':autostart!==true?'Enable Launch with Windows to use this setting':'Launch with Windows without opening the widget'} disabled={!native||autostart!==true} value={settings.startHidden} onChange={startHidden=>update({startHidden})}/>
         {startupError&&<p className="notice" role="status">Could not read the Windows startup setting. Reopen Settings to try again.</p>}
         <div className="about"><CircleHelp size={17}/><p>Scores use ESPN’s unofficial endpoints and may be unavailable or change. MatchRadar is not affiliated with ESPN, the Premier League, or UEFA.</p></div>
-        <button className="outline-button" onClick={refresh} disabled={refreshing}><RefreshCw size={15}/>Refresh data</button>
+        <button className="outline-button" onClick={()=>void copyDiagnostics()} title="Copy version, settings summary and feed status for a bug report"><ClipboardCopy size={15}/>Copy diagnostics</button>
         <p className="field-note">MatchRadar lives in the system tray. The X button hides it there; click the tray icon or press Ctrl+Shift+M anywhere to show it again, and choose Quit in the tray to exit.</p>
       </>}
       {notice&&<p className="notice" role="status">{notice}</p>}

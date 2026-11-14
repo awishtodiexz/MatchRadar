@@ -50,6 +50,8 @@ export function MatchCard({match, settings, onOpen, showCompetition=false, now}:
     ? `Kick-off ${timeLabel(match.kickoff)}${awaitingUpdate?', awaiting match update':''}`
     : `${match.homeScore ?? '–'} to ${match.awayScore ?? '–'}, ${isLive(match) ? (match.status==='halftime' ? 'half-time' : clockText(match.detail||'live')) : (match.detail || match.status)}${match.scoreStale?' (saved)':''}`)
     + (showCompetition ? `, ${match.league==='championsLeague'?'Champions League':'Premier League'}` : '');
+  const loser = match.status==='fulltime'&&match.homeScore!=null&&match.awayScore!=null&&match.homeScore!==match.awayScore
+    ? (match.homeScore<match.awayScore?match.home.id:match.away.id) : null;
   return <article className="match-row match-card" data-match-id={match.id} aria-labelledby={matchButtonId(match.id)}>
     <button id={matchButtonId(match.id)} className="match-open" onClick={onOpen} aria-describedby={detailId} title="View match details">
       <span className="sr-only">Match details: </span>
@@ -59,14 +61,14 @@ export function MatchCard({match, settings, onOpen, showCompetition=false, now}:
         {awaitingUpdate&&<small>Awaiting update</small>}
         {showCompetition&&<small className="competition-tag">{match.league==='championsLeague'?'UCL':'PL'}</small>}
       </div>
-      <div className="teams">{[match.home,match.away].map(team=><div className="team-line" key={team.id}>
+      <div className="teams">{[match.home,match.away].map(team=><div className={'team-line'+(team.id===loser?' is-beaten':'')} key={team.id}>
         <Badge team={team}/><span className="team-name" title={team.name}>{team.name}</span>
         {settings.favorites.includes(team.id) && <Star aria-hidden="true" className="fav" size={11} fill="currentColor"/>}
       </div>)}</div>
       <div className={'match-state '+(isLive(match)&&!match.scoreStale?'is-live':'')}>
         <div className={'result '+(match.status==='scheduled'?'scheduled':'')}>
           {match.status==='scheduled' ? <span className="scheduled-score" title={countdownLabel(match.kickoff, now)??undefined}>{shortCountdown(match.kickoff, now) ?? '–'}</span>
-            : <div className="scores"><strong>{match.homeScore ?? '–'}</strong><strong>{match.awayScore ?? '–'}</strong></div>}
+            : <div className="scores"><strong className={match.home.id===loser?'is-beaten':undefined}>{match.homeScore ?? '–'}</strong><strong className={match.away.id===loser?'is-beaten':undefined}>{match.awayScore ?? '–'}</strong></div>}
         </div>
       </div><ChevronRight size={13} className="row-arrow" aria-hidden="true"/>
     </button>

@@ -88,7 +88,7 @@ for (const width of [320,390]) for (const theme of ['dark','light']) for (const 
         expect(await page.locator('.settings-body').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
         await expect(page.getByRole('button',{name:'Settings',exact:true})).toBeInViewport();
       }
-      const refresh=page.getByRole('button',{name:'Refresh data'});
+      const refresh=page.getByRole('button',{name:'Copy diagnostics'});
       await refresh.scrollIntoViewIfNeeded(); await expect(refresh).toBeInViewport();
       await page.screenshot({path:info.outputPath(`${width}-${theme}-${compact}-${opacity}-settings.png`),animations:'disabled'});
       await page.getByRole('button',{name:/^Back to match/}).click();
