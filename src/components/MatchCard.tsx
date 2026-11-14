@@ -128,15 +128,12 @@ export function MatchAlertsButton({match, settings, list=false}: {match:Match; s
       <p className="field-note">{match.home.name} vs {match.away.name}</p>
       {alerts.postponed&&<p className="field-note">{alerts.description}</p>}
       <div className="alert-options">
-        <button className="outline-button" aria-labelledby={`${menuId}-team`} aria-describedby={`${menuId}-team-description`} aria-pressed={alerts.state==='team'} onClick={reset}>
-          <strong id={`${menuId}-team`}>Team default</strong><small id={`${menuId}-team-description`}>{alerts.defaultDescription}</small>
-        </button>
-        <button className="outline-button" aria-labelledby={`${menuId}-on`} aria-describedby={`${menuId}-on-description`} aria-pressed={alerts.state==='on'} onClick={()=>change(true)}>
-          <strong id={`${menuId}-on`}>On</strong><small id={`${menuId}-on-description`}>Reminders, match start and goals, even if you don’t follow either team.</small>
-        </button>
-        <button className="outline-button" aria-labelledby={`${menuId}-muted`} aria-describedby={`${menuId}-muted-description`} aria-pressed={alerts.state==='muted'} onClick={()=>change(false)}>
-          <strong id={`${menuId}-muted`}>Muted</strong><small id={`${menuId}-muted-description`}>No alerts for this match, even for followed clubs.</small>
-        </button>
+        <div className="alert-option"><button className="outline-button" aria-labelledby={`${menuId}-team`} aria-describedby={`${menuId}-team-description`} aria-pressed={alerts.state==='team'} onClick={reset}>
+          <strong id={`${menuId}-team`}>Team default</strong></button><small id={`${menuId}-team-description`}>{alerts.defaultDescription}</small></div>
+        <div className="alert-option"><button className="outline-button" aria-labelledby={`${menuId}-on`} aria-describedby={`${menuId}-on-description`} aria-pressed={alerts.state==='on'} onClick={()=>change(true)}>
+          <strong id={`${menuId}-on`}>On</strong></button><small id={`${menuId}-on-description`}>Reminders, match start and goals, even if you don’t follow either team.</small></div>
+        <div className="alert-option"><button className="outline-button" aria-labelledby={`${menuId}-muted`} aria-describedby={`${menuId}-muted-description`} aria-pressed={alerts.state==='muted'} onClick={()=>change(false)}>
+          <strong id={`${menuId}-muted`}>Muted</strong></button><small id={`${menuId}-muted-description`}>No alerts for this match, even for followed clubs.</small></div>
       </div>
       <p className="field-note alert-feedback" role="status">{feedback}</p>
     </div>}
