@@ -11,7 +11,7 @@ test('a pending notification opens its match on startup despite hidden league an
  await expect(page.getByRole('tab',{name:'Overview',exact:true})).toHaveAttribute('aria-selected','true');
  await page.getByRole('button',{name:'Back to matches'}).click();
  await expect(page.getByRole('button',{name:/Competition: Champions League/})).toBeVisible();
- await expect(page.getByRole('button',{name:'Following',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(page.getByRole('button',{name:'Following only',exact:true})).toHaveAttribute('aria-pressed','true');
 });
 
 test('notification clicks switch matches and reset an already open match to its Overview',async({page})=>{

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countdownLabel, timezoneLabel } from './countdown';
+import { countdownLabel, shortCountdown, timezoneLabel } from './countdown';
 
 const now = new Date('2026-11-13T12:00:00Z');
 const in_ = (ms: number) => new Date(now.getTime() + ms).toISOString();
@@ -24,8 +24,11 @@ describe('countdownLabel', () => {
     expect(countdownLabel(in_(4 * MIN), now)).toBe('Starting soon');
     expect(countdownLabel(in_(5 * MIN), now)).toBe('Starting soon');
   });
-  it('reads as starting soon for a kick-off already past', () => {
-    expect(countdownLabel(in_(-10 * MIN), now)).toBe('Starting soon');
+  it('waits briefly for confirmation, then stops describing overdue kick-offs as starting soon', () => {
+    expect(countdownLabel(in_(-5 * MIN), now)).toBe('Starting soon');
+    expect(countdownLabel(in_(-5 * MIN - 1), now)).toBe('Awaiting match update');
+    expect(countdownLabel(in_(-10 * MIN), now)).toBe('Awaiting match update');
+    expect(shortCountdown(in_(-10 * MIN), now)).toBe('…');
   });
   it('returns null for an unparseable kick-off', () => {
     expect(countdownLabel('not a date', now)).toBeNull();

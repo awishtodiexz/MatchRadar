@@ -1,8 +1,8 @@
-export type MatchView = 'All'|'Live'|'Following'|'Upcoming'|'Results';
+export type MatchView = 'All'|'Live'|'Upcoming'|'Results';
 import type { Match } from './types';
 import { isInProgress } from './fixtures';
-export function matchesView(matches:Match[], view:MatchView, favorites:string[]) {
-  return matches.filter(m=>view==='All'||view==='Live'&&isInProgress(m)||view==='Following'&&(favorites.includes(m.home.id)||favorites.includes(m.away.id))||view==='Upcoming'&&m.status==='scheduled'||view==='Results'&&m.status==='fulltime');
+export function matchesView(matches:Match[], view:MatchView, favorites:string[], followedOnly=false) {
+  return matches.filter(m=>(!followedOnly||favorites.includes(m.home.id)||favorites.includes(m.away.id))&&(view==='All'||view==='Live'&&isInProgress(m)||view==='Upcoming'&&m.status==='scheduled'||view==='Results'&&m.status==='fulltime'));
 }
 
 // History is authoritative on legacy ties; individually fresher daily scores win.

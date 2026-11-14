@@ -93,17 +93,17 @@ test('a successful queued alert save reports its own outcome after an earlier fa
 });
 
 test('Following selection rolls back when its preference cannot be saved', async ({ page }) => {
-  const tabs = page.getByRole('navigation', {name:'Fixture views'});
+  const tabs = page.locator('.match-list');
   await page.evaluate(() => window.dispatchEvent(new CustomEvent('test:set-failures', {detail:{save:1}})));
-  await tabs.getByRole('button', {name:'Following', exact:true}).click();
+  await tabs.getByRole('button', {name:'Following only', exact:true}).click();
   await expect(page.getByText('Could not save settings. Please try again.', {exact:true})).toBeVisible();
   await expect(tabs.getByRole('button', {name:'All', exact:true})).toHaveAttribute('aria-pressed', 'true');
-  await tabs.getByRole('button', {name:'Following', exact:true}).click();
-  await expect(tabs.getByRole('button', {name:'Following', exact:true})).toHaveAttribute('aria-pressed', 'true');
+  await tabs.getByRole('button', {name:'Following only', exact:true}).click();
+  await expect(tabs.getByRole('button', {name:'Following only', exact:true})).toHaveAttribute('aria-pressed', 'true');
   await page.evaluate(() => window.dispatchEvent(new CustomEvent('test:set-failures', {detail:{save:1}})));
-  await tabs.getByRole('button', {name:'All', exact:true}).click();
+  await tabs.getByRole('button', {name:'Following only', exact:true}).click();
   await expect(page.getByText('Could not save settings. Please try again.', {exact:true})).toBeVisible();
-  await expect(tabs.getByRole('button', {name:'Following', exact:true})).toHaveAttribute('aria-pressed', 'true');
+  await expect(tabs.getByRole('button', {name:'Following only', exact:true})).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('reset confirmation moves and returns keyboard focus', async ({ page }) => {

@@ -19,6 +19,7 @@ export function useRecentResults(enabled:boolean, view:CompetitionView='premierL
  // new league's request settles.
  const [requestedView,setRequestedView]=useState<CompetitionView|null>(null);
  const attemptedRef=useRef(false);
+ const forceNext=useRef(false);
  useEffect(()=>{
    let disposed=false;let inFlight=false;let timer:ReturnType<typeof setInterval>|undefined;
    const load=(initial:boolean)=>{
@@ -31,7 +32,9 @@ export function useRecentResults(enabled:boolean, view:CompetitionView='premierL
      inFlight=true;
      if(initial)setLoading(true);
      const leagues=competitionLeagues(view).map(competitionSlug);
-     void invoke<RecentResults>('get_recent_results',{leagues})
+     const force=forceNext.current;
+     forceNext.current=false;
+     void invoke<RecentResults>('get_recent_results',force?{leagues,force:true}:{leagues})
        .then(result=>{if(!disposed){setData(result);setRequestedView(view);}})
        .catch(()=>{if(!disposed){
          const error='Could not load recent results. Cached results remain available.';
@@ -54,5 +57,5 @@ export function useRecentResults(enabled:boolean, view:CompetitionView='premierL
    return()=>{disposed=true;if(timer)clearInterval(timer);document.removeEventListener('visibilitychange',visible);};
  },[enabled,revision,view]);
  const pendingView=requestedView!==null&&requestedView!==view;
- return {data:enabled?data:empty,loading:enabled&&(loading||!attempted||pendingView),retry:()=>{if(enabled)setLoading(true);setRevision(n=>n+1);}};
+ return {data:enabled?data:empty,loading:enabled&&(loading||!attempted||pendingView),retry:()=>{forceNext.current=true;if(enabled)setLoading(true);setRevision(n=>n+1);}};
 }

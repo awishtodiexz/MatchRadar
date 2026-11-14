@@ -4,9 +4,9 @@ import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { LogicalSize } from '@tauri-apps/api/dpi';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { Maximize2, Minimize2, Pin, Radio, RefreshCw, Settings2, X } from 'lucide-react';
+import { Lock, Maximize2, Minimize2, Pin, Radio, RefreshCw, Settings2, Star, Unlock, X } from 'lucide-react';
 import logo from './assets/logo.png';
-import { groupFixtures, isInProgress, isLive } from './fixtures';
+import { groupFixtures, isInProgress } from './fixtures';
 import { competitionLeagues, competitionName, competitionSlug, competitionStatus, rateLimitedUntil, resultsStatus, updateStatus } from './freshness';
 import { useApp } from './store';
 import { useLocalDay } from './useLocalDay';
@@ -23,8 +23,11 @@ import { MatchDetails } from './components/MatchDetails';
 import { SettingsPanel } from './components/SettingsPanel';
 import { CompetitionPicker } from './components/CompetitionPicker';
 import { TickerView } from './components/TickerView';
+import { tickerMatches } from './ticker';
+import type { MatchDetailsHandle } from './components/MatchDetails';
+import type { MatchMemory } from './matchMemory';
 
-const VIEWS = ['All','Live','Following','Upcoming','Results'] as const;
+const VIEWS = ['All','Live','Upcoming','Results'] as const;
 // The global-shortcut conflict lasts until the other app releases the keys, so
 // repeating it on every launch only costs vertical space. Show it once.
 const SHORTCUT_NOTICE_KEY = 'matchradar.shortcutNoticeShown';
@@ -42,6 +45,11 @@ export default function App() {
   const [systemTheme,setSystemTheme] = useState<'dark'|'light'>(()=>window.matchMedia?.('(prefers-color-scheme: light)').matches?'light':'dark');
   // Session-only slim mode; the widget's full size is remembered so it can be restored.
   const [ticker,setTicker] = useState(false);
+  const [tickerPinned,setTickerPinned] = useState<Match|null>(null);
+  const detailRefresh = useRef<MatchDetailsHandle>(null);
+  const matchSessions = useRef(new Map<string,MatchMemory>());
+  const settingsReturn = useRef<'home'|'detail'>('home');
+  const [detailBusy,setDetailBusy] = useState(false);
   const tickerRestoreSize = useRef<{width:number;height:number}|null>(null);
   const root = useRef<HTMLElement>(null);
   const restoreFocus = useRef('settings-control');
@@ -74,22 +82,27 @@ export default function App() {
   },[historyView,recent.data.matches,allMatches,competitionView]);
   const listError=historyView?viewResults.error:viewStatus.error;
   const detailMatch = selected ? mergeResults([selected],mergeResults(recent.data.matches,allMatches??[])).find(m=>m.id===selected.id)??selected : null;
-  // Ticker shows the match in front of the user: the open detail, else the first confirmed live match, else the next kick-off.
-  const tickerMatch = (view==='detail'&&detailMatch)
-    ? detailMatch
-    : competitionMatches.find(m=>isLive(m)&&!m.scoreStale)
-      ?? [...competitionMatches].filter(m=>m.status==='scheduled'&&Date.parse(m.kickoff)>Date.now()).sort((a,b)=>Date.parse(a.kickoff)-Date.parse(b.kickoff))[0]
-      ?? null;
+  const tickerOptions = useMemo(()=>tickerMatches(competitionMatches,settings?.favorites??[],now.getTime()),[competitionMatches,settings?.favorites,now]);
+  const pinnedMatch = tickerPinned ? allMatches?.find(match=>match.id===tickerPinned.id)??{...tickerPinned,scoreStale:isInProgress(tickerPinned)||tickerPinned.scoreStale} : null;
+  const tickerMatch = pinnedMatch??(view==='detail'?detailMatch:null)??tickerOptions[0]??null;
+  const tickerChoices = tickerMatch&&!tickerOptions.some(match=>match.id===tickerMatch.id)?[tickerMatch,...tickerOptions]:tickerOptions;
+  const cycleTicker = (direction:number) => {
+    const index=tickerChoices.findIndex(match=>match.id===tickerMatch?.id);
+    const next=tickerChoices[(index+direction+tickerChoices.length)%tickerChoices.length];
+    if(next) setTickerPinned(next);
+  };
   const rememberHome = () => { homeScroll.current=root.current?.querySelector('.match-list')?.scrollTop??0; };
-  const back = () => setView('home');
+  const back = () => setView(view==='settings'?settingsReturn.current:'home');
   const openSettings = () => {
-    if(view==='home') rememberHome();
-    restoreFocus.current='settings-control';setView('settings');
+    if(view==='home'){rememberHome();restoreFocus.current='settings-control';}
+    settingsReturn.current=view==='detail'?'detail':'home';
+    setView('settings');
   };
   const openMatch = (match:Match) => {rememberHome();restoreFocus.current=matchButtonId(match.id);setSelected(match);setView('detail');};
   useNotificationNavigation(native,target=>{
     homeScroll.current=root.current?.querySelector('.match-list')?.scrollTop??homeScroll.current;
     if(target.match) {
+      matchSessions.current.delete(target.match.id);
       setNotificationRequest(target.requestId);
       notificationFocus.current=target.requestId;
       restoreFocus.current=matchButtonId(target.match.id);
@@ -110,11 +123,17 @@ export default function App() {
     });
   },[allMatches]);
   useEffect(()=>{
+    setTickerPinned(current=>{
+      if(!current)return current;
+      return allMatches?.find(match=>match.id===current.id)??(isInProgress(current)&&!current.scoreStale?{...current,scoreStale:true}:current);
+    });
+  },[allMatches]);
+  useEffect(()=>{
     void load();
     if(!native) return;
     let disposed=false;
     const listeners:Array<()=>void>=[];
-    for(const [event,callback] of [['snapshot-updated',()=>{void load();}],['open-settings',()=>{homeScroll.current=root.current?.querySelector('.match-list')?.scrollTop??homeScroll.current;restoreFocus.current='settings-control';setView('settings');}],['shortcut-unavailable',()=>{let shown=false;try{shown=localStorage.getItem(SHORTCUT_NOTICE_KEY)==='1';localStorage.setItem(SHORTCUT_NOTICE_KEY,'1');}catch{/* Storage unavailable: show the notice this session. */}if(!shown)useApp.setState({error:SHORTCUT_MESSAGE});}]] as const) {
+    for(const [event,callback] of [['snapshot-updated',()=>{void load();}],['open-settings',()=>{homeScroll.current=root.current?.querySelector('.match-list')?.scrollTop??homeScroll.current;if(previousView.current!=='settings')settingsReturn.current=previousView.current==='detail'?'detail':'home';if(previousView.current==='home')restoreFocus.current='settings-control';setView('settings');}],['shortcut-unavailable',()=>{let shown=false;try{shown=localStorage.getItem(SHORTCUT_NOTICE_KEY)==='1';localStorage.setItem(SHORTCUT_NOTICE_KEY,'1');}catch{/* Storage unavailable: show the notice this session. */}if(!shown)useApp.setState({error:SHORTCUT_MESSAGE});}]] as const) {
       void listen(event,callback).then(fn=>{if(disposed) fn();else listeners.push(fn);}).catch(()=>useApp.setState({error:'Could not subscribe to desktop updates.'}));
     }
     return ()=>{disposed=true;listeners.forEach(fn=>fn());};
@@ -139,11 +158,8 @@ export default function App() {
     if(view!=='home') return;
     const list=root.current?.querySelector<HTMLElement>('.match-list');
     if(list) list.scrollTop=0;
-  },[competitionView,matchView]);
-  useEffect(()=>{
-    if(settings?.followedOnly) setMatchView('Following');
-    else setMatchView(current=>current==='Following'?'All':current);
-  },[settings?.followedOnly]);
+  },[competitionView,matchView,settings?.followedOnly]);
+  useEffect(()=>{setTickerPinned(null);},[competitionView]);
   useEffect(()=>{
     const preference=window.matchMedia?.('(prefers-color-scheme: light)');
     if(!preference) return;
@@ -161,7 +177,7 @@ export default function App() {
     },0);
     return ()=>clearTimeout(timer);
   },[view,selected,notificationRequest]);
-  const viewMatches = useMemo(()=>matchesView(sourceMatches??[],matchView,settings?.favorites??[]),[sourceMatches,matchView,settings?.favorites]);
+  const viewMatches = useMemo(()=>matchesView(sourceMatches??[],matchView,settings?.favorites??[],settings?.followedOnly??false),[sourceMatches,matchView,settings?.favorites,settings?.followedOnly]);
   const matches = viewMatches;
   const groups = useMemo(()=>groupFixtures(matches,historyView?[]:settings?.favorites??[],day,historyView?'results':'fixtures'),[matches,settings?.favorites,day,historyView]);
   // Tab counts make empty views visible before they are opened. Results only has a
@@ -169,7 +185,7 @@ export default function App() {
   const viewCounts = useMemo(()=>{
     const favorites=settings?.favorites??[];
     if(!snapshot) return {};
-    const visible=(items:Match[])=>items;
+    const visible=(items:Match[])=>settings?.followedOnly?items.filter(match=>followsTeam(match,favorites)):items;
     const counts:Partial<Record<MatchView,number>>={};
     for(const name of VIEWS) if(name!=='Results') counts[name]=visible(matchesView(competitionMatches,name,favorites)).length;
     if(recent.data.updatedAt||recent.data.matches.length) {
@@ -177,7 +193,7 @@ export default function App() {
       counts.Results=visible(mergeResults(recent.data.matches,competitionMatches).filter(m=>m.status==='fulltime'&&included.includes(m.league??'premierLeague'))).length;
     }
     return counts;
-  },[competitionMatches,competitionView,recent.data.matches,recent.data.updatedAt,settings?.favorites,snapshot]);
+  },[competitionMatches,competitionView,recent.data.matches,recent.data.updatedAt,settings?.favorites,settings?.followedOnly,snapshot]);
   // Status is scoped to the selected competition(s), independent of card filters.
   const live = competitionMatches.filter(isInProgress).length;
   const savedLive = competitionMatches.some(m=>isInProgress(m)&&m.scoreStale);
@@ -198,13 +214,13 @@ export default function App() {
       : `${live} live ${live===1?'match':'matches'}`
     : savedLive?'saved scores, awaiting live update':liveChecking?'checking live status':liveUnknown?'live status unavailable':'no confirmed live matches';
   const viewEmpty = viewMatches.length===0;
-  const followingEmpty = matchView==='Following' && viewEmpty;
+  const followingEmpty = !!settings?.followedOnly && viewEmpty;
   const upcomingEmpty = matchView==='Upcoming' && viewEmpty;
   const windowLabel = competitionView==='both'?30:competitionView==='championsLeague'?30:14;
-  const selectMatchView = (next:MatchView) => {setMatchView(next);if(settings&&settings.followedOnly!==(next==='Following')) void save({followedOnly:next==='Following'});};
-  const showAllMatches = () => {recoveryFocus.current=true;selectMatchView('All');};
+  const selectMatchView = (next:MatchView) => setMatchView(next);
+  const showAllMatches = () => {recoveryFocus.current=true;if(settings?.followedOnly)void save({followedOnly:false});else selectMatchView('All');};
   const liveStatusUnavailable=!liveChecking&&(!!viewStatus.scoreError||unchecked);
-  const liveEmpty = liveEmptyState({checking:liveChecking,scoreError:liveStatusUnavailable,savedLive,live,followedOnly:false,view:matchView,competition:competitionView==='both'?'live':competitionName(competitionView),both:competitionView==='both'});
+  const liveEmpty = liveEmptyState({checking:liveChecking,scoreError:liveStatusUnavailable,savedLive,live,followedOnly:!!settings?.followedOnly,view:matchView,competition:competitionView==='both'?'live':competitionName(competitionView),both:competitionView==='both'});
   const emptyTitle = feedUnavailable ? 'Unable to load matches' : liveEmpty?.title ?? (
     listError ? (historyView?'Unable to update results':viewStatus.partial?'Some updates are unavailable':'Unable to update matches')
     : followingEmpty ? 'No matches involving followed clubs'
@@ -225,6 +241,8 @@ export default function App() {
     : (liveEmpty&&liveStatusUnavailable||listError ? 'retry' : null);
   const waiting = historyView?recent.loading&&!matches.length:!allMatches?.length&&(loading||!!snapshot?.refreshing&&!viewStatus.updatedAt&&!viewStatus.fixtureUpdatedAt&&!viewStatus.error);
   const busy = refreshing||!!snapshot?.refreshing;
+  const refreshBusy = view==='detail'?busy||detailBusy:view==='home'&&historyView?recent.loading:busy;
+  const refreshLabel = view==='detail'?'Refresh match details and scores':view==='home'&&historyView?'Refresh results':'Refresh fixtures and scores';
   const status = updateStatus(snapshot,competitionView);
   const limitedUntil = rateLimitedUntil(snapshot);
   const statusLabel = feedUnavailable?'NOT CONNECTED':status.label;
@@ -232,6 +250,11 @@ export default function App() {
   // A rate-limit deadline is in the future, so it keeps its clock time.
   const statusTime = status.timestamp?(limitedUntil?timeLabel(status.timestamp):relativeAge(status.timestamp,now.getTime())):undefined;
   const doRefresh = async () => {setRefreshing(true);try{await refresh();}finally{setRefreshing(false);}};
+  const refreshCurrent = () => {
+    if(view==='detail'){detailRefresh.current?.refresh();void doRefresh();}
+    else if(view==='home'&&historyView) recent.retry();
+    else void doRefresh();
+  };
   const retryFeed = () => {recoveryFocus.current=true;if(feedUnavailable){void doRefresh();return;}if(historyView) recent.retry();else void doRefresh();};
   // The control that triggered recovery disappears once content returns. Put
   // keyboard focus on the recovered list (or the active view tab if it is
@@ -277,6 +300,7 @@ export default function App() {
       }
     }
     setTicker(next);
+    if(!next)requestAnimationFrame(()=>root.current?.querySelector<HTMLElement>(view==='detail'?'.match-centre > .centre-tabs [aria-selected="true"]':'[aria-label="Ticker mode"]')?.focus({preventScroll:true}));
   };
   const contextMenu = (event:MouseEvent) => {
     const target = event.target;
@@ -298,19 +322,20 @@ export default function App() {
     <header className="header" data-tauri-drag-region>
       <div className="brand" data-tauri-drag-region><span className="brand-icon"><img src={logo} alt=""/></span><div data-tauri-drag-region><h1>match<span>radar</span></h1></div></div>
       <div className="header-actions">
+        {ticker&&<button className="icon-button ticker-lock" aria-label="Lock ticker match" aria-pressed={!!tickerPinned} title={tickerPinned?'Unlock · automatically choose a match':'Lock this match in the ticker'} disabled={!tickerMatch} onClick={()=>setTickerPinned(tickerPinned?null:tickerMatch)}>{tickerPinned?<Lock size={15}/>:<Unlock size={15}/>}</button>}
         <button className="icon-button" title={settings?.alwaysOnTop?'Always on top is on · unpin widget':'Always on top is off · keep widget above other windows'} disabled={!settings} onClick={()=>void toggleAlwaysOnTop()} aria-label="Always on top" aria-pressed={!!settings?.alwaysOnTop}><Pin size={15} fill={settings?.alwaysOnTop?'currentColor':'none'}/></button>
         <button className="icon-button" title={ticker?'Expand the full widget':'Collapse to a slim match ticker'} onClick={()=>void toggleTicker()} aria-label="Ticker mode" aria-pressed={ticker}>{ticker?<Maximize2 size={15}/>:<Minimize2 size={15}/>}</button>
         <button className="icon-button close" title={native?'Hide to system tray':'Hide is available in the desktop app'} disabled={!native} onClick={()=>void getCurrentWindow().hide().catch(()=>useApp.setState({error:'Could not hide the widget.'}))} aria-label="Hide widget"><X size={16}/></button>
       </div>
     </header>
-    {ticker?<TickerView match={tickerMatch} onExpand={()=>void toggleTicker()}/>
-      :view==='settings'&&settings?<SettingsPanel settings={settings} matches={allMatches??[]} save={save} back={back} refresh={()=>void doRefresh()} refreshing={busy}/>
-      :view==='detail'&&selected&&settings?<MatchDetails key={`${selected.id}:${notificationRequest}`} match={detailMatch??selected} settings={settings} back={back}/>
+    {ticker?<TickerView match={tickerMatch} onExpand={()=>void toggleTicker()} navigation={{canCycle:tickerChoices.length>1,onPrevious:()=>cycleTicker(-1),onNext:()=>cycleTicker(1)}}/>
+      :view==='settings'&&settings?<SettingsPanel settings={settings} matches={allMatches??[]} save={save} back={back} backLabel={settingsReturn.current==='detail'?'Back to match':'Back to matches'} refresh={()=>void doRefresh()} refreshing={busy}/>
+      :view==='detail'&&selected&&settings?<MatchDetails ref={detailRefresh} onBusyChange={setDetailBusy} sessions={matchSessions.current} key={`${selected.id}:${notificationRequest}`} match={detailMatch??selected} settings={settings} back={back}/>
       :<>
         <div className="summary"><CompetitionPicker value={competitionView} onChange={value=>void save({competitionView:value})} disabled={!settings}/><span className={'live-pill '+(!live?'quiet':'')} aria-label={`${competitionTitle}: ${liveAriaLabel}`} title="In-progress matches, including half-time and suspended games."><i className="dot"/>{live?`${live} ${savedLive?'LIVE · SAVED':'LIVE'}`:savedLive?'SAVED LIVE':liveChecking?'CHECKING LIVE':liveUnknown?'LIVE UNAVAILABLE':'NO LIVE MATCHES'}</span></div>
         <div className="match-list">
           <nav className="centre-tabs" aria-label="Fixture views">{VIEWS.map(name=>{const count=viewCounts[name];return <button key={name} aria-pressed={matchView===name} className={count===0?'is-empty':undefined} title={count===undefined?undefined:`${count} ${count===1?'match':'matches'}`} onClick={()=>selectMatchView(name)}>{name}{count!==undefined&&<span className="tab-count" aria-hidden="true">{count}</span>}</button>;})}</nav>
-          <div className="schedule-context"><time dateTime={day.toISOString()}>{dateLabel(day.toISOString())}</time><p className="schedule-note">{historyView?'Results · latest first':`Next ${windowLabel} days`}</p></div>
+          <div className="schedule-context"><div><time dateTime={day.toISOString()}>{dateLabel(day.toISOString())}</time><p className="schedule-note">{historyView?'Results · latest first':`Next ${windowLabel} days`}</p></div><button className="following-filter" aria-label="Following only" title="Show only followed clubs in this view" aria-pressed={!!settings?.followedOnly} disabled={!settings} onClick={()=>void save({followedOnly:!settings?.followedOnly})}><Star size={12} fill={settings?.followedOnly?'currentColor':'none'} aria-hidden="true"/>Following only</button></div>
           {listError&&!!sourceMatches?.length&&<div className="offline-banner" role="status" title={listError}><span>{historyView?'Results update failed · cached results retained':viewStatus.partial?'Partial update · some data may be stale':'Update failed · saved data is unchanged'}</span><button onClick={retryFeed} disabled={historyView?recent.loading:busy}>Retry</button></div>}
           {historyView&&viewResults.updatedAt&&<p className="field-note">Results checked {`${dateLabel(viewResults.updatedAt)} ${timeLabel(viewResults.updatedAt)}`}</p>}
           {waiting?<div className="skeletons" role="status" aria-label="Loading fixtures"><div/><div/><div/></div>
@@ -321,7 +346,7 @@ export default function App() {
             :settings&&groups.map(({key,label,matches:items})=><section key={key} aria-labelledby={'date-group-'+key}><h2 id={'date-group-'+key} className={'group-title '+(key==='live'&&items.some(m=>!m.scoreStale)?'live-group':'')}><span>{label}</span><span>{items.length} {items.length===1?'match':'matches'}</span></h2>{items.map((match,index)=>{
               // Followed clubs lead each day; label the split so the order does not read as a sorting bug.
               const followed=followsTeam(match,settings.favorites);
-              const split=!historyView&&key!=='live'&&matchView!=='Following'&&items.some(m=>followsTeam(m,settings.favorites))&&items.some(m=>!followsTeam(m,settings.favorites));
+              const split=!historyView&&key!=='live'&&!settings.followedOnly&&items.some(m=>followsTeam(m,settings.favorites))&&items.some(m=>!followsTeam(m,settings.favorites));
               const heading=split&&(index===0||followsTeam(items[index-1],settings.favorites)!==followed)?<p className="group-subtitle" key={match.id+'-heading'}>{followed?'Your clubs':'Other matches'}</p>:null;
               return [heading,<MatchCard key={match.id} match={match} settings={settings} now={now} onOpen={()=>openMatch(match)} showCompetition={competitionView==='both'}/>];
             })}</section>)}
@@ -331,8 +356,8 @@ export default function App() {
     {!ticker&&<footer>
       <div className="connection-info" role="status" title={[statusLabel,statusAbsolute,'Live scores refresh about every 60 seconds'].filter(Boolean).join(' · ')}><span className={'connection '+(viewStatus.error||feedUnavailable?'error':!viewStatus.updatedAt?'pending':'')} aria-hidden="true"/><div className="status-copy"><span>{statusLabel}</span>{statusTime&&<time dateTime={status.timestamp??undefined}>{statusTime}</time>}</div></div>
       <div className="footer-actions">
-        <button id="settings-control" className="icon-button" title={view==='settings'?'Return to matches (Esc)':'Open Settings'} onClick={()=>view==='settings'?back():openSettings()} aria-label="Settings" aria-pressed={view==='settings'}><Settings2 size={16}/></button>
-        <button className="icon-button" title={busy?'Updating fixtures…':limitedUntil?`ESPN is rate limiting requests · updates resume automatically at ${timeLabel(limitedUntil)}`:'Refresh fixtures and scores only · use Refresh match details for lineups, statistics and commentary'} onClick={()=>void doRefresh()} disabled={busy} aria-label="Refresh" aria-busy={busy}><RefreshCw size={16} className={busy?'spin':''}/></button>
+        <button id="settings-control" className="icon-button" title={view==='settings'?`Return to ${settingsReturn.current==='detail'?'match':'matches'} (Esc)`:'Open Settings'} onClick={()=>view==='settings'?back():openSettings()} aria-label="Settings" aria-pressed={view==='settings'}><Settings2 size={16}/></button>
+        <button className="icon-button" title={refreshBusy?'Updating…':limitedUntil?`${refreshLabel} · ESPN is rate limiting requests until ${timeLabel(limitedUntil)}`:refreshLabel} onClick={refreshCurrent} disabled={refreshBusy} aria-label="Refresh" aria-busy={refreshBusy}><RefreshCw size={16} className={refreshBusy?'spin':''}/></button>
       </div>
     </footer>}
   </main>;

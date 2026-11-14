@@ -41,12 +41,16 @@ describe('focused usability refinements',()=>{
     failed.unmount();
     await load({...base,settings:{...base.settings,followedOnly:true,favorites:[]}});
     render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Live'}));
-    expect(screen.getByRole('button',{name:detailName})).toBeTruthy();
+    expect(screen.queryByRole('button',{name:detailName})).toBeNull();
+    expect(screen.getByText('No followed clubs are live')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'Show all matches'}));
+    await waitFor(()=>expect(screen.getByRole('button',{name:detailName})).toBeTruthy());
+    expect(screen.getByRole('button',{name:'Live'}).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByLabelText(/Premier League: .* live matches/)).toBeTruthy();
   });
   it('explains when the Following view has no matching clubs',async()=>{
     await load({...structuredClone(mockSnapshot),settings:{...mockSnapshot.settings,favorites:[]}});
-    render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Following'}));
+    render(<App/>);fireEvent.click(screen.getByRole('button',{name:'Following only'}));
     expect(screen.getByText('No matches involving followed clubs')).toBeTruthy();
     expect(screen.getByRole('button',{name:'Show all matches'})).toBeTruthy();
   });
@@ -69,7 +73,6 @@ describe('focused usability refinements',()=>{
   it('returns focus to the first recovered card after showing filtered-out matches',async()=>{
     await load({...structuredClone(mockSnapshot),settings:{...mockSnapshot.settings,favorites:[],followedOnly:true}});
     render(<App/>);
-    fireEvent.click(screen.getByRole('button',{name:'Following'}));
     fireEvent.click(screen.getByRole('button',{name:'Show all matches'}));
     await waitFor(()=>expect(document.activeElement).toBe(screen.getByRole('button',{name:detailName})));
   });

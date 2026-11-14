@@ -5,11 +5,16 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const SOON = 5 * MINUTE;
 
-// Floors every unit; anything within five minutes (including past kick-offs) reads as "Starting soon".
+export function awaitingKickoffUpdate(kickoff:string, now:Date = new Date()):boolean {
+  return now.getTime()-Date.parse(kickoff)>SOON;
+}
+
+// Allow five minutes after kickoff for the feed to confirm that play has started.
 export function countdownLabel(kickoff: string, now: Date = new Date()): string | null {
   const at = new Date(kickoff).getTime();
   if (Number.isNaN(at)) return null;
   const diff = at - now.getTime();
+  if (diff < -SOON) return 'Awaiting match update';
   if (diff <= SOON) return 'Starting soon';
   if (diff < HOUR) return `Starts in ${Math.floor(diff / MINUTE)}m`;
   if (diff < DAY) {
@@ -52,6 +57,7 @@ export function shortCountdown(kickoff: string, now: Date = new Date()): string 
   const at = new Date(kickoff).getTime();
   if (Number.isNaN(at)) return null;
   const diff = at - now.getTime();
+  if (diff < -SOON) return '…';
   if (diff <= SOON) return 'Soon';
   if (diff < HOUR) return `${Math.floor(diff / MINUTE)}m`;
   if (diff < DAY) return `${Math.floor(diff / HOUR)}h`;

@@ -17,10 +17,10 @@ test('a new fixture view or competition starts the list at the top', async ({ pa
   const list = page.locator('.match-list');
   await list.evaluate(element => { element.scrollTop = element.scrollHeight; });
   expect(await list.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
-  await page.getByRole('button', {name: 'Following', exact: true}).click();
+  await page.getByRole('button', {name: 'Following only', exact: true}).click();
   await expect.poll(() => list.evaluate(element => element.scrollTop)).toBe(0);
 
-  await page.getByRole('button', {name: 'All', exact: true}).click();
+  await page.getByRole('button', {name: 'Following only', exact: true}).click();
   await list.evaluate(element => { element.scrollTop = element.scrollHeight; });
   expect(await list.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
   await page.getByRole('button', {name: /Competition: Premier League/}).click();
@@ -34,7 +34,6 @@ test('showing filtered-out matches returns keyboard focus to the first card', as
   await page.route('https://**/*', route => route.abort());
   await installBridge(page, {snapshot: {...mockSnapshot, settings: {...mockSnapshot.settings, favorites: [], followedOnly: true}}});
   await page.goto('/');
-  await page.getByRole('button', {name: 'Following', exact: true}).click();
   const show = page.getByRole('button', {name: 'Show all matches'});
   await show.focus();
   await page.keyboard.press('Enter');

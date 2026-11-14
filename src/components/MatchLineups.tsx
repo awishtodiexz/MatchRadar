@@ -157,12 +157,12 @@ function BenchList({rows,marksFor}:{rows:BenchRow[];marksFor:(name:string)=>Play
   </li>)}</ul>;
 }
 
-export function MatchLineups({match,players,substitutions=[],formations={},coaches=[],events=[]}: {match:Match;players:MatchSummary['players'];substitutions?:MatchSummary['substitutions'];formations?:Record<string,string>;coaches?:MatchSummary['coaches'];events?:MatchSummary['events']}) {
+export function MatchLineups({match,players,substitutions=[],formations={},coaches=[],events=[],selection}: {match:Match;players:MatchSummary['players'];substitutions?:MatchSummary['substitutions'];formations?:Record<string,string>;coaches?:MatchSummary['coaches'];events?:MatchSummary['events'];selection?:{teamId:string|null;onChange:(teamId:string)=>void}}) {
   const sectionId = useId();
   const teams = [match.home, match.away];
   const [teamId,setTeamId] = useState<string|null>(null);
   const totals = Object.fromEntries(teams.map(team=>[team.id,players.filter(player=>player.teamId===team.id).length]));
-  const activeId = teamId ?? (totals[match.home.id] ? match.home.id : totals[match.away.id] ? match.away.id : match.home.id);
+  const activeId = (selection?selection.teamId:teamId) ?? (totals[match.home.id] ? match.home.id : totals[match.away.id] ? match.away.id : match.home.id);
   const active = teams.find(team=>team.id===activeId) ?? match.home;
   const selected = players.filter(player=>player.teamId===active.id);
   const starters = selected.filter(player=>player.starter);
@@ -182,7 +182,7 @@ export function MatchLineups({match,players,substitutions=[],formations={},coach
   const lineupRef=useRef<HTMLDivElement>(null);
   const selectTeam=(id:string)=>{
     if(id===active.id)return;
-    setTeamId(id);
+    if(selection)selection.onChange(id);else setTeamId(id);
     requestAnimationFrame(()=>{
       const body=lineupRef.current?.closest<HTMLElement>('.detail-body');
       const centre=lineupRef.current?.closest<HTMLElement>('.match-centre');
