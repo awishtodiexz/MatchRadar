@@ -25,15 +25,21 @@ function alertPresentation(settings:Settings, match:Match) {
   const cancelled = match.status === 'cancelled';
   const postponed = match.status === 'postponed';
   const closed = ended || cancelled;
+  const followed = [match.home, match.away].filter(team => settings.favorites.includes(team.id));
+  const defaultTypes = [settings.reminders && `${settings.reminderMinutes}-minute reminders`, settings.starts && 'match start', settings.goals && 'goals'].filter(Boolean);
+  const defaultDescription = followed.length === 0
+    ? 'No alerts: you don’t follow either team.'
+    : defaultTypes.length === 0 ? 'No alerts: all team alert types are off in Settings.'
+    : `Alerts for ${defaultTypes.join(', ')} because you follow ${followed.map(team => team.name).join(' and ')}.`;
   const base = state === 'on' ? 'Kick-off reminders, match start and goal alerts are on for this match.'
     : state === 'muted' ? 'No alerts for this match, even for followed clubs.'
-    : 'Using your followed-team alert settings.';
+    : defaultDescription;
   // A cancelled match has not "ended", and a postponed one can still alert later.
   const description = ended ? 'This match has ended.'
     : cancelled ? closedNote(match)
     : postponed ? 'This match is postponed; alerts resume if it is rescheduled.'
     : base;
-  return {state, ended, cancelled, closed, postponed, description, enabled:state==='on', label:state==='on'?'On':state==='muted'?'Muted':'Team default'};
+  return {defaultDescription, state, ended, cancelled, closed, postponed, description, enabled:state==='on', label:state==='on'?'On':state==='muted'?'Muted':'Team default'};
 }
 
 export function MatchCard({match, settings, onOpen, showCompetition=false, now}: {match:Match; settings:Settings; onOpen:()=>void; showCompetition?:boolean; now?:Date}) {
@@ -104,7 +110,7 @@ export function MatchAlertsButton({match, settings, list=false}: {match:Match; s
     return ()=>{document.removeEventListener('mousedown',close);document.removeEventListener('focusin',focus);document.removeEventListener('keydown',key);};
   },[open]);
   const persist = async (matchAlerts:Settings['matchAlerts'], label:string) => {
-    setFeedback('Saving alert preference…');
+    setFeedback('Saving…');
     const saved = await save({matchAlerts});
     setFeedback(saved?`Match alerts: ${label}.`:'Could not save alert preference. Please try again.');
   };
@@ -118,14 +124,18 @@ export function MatchAlertsButton({match, settings, list=false}: {match:Match; s
       {alerts.enabled?<BellRing size={17} fill="currentColor"/>:alerts.state==='muted'?<BellOff size={17}/>:<Bell size={17}/>}
     </button>
     {open&&<div ref={menu} className="alert-menu" style={position} role="dialog" aria-labelledby={menuId} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setOpen(false);trigger.current?.focus();}}}>
-      <div className="alert-menu-head"><h3 id={menuId} ref={heading} tabIndex={-1}>Match alerts</h3><span className="state-label" data-alert-state={alerts.state}>{alerts.label}</span></div>
-      <p className="field-note">{alerts.description}</p>
-      <div className="inline-actions">
-        <button className="outline-button compact" aria-pressed={alerts.state==='team'} onClick={reset}>Team default</button>
-        <button className="outline-button compact" aria-pressed={alerts.state==='on'} onClick={()=>change(true)}>On</button>
-        <button className="outline-button compact" aria-pressed={alerts.state==='muted'} onClick={()=>change(false)}>Muted</button>
+      <div className="alert-menu-head"><h3 id={menuId} ref={heading} tabIndex={-1}>Match alerts</h3></div>
+      <p className="field-note">{match.home.name} vs {match.away.name}</p>
+      {alerts.postponed&&<p className="field-note">{alerts.description}</p>}
+      <div className="alert-options">
+        <div className="alert-option"><button className="outline-button" aria-labelledby={`${menuId}-team`} aria-describedby={`${menuId}-team-description`} aria-pressed={alerts.state==='team'} onClick={reset}>
+          <strong id={`${menuId}-team`}>Team default</strong></button><small id={`${menuId}-team-description`}>{alerts.defaultDescription}</small></div>
+        <div className="alert-option"><button className="outline-button" aria-labelledby={`${menuId}-on`} aria-describedby={`${menuId}-on-description`} aria-pressed={alerts.state==='on'} onClick={()=>change(true)}>
+          <strong id={`${menuId}-on`}>On</strong></button><small id={`${menuId}-on-description`}>Reminders, match start and goals, even if you don’t follow either team.</small></div>
+        <div className="alert-option"><button className="outline-button" aria-labelledby={`${menuId}-muted`} aria-describedby={`${menuId}-muted-description`} aria-pressed={alerts.state==='muted'} onClick={()=>change(false)}>
+          <strong id={`${menuId}-muted`}>Muted</strong></button><small id={`${menuId}-muted-description`}>No alerts for this match, even for followed clubs.</small></div>
       </div>
-      <p className="field-note" role="status">{feedback}</p>
+      <p className="field-note alert-feedback" role="status">{feedback}</p>
     </div>}
   </div>;
 }
