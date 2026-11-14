@@ -79,7 +79,7 @@ for (const width of [320,390]) for (const theme of ['dark','light']) for (const 
     await page.getByRole('button',{name:'Settings',exact:true}).click();
     await page.getByRole('tab',{name:'Appearance'}).click();
     await page.getByRole('combobox',{name:'Theme'}).selectOption(theme);
-    if(compact) await page.getByText('Compact view',{exact:true}).click();
+    if(compact) await page.getByText('Compact layout',{exact:true}).click();
     for(const opacity of [70,100]) {
       const slider=page.getByRole('slider',{name:'Panel opacity'});await slider.focus();await slider.press(opacity===70?'Home':'End');
       await expect(slider).toHaveValue(String(opacity));

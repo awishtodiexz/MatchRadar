@@ -256,7 +256,7 @@ select option {background-color:var(--surface-solid);color:var(--text);}
 
 /* Stats keep their accessible table columns and center-origin comparison bars. */
 .stat-section-title {text-align:left;}
-.stat-teams {position:sticky;top:40px;z-index:6;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr);align-items:center;gap:8px;padding:7px 0 8px;border-bottom:1px solid var(--border);background:rgba(var(--panel-rgb),.99);color:var(--muted);font-size:var(--font-xs);letter-spacing:normal;text-align:center;text-transform:none;}
+.stat-teams {position:sticky;top:40px;z-index:6;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr);align-items:center;gap:8px;padding:7px 0 8px;border-bottom:1px solid var(--border);background:rgb(var(--panel-rgb));color:var(--muted);font-size:var(--font-xs);letter-spacing:normal;text-align:center;text-transform:none;}
 .stat-teams strong {min-width:0;color:var(--text);font-size:var(--font-xs);font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .stat-teams strong:first-child {text-align:left;}
 .stat-teams strong:last-child {text-align:right;}

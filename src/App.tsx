@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react';
+import type { CSSProperties, MouseEvent } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { LogicalSize } from '@tauri-apps/api/dpi';
@@ -311,13 +311,23 @@ export default function App() {
     }
     event.preventDefault();
   };
-  const keyDown = (event:KeyboardEvent) => {
+  type KeyInput = {key:string;defaultPrevented:boolean;target:EventTarget|null;preventDefault:()=>void;ctrlKey:boolean;altKey:boolean;metaKey:boolean};
+  const keyDown = (event:KeyInput) => {
     if(event.key==='Escape'&&!event.defaultPrevented&&!(event.target instanceof HTMLSelectElement)) {
       if(root.current?.querySelector('.alert-menu')) {event.preventDefault();return;}
       if(ticker) {event.preventDefault();void toggleTicker();}
       else if(view!=='home') {event.preventDefault();back();}
     }
   };
+  // With focus on the page itself (for example after clicking a non-focusable
+  // area) key events never reach <main>. Route only those through the same handler.
+  const latestKeyDown = useRef(keyDown);
+  latestKeyDown.current = keyDown;
+  useEffect(()=>{
+    const unfocused = (event:globalThis.KeyboardEvent) => {if(event.target===document.body||event.target===document.documentElement) latestKeyDown.current(event);};
+    window.addEventListener('keydown',unfocused);
+    return ()=>window.removeEventListener('keydown',unfocused);
+  },[]);
   return <main ref={root} onKeyDown={keyDown} onContextMenu={contextMenu} className={'shell theme-'+(settings?.theme==='system'?systemTheme:settings?.theme??themeHint)+' '+(panelOpacity<85?'transparent-panel ':'')+(settings?.compact?'compact-view ':'')+(settings?.reducedMotion?'reduced ':'')+(ticker?'ticker-mode':'')} style={{'--panel-opacity':panelOpacity/100} as CSSProperties}>
     <header className="header" data-tauri-drag-region>
       <div className="brand" data-tauri-drag-region><span className="brand-icon"><img src={logo} alt=""/></span><div data-tauri-drag-region><h1>match<span>radar</span></h1></div></div>
@@ -332,9 +342,9 @@ export default function App() {
       :view==='settings'&&settings?<SettingsPanel settings={settings} matches={allMatches??[]} save={save} back={back} backLabel={settingsReturn.current==='detail'?'Back to match':'Back to matches'} refresh={()=>void doRefresh()} refreshing={busy}/>
       :view==='detail'&&selected&&settings?<MatchDetails ref={detailRefresh} onBusyChange={setDetailBusy} sessions={matchSessions.current} key={`${selected.id}:${notificationRequest}`} match={detailMatch??selected} settings={settings} back={back}/>
       :<>
-        <div className="summary"><CompetitionPicker value={competitionView} onChange={value=>void save({competitionView:value})} disabled={!settings}/><span className={'live-pill '+(!live?'quiet':'')} aria-label={`${competitionTitle}: ${liveAriaLabel}`} title="In-progress matches, including half-time and suspended games."><i className="dot"/>{live?`${live} ${savedLive?'LIVE · SAVED':'LIVE'}`:savedLive?'SAVED LIVE':liveChecking?'CHECKING LIVE':liveUnknown?'LIVE UNAVAILABLE':'NO LIVE MATCHES'}</span></div>
+        <div className="summary"><CompetitionPicker value={competitionView} onChange={value=>void save({competitionView:value})} disabled={!settings}/><span className={'live-pill '+(!live?'quiet':'')} aria-label={`${competitionTitle}: ${liveAriaLabel}${settings?.followedOnly?', all clubs':''}`} title={`In-progress matches${settings?.followedOnly?' for all clubs, not only followed ones':''}, including half-time and suspended games.`}><i className="dot"/>{live?`${live} ${savedLive?'LIVE · SAVED':'LIVE'}`:savedLive?'SAVED LIVE':liveChecking?'CHECKING LIVE':liveUnknown?'LIVE UNAVAILABLE':'NO LIVE MATCHES'}</span></div>
         <div className="match-list">
-          <nav className="centre-tabs" aria-label="Fixture views">{VIEWS.map(name=>{const count=viewCounts[name];return <button key={name} aria-pressed={matchView===name} className={count===0?'is-empty':undefined} title={count===undefined?undefined:`${count} ${count===1?'match':'matches'}`} onClick={()=>selectMatchView(name)}>{name}{count!==undefined&&<span className="tab-count" aria-hidden="true">{count}</span>}</button>;})}</nav>
+          <nav className="centre-tabs" aria-label="Fixture views">{VIEWS.map(name=>{const count=viewCounts[name];return <button key={name} aria-pressed={matchView===name} className={count===0?'is-empty':undefined} title={count===undefined?(name==='Results'?'Open to load recent results':undefined):`${count} ${count===1?'match':'matches'}`} onClick={()=>selectMatchView(name)}>{name}{count!==undefined&&<span className="tab-count" aria-hidden="true">{count}</span>}</button>;})}</nav>
           <div className="schedule-context"><div><time dateTime={day.toISOString()}>{dateLabel(day.toISOString())}</time><p className="schedule-note">{historyView?'Results · latest first':`Next ${windowLabel} days`}</p></div><button className="following-filter" aria-label="Following only" title="Show only followed clubs in this view" aria-pressed={!!settings?.followedOnly} disabled={!settings} onClick={()=>void save({followedOnly:!settings?.followedOnly})}><Star size={12} fill={settings?.followedOnly?'currentColor':'none'} aria-hidden="true"/>Following only</button></div>
           {listError&&!!sourceMatches?.length&&<div className="offline-banner" role="status" title={listError}><span>{historyView?'Results update failed · cached results retained':viewStatus.partial?'Partial update · some data may be stale':'Update failed · saved data is unchanged'}</span><button onClick={retryFeed} disabled={historyView?recent.loading:busy}>Retry</button></div>}
           {historyView&&viewResults.updatedAt&&<p className="field-note">Results checked {`${dateLabel(viewResults.updatedAt)} ${timeLabel(viewResults.updatedAt)}`}</p>}

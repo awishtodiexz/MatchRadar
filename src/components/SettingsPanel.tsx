@@ -11,6 +11,7 @@ import { useApp } from '../store';
 
 const sections = ['Teams','Appearance','Alerts','App'] as const;
 type Section = typeof sections[number];
+const PREMIER_LEAGUE_CLUBS = 20;
 
 export function SettingsPanel({settings, save, back, matches, refresh, refreshing, backLabel}: {
   settings:Settings; save:(s:Partial<Settings>)=>Promise<unknown>; back:()=>void; matches:Match[]; refresh:()=>void; refreshing:boolean;backLabel?:string;
@@ -48,10 +49,12 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
   const byId = useMemo(()=>new Map(availableClubs.map(team=>[team.id,team])),[availableClubs]);
   const favoriteIds = useMemo(()=>[...new Set(settings.favorites)],[settings.favorites]);
   const favoriteSet = useMemo(()=>new Set(favoriteIds),[favoriteIds]);
+  // The bundled list spans promotion candidates, so it holds more than 20 clubs.
+  // Once the fixture window covers a full matchweek the feed is the authority;
+  // before that (cold start, international break) fall back to the bundled list.
   const plIds = useMemo(()=>{
-    const ids = new Set(clubs.map(team=>team.id));
-    matches.filter(m=>m.league==='premierLeague').flatMap(m=>[m.home,m.away]).forEach(team=>ids.add(team.id));
-    return ids;
+    const seen = new Set(matches.filter(m=>m.league==='premierLeague').flatMap(m=>[m.home.id,m.away.id]));
+    return seen.size>=PREMIER_LEAGUE_CLUBS ? seen : new Set([...clubs.map(team=>team.id),...seen]);
   },[matches]);
   const followedClubs = favoriteIds.map(id=>byId.get(id)).filter((club): club is Team => !!club).sort((a,b)=>a.name.localeCompare(b.name));
   const unknownFavoriteIds = favoriteIds.filter(id=>!byId.has(id));
@@ -156,7 +159,7 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
       {section==='Appearance'&&<>
         <div className="section-intro"><h3>Appearance</h3><p>Theme, density and desktop visibility.</p></div>
         <label className="select-row">Theme<select aria-label="Theme" value={settings.theme} onChange={e=>{const theme=e.target.value;if(theme==='light'||theme==='dark'||theme==='system') update({theme});}}><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label>
-        <Toggle label="Compact view" description="Start smaller and remember your expanded size. You can still resize the window." value={settings.compact} onChange={compact=>update({compact})}/>
+        <Toggle label="Compact layout" description="Tighter spacing and a smaller window. For a one-match strip, use ticker mode in the header." value={settings.compact} onChange={compact=>update({compact})}/>
         {!native&&<p className="field-note">Browser preview changes spacing only. The desktop app also resizes the window.</p>}
         <Toggle label="Always on top" description="Keep the widget above other windows" value={settings.alwaysOnTop} onChange={alwaysOnTop=>update({alwaysOnTop})}/>
         <Toggle label="Reduce motion" description="Use fewer transitions and animations" value={settings.reducedMotion} onChange={reducedMotion=>update({reducedMotion})}/>
@@ -174,7 +177,7 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
         <Toggle label="Match starting" value={settings.starts} onChange={starts=>update({starts})}/>
         <Toggle label="Goals" description="For followed clubs; match bells can enable goals separately" value={settings.goals} onChange={goals=>update({goals})}/>
         <button className="outline-button" onClick={()=>void test()} disabled={testing} aria-busy={testing}><Bell size={15}/>{testing?'Requesting notification…':'Send test notification'}</button>
-        <p className="field-note">Open match details to mute a game or return to team defaults.</p>
+        <p className="field-note">Use the bell on a match, in the list or in match details, to turn alerts on, mute a game, or return to team defaults.</p>
         {!!Object.keys(settings.matchAlerts).length&&(confirmReset?<div role="group" aria-label="Confirm reset match bells"><p>Reset all match bells to team defaults?</p><button ref={resetConfirmation} className="text-button" onClick={()=>{setConfirmReset(false);panel.current?.focus();update({matchAlerts:{}});}}>Confirm reset</button><button className="text-button" onClick={()=>{setConfirmReset(false);requestAnimationFrame(()=>resetTrigger.current?.focus());}}>Cancel</button></div>:<button ref={resetTrigger} className="text-button reset-all" onClick={()=>setConfirmReset(true)}>Reset match bells to team defaults</button>)}
       </>}
       {section==='App'&&<>

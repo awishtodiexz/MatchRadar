@@ -146,7 +146,7 @@ describe('focused usability refinements',()=>{
   it('keeps league-wide live counts when only followed cards are shown and can clear an empty filter',async()=>{
     await load({...structuredClone(mockSnapshot),settings:{...mockSnapshot.settings,favorites:[],followedOnly:true}});
     render(<App/>);
-    expect(screen.getByLabelText('Premier League: 4 live matches').textContent).toBe('4 LIVE');
+    expect(screen.getByLabelText('Premier League: 4 live matches, all clubs').textContent).toBe('4 LIVE');
     expect(screen.queryByText('NO LIVE MATCHES')).toBeNull();
     expect(screen.getByRole('heading',{name:'No matches involving followed clubs'})).toBeTruthy();
     expect(screen.queryByRole('button',{name:detailName})).toBeNull();
@@ -321,7 +321,7 @@ describe('focused usability refinements',()=>{
     expect(screen.getAllByText('Wolverhampton Wanderers')[0].title).toBe('Wolverhampton Wanderers');
     fireEvent.click(screen.getByRole('button',{name:'Settings'}));
     fireEvent.click(screen.getByRole('tab',{name:'Appearance'}));
-    fireEvent.click(screen.getByRole('checkbox',{name:'Compact view'}));
+    fireEvent.click(screen.getByRole('checkbox',{name:'Compact layout'}));
     await waitFor(()=>expect(useApp.getState().snapshot?.settings.compact).toBe(true));
     fireEvent.click(screen.getByRole('tab',{name:'App'}));
     expect(screen.getByRole('checkbox',{name:'Launch with Windows'}).hasAttribute('disabled')).toBe(true);

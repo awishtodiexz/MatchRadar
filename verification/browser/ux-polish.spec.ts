@@ -14,7 +14,7 @@ for (const [width,theme,compact] of [[320,'light',true],[390,'dark',false]] as c
     await page.getByRole('button',{name:'Settings',exact:true}).click();
     await page.getByRole('tab',{name:'Appearance'}).click();
     await page.getByRole('combobox',{name:'Theme'}).selectOption(theme);
-    if(compact)await page.getByText('Compact view',{exact:true}).click();
+    if(compact)await page.getByText('Compact layout',{exact:true}).click();
     await page.getByRole('button',{name:'Back to matches'}).click();
     for(const [name,status] of [
       ['Arsenal versus Chelsea','LIVE'],['Liverpool versus Newcastle United','HALF-TIME'],
