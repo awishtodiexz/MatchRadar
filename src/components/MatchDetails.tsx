@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import type { Ref } from 'react';
 import { ArrowLeft, Star } from 'lucide-react';
 import { useApp } from '../store';
 import { MatchCentreView } from './MatchCentre';
@@ -10,6 +11,8 @@ import { MatchAlertsButton } from './MatchCard';
 import { useMatchSummary, type MatchSummary } from '../useMatchSummary';
 import { countdownLabel, timezoneLabel, useNow } from '../countdown';
 import { teamCode } from '../teams';
+import { createMatchMemory } from '../matchMemory';
+import type { MatchMemory, MatchSection } from '../matchMemory';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 // 1st, 2nd, 3rd, 4th … 11th–13th take "th".
@@ -34,14 +37,33 @@ function TablePill({team, standings, current}:{team:Team; standings?:MatchSummar
   return <span className="table-pill" title={`${ordinal(row.rank)} in the ${current?'current ':''}table · ${points}${played}`}>{current&&'Now '}{ordinal(row.rank)} · {row.points} {row.points===1?'pt':'pts'}</span>;
 }
 
-export function MatchDetails({match, settings, back}: {match:Match; settings:Settings; back:()=>void}) {
+export interface MatchDetailsHandle { refresh:()=>void }
+
+export function MatchDetails({match, settings, back, ref, onBusyChange, sessions}: {match:Match; settings:Settings; back:()=>void; ref?:Ref<MatchDetailsHandle>; onBusyChange?:(busy:boolean)=>void; sessions?:Map<string,MatchMemory>}) {
   const save = useApp(state=>state.save);
+  const [memory]=useState(()=>sessions?.get(match.id)??createMatchMemory());
+  useEffect(()=>{sessions?.set(match.id,memory);},[sessions,match.id,memory]);
+  const [section,setSection]=useState(memory.view.section);
   const [collapsed,setCollapsed] = useState(false);
-  const [lineupView,setLineupView] = useState(false);
+  const lineupView=section==='Lineups';
   const hero = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  const restoredSection = useRef<MatchSection|null>(null);
   const live = isLive(match);
   // Single summary owner for the page: the hero reads standings, the centre reads everything else.
   const summary = useMatchSummary(match.id, live, match.status==='fulltime');
+  useLayoutEffect(()=>{
+    if(restoredSection.current===section||summary.loading&&!summary.data||!body.current)return;
+    if(!summary.data&&(memory.scroll[section]??0)>0)return;
+    body.current.scrollTop=memory.scroll[section]??0;
+    restoredSection.current=section;
+    setCollapsed(!lineupView&&body.current.scrollTop>0&&body.current.scrollTop>=(hero.current?.offsetHeight??180)-24);
+  },[section,summary.loading,summary.data,memory,lineupView]);
+  useImperativeHandle(ref,()=>({refresh:summary.refresh}));
+  useEffect(()=>{
+    onBusyChange?.(summary.loading||summary.refreshing);
+    return ()=>onBusyChange?.(false);
+  },[summary.loading,summary.refreshing,onBusyChange]);
   const scheduled = match.status==='scheduled';
   const status = live
     ? (match.status==='halftime'?'HALF-TIME':`LIVE ${match.detail || ''}`.trim())
@@ -61,7 +83,7 @@ export function MatchDetails({match, settings, back}: {match:Match; settings:Set
       {collapsed||lineupView?<div className="mini-score" aria-label={`${match.home.name} ${score} ${match.away.name}, ${statusText}`}><Badge team={match.home}/><span>{teamCode(match.home)}</span><div><strong>{score}</strong><small>{statusText}</small></div><span>{teamCode(match.away)}</span><Badge team={match.away}/></div>:<div className="detail-league"><CompetitionMark league={match.league}/><span>{match.competition}</span></div>}
       <MatchAlertsButton match={match} settings={settings}/>
     </div>
-    <div className="detail-body" onScroll={event=>{if(!lineupView)setCollapsed(event.currentTarget.scrollTop >= (hero.current?.offsetHeight??180)-24);}}>
+    <div className="detail-body" ref={body} onScroll={event=>{if(restoredSection.current===section)memory.scroll[section]=event.currentTarget.scrollTop;if(!lineupView)setCollapsed(event.currentTarget.scrollTop>0&&event.currentTarget.scrollTop >= (hero.current?.offsetHeight??180)-24);}}>
       <div className={'detail-hero'+(live?' is-live':'')} ref={hero} hidden={lineupView}>
       <div className="versus">
         <div className={winner==='away'?'is-beaten':undefined}><span className="crest-ring"><Badge team={match.home}/></span><b title={match.home.name}>{match.home.name}</b><small>Home</small><FollowTeam team={match.home} settings={settings} save={save}/><TablePill team={match.home} standings={summary.data?.standings} current={!scheduled&&!live}/></div>
@@ -73,7 +95,11 @@ export function MatchDetails({match, settings, back}: {match:Match; settings:Set
       </div>
       <p className="detail-date">{scheduled?<Countdown kickoff={match.kickoff}/>:<time dateTime={match.kickoff}>{dateLabel(match.kickoff)}{showKickoff?'':` · ${timeLabel(match.kickoff)}`}</time>}{context&&<> · {context}</>}</p>
       </div>
-      <MatchCentreView key={match.id} match={match} summary={summary} onSectionChange={section=>{setLineupView(section==='Lineups');setCollapsed(false);}}/>
+      <MatchCentreView key={match.id} match={match} summary={summary} memory={memory} onSectionChange={next=>{
+        if(next===section)return;
+        if(body.current)memory.scroll[section]=body.current.scrollTop;
+        setSection(next);setCollapsed(false);
+      }}/>
     </div>
   </>;
 }

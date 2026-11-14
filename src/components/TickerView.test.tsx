@@ -32,6 +32,20 @@ it('renders a dash for a missing score instead of undefined', () => {
   expect(container.textContent).not.toMatch(/undefined|NaN/);
 });
 
+it('labels saved scores and removes the live treatment', () => {
+  const {container}=render(<TickerView match={{...live,scoreStale:true}} onExpand={vi.fn()}/>);
+  expect(screen.getByText(/SAVED/)).toBeTruthy();
+  expect(container.querySelector('.is-live')).toBeNull();
+  expect(container.querySelector('.dot')).toBeNull();
+});
+
+it('keeps the score visible while a match is suspended',()=>{
+  const {container}=render(<TickerView match={{...live,status:'suspended',detail:'Suspended'}} onExpand={vi.fn()}/>);
+  expect(screen.getByText('2 – 1')).toBeTruthy();
+  expect(screen.getByText('SUSPENDED')).toBeTruthy();
+  expect(container.querySelector('.dot')).toBeNull();
+});
+
 it('shows the empty message when there is no match', () => {
   render(<TickerView match={null} onExpand={vi.fn()}/>);
   expect(screen.getByText('No live or upcoming matches')).toBeTruthy();
@@ -49,4 +63,9 @@ it('keeps the expand affordance available without a match', () => {
   render(<TickerView match={null} onExpand={onExpand}/>);
   fireEvent.click(screen.getByTitle('Expand MatchRadar'));
   expect(onExpand).toHaveBeenCalledTimes(1);
+});
+
+it('shows that a pinned scheduled game is awaiting a provider update after kickoff',()=>{
+ render(<TickerView match={{...scheduled,kickoff:new Date(Date.now()-10*60_000).toISOString()}} onExpand={vi.fn()}/>);
+ expect(screen.getByText('Awaiting update')).toBeTruthy();
 });

@@ -42,7 +42,7 @@ export async function installBridge(page: Page, options: BridgeOptions = {}) {
     let nextCallback=0,nextListener=0;
     const remaining = {load:failures?.load??0,refresh:failures?.refresh??0,save:failures?.save??0,results:failures?.results??0};
     // Read-only observability for assertions: window.__MATCHRADAR_BRIDGE_STATS__.
-    const stats = {load:0,refresh:0,save:0,results:0,lastSavedSettings:null as unknown, commands:[] as string[]};
+    const stats = {load:0,refresh:0,save:0,results:0,resultsForced:0,detailsForced:0,lastSavedSettings:null as unknown, commands:[] as string[]};
     const callbacks=new Map<number,(event:unknown)=>void>();
     const listeners=new Map<number,{event:string;handler:number}>();
     const emit=(event:string,payload:unknown)=>{
@@ -75,6 +75,8 @@ export async function installBridge(page: Page, options: BridgeOptions = {}) {
       unregisterCallback: (id:number) => callbacks.delete(id),
       invoke: async (command: string, args: Record<string, unknown> = {}) => {
         stats.commands.push(command);
+        if (command === 'plugin:window|inner_size') return {width:window.innerWidth,height:window.innerHeight};
+        if (command === 'plugin:window|scale_factor') return 1;
         if (command === 'get_snapshot') {
           stats.load++;
           if(remaining.load>0){remaining.load--;throw new Error('IPC unavailable');}
@@ -102,11 +104,13 @@ export async function installBridge(page: Page, options: BridgeOptions = {}) {
         }
         if (command === 'get_recent_results') {
           stats.results++;
+          if(args.force)stats.resultsForced++;
           await wait(resultsDelayMs);
           if(remaining.results>0){remaining.results--;throw new Error('results unavailable');}
           return {matches:state.matches.filter(m => m.status === 'fulltime'),updatedAt:state.updatedAt,error:null};
         }
         if (command === 'get_match_details') {
+          if(args.force)stats.detailsForced++;
           if(details==='error') throw new Error('Unavailable');
           if(details==='pending') return new Promise(()=>{});
           if(summary) return {...summary,matchId:args.id};

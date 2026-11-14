@@ -67,9 +67,9 @@ export function Toggle({label, description, value, onChange, disabled=false}: {
   </label>;
 }
 
-export function ViewHeading({title, eyebrow, back, actions}: {title:string; eyebrow:string; back:()=>void; actions?:ReactNode}) {
+export function ViewHeading({title, eyebrow, back, actions, backLabel='Back to matches'}: {title:string; eyebrow:string; back:()=>void; actions?:ReactNode;backLabel?:string}) {
   return <div className="subhead">
-    <button className="icon-button" onClick={back} aria-label="Back to matches" title="Back to matches (Esc)"><ArrowLeft size={18}/></button>
+    <button className="icon-button" onClick={back} aria-label={backLabel} title={`${backLabel} (Esc)`}><ArrowLeft size={18}/></button>
     <div><span className="sr-only">{eyebrow}</span><h2 data-view-heading tabIndex={-1}>{title}</h2></div>
     {actions&&<div className="subhead-actions">{actions}</div>}
   </div>;

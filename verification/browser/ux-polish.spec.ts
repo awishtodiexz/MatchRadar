@@ -76,7 +76,7 @@ test('toolbar and settings expose consistent status and preferences',async({page
   const pin=page.getByRole('button',{name:'Always on top'});
   await expect(pin).toHaveAttribute('aria-pressed','true');await expect(pin).toHaveAttribute('title',/unpin/);
   await pin.click();await expect(pin).toHaveAttribute('aria-pressed','false');
-  const following=page.getByRole('button',{name:'Following',exact:true});
+  const following=page.getByRole('button',{name:'Following only',exact:true});
   await following.click();await expect(following).toHaveAttribute('aria-pressed','true');
   await page.getByRole('button',{name:'Settings',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Settings'})).toBeFocused();

@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
 test('home filters show the appropriate fixtures', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Hide widget' })).toHaveCount(1);
   await expect(page.locator('.hero')).toHaveCount(0);
-  for (const name of ['Live', 'Following', 'Upcoming', 'Results', 'All']) {
+  for (const name of ['Live', 'Upcoming', 'Results', 'All']) {
     await page.getByRole('button', { name, exact: true }).click();
     await expect(page.getByRole('button', { name, exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('button', { name: /^Match details:/ }).first()).toBeVisible();
@@ -22,13 +22,15 @@ test('home filters show the appropriate fixtures', async ({ page }) => {
   }
 });
 
-test('Following persists its legacy setting while All includes unfollowed clubs', async ({ page }) => {
+test('Following stays active when selecting All until explicitly disabled', async ({ page }) => {
   const other = page.getByRole('button', { name: /Match details:.*Crystal Palace.*Fulham/ });
   await expect(other).toBeVisible();
-  await page.getByRole('button', { name: 'Following', exact: true }).click();
+  await page.getByRole('button', { name: 'Following only', exact: true }).click();
   await expect(other).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => Reflect.get(window, '__MATCHRADAR_BRIDGE_STATS__').lastSavedSettings?.followedOnly)).toBe(true);
   await page.getByRole('button', { name: 'All', exact: true }).click();
+  await expect(other).toHaveCount(0);
+  await page.getByRole('button', { name: 'Following only', exact: true }).click();
   await expect(other).toBeVisible();
   await expect.poll(() => page.evaluate(() => Reflect.get(window, '__MATCHRADAR_BRIDGE_STATS__').lastSavedSettings?.followedOnly)).toBe(false);
 });

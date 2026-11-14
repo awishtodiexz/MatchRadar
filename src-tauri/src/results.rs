@@ -69,7 +69,7 @@ fn timestamps(s: &Snapshot, league: Competition) -> (Option<String>, Option<Stri
         None => (None, None),
     }
 }
-fn due(s: &Snapshot, league: Competition, now: DateTime<Utc>) -> bool {
+fn due(s: &Snapshot, league: Competition, now: DateTime<Utc>, force: bool) -> bool {
     let (updated, retry) = timestamps(s, league);
     if retry
         .as_ref()
@@ -83,7 +83,7 @@ fn due(s: &Snapshot, league: Competition, now: DateTime<Utc>) -> bool {
         .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
         .is_none_or(|t| {
             let age = (now - t.with_timezone(&Utc)).num_seconds();
-            !(0..21600).contains(&age)
+            !(0..if force { 30 } else { 21600 }).contains(&age)
         })
 }
 fn refresh_aggregates(s: &mut Snapshot) {
@@ -183,6 +183,7 @@ pub async fn get_recent_results(
     app: tauri::AppHandle,
     history: tauri::State<'_, History>,
     leagues: Option<Vec<String>>,
+    force: Option<bool>,
 ) -> Result<Results, String> {
     let _guard = history.0.lock().await;
     let now = Utc::now();
@@ -200,7 +201,7 @@ pub async fn get_recent_results(
         let fetch = {
             let state = app.state::<State>();
             let s = state.snapshot.lock().map_err(|e| e.to_string())?;
-            due(&s, league, now)
+            due(&s, league, now, force.unwrap_or(false))
         };
         if !fetch {
             continue;
@@ -246,6 +247,61 @@ pub async fn get_recent_results(
 mod tests {
     use super::*;
     #[test]
+    fn manual_refresh_bypasses_history_cache_but_keeps_cooldown_and_backoff() {
+        let now = DateTime::parse_from_rfc3339("2026-11-14T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut s = Snapshot::default();
+        apply_league(
+            &mut s,
+            Competition::PremierLeague,
+            provider::FetchOutcome {
+                matches: Some(vec![]),
+                error: None,
+            },
+            now,
+        );
+        assert!(!due(
+            &s,
+            Competition::PremierLeague,
+            now + Duration::seconds(29),
+            true
+        ));
+        assert!(due(
+            &s,
+            Competition::PremierLeague,
+            now + Duration::seconds(30),
+            true
+        ));
+        assert!(!due(
+            &s,
+            Competition::PremierLeague,
+            now + Duration::seconds(30),
+            false
+        ));
+        apply_league(
+            &mut s,
+            Competition::PremierLeague,
+            provider::FetchOutcome::failed(provider::FetchError {
+                message: "HTTP 429".into(),
+                retry_after: Some(600),
+            }),
+            now,
+        );
+        assert!(!due(
+            &s,
+            Competition::PremierLeague,
+            now + Duration::seconds(60),
+            true
+        ));
+        assert!(due(
+            &s,
+            Competition::PremierLeague,
+            now + Duration::seconds(600),
+            true
+        ));
+    }
+    #[test]
     fn history_survives_daily_empty_and_failure() {
         let now = DateTime::parse_from_rfc3339("2026-10-29T12:00:00Z")
             .unwrap()
@@ -260,7 +316,7 @@ mod tests {
         };
         apply_league(&mut s, Competition::PremierLeague, outcome, now);
         assert_eq!(s.recent_results.len(), 1);
-        assert!(!due(&s, Competition::PremierLeague, now));
+        assert!(!due(&s, Competition::PremierLeague, now, false));
         let timestamp = s.recent_updated_at.clone();
         apply_league(
             &mut s,
@@ -274,7 +330,7 @@ mod tests {
         assert_eq!(s.recent_results.len(), 1);
         assert_eq!(s.recent_updated_at, timestamp);
         assert!(s.recent_error.is_some());
-        assert!(!due(&s, Competition::PremierLeague, now));
+        assert!(!due(&s, Competition::PremierLeague, now, false));
         assert!(s.matches.is_empty());
         assert!(s.pending_notifications.is_empty());
     }
@@ -284,7 +340,7 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc);
         let mut s: Snapshot = serde_json::from_str("{}").unwrap();
-        assert!(due(&s, Competition::PremierLeague, now));
+        assert!(due(&s, Competition::PremierLeague, now, false));
         apply_league(
             &mut s,
             Competition::PremierLeague,
@@ -341,7 +397,8 @@ mod tests {
         assert!(!due(
             &s,
             Competition::PremierLeague,
-            now + Duration::minutes(11)
+            now + Duration::minutes(11),
+            false
         ));
         let restored: Snapshot = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
         assert_eq!(restored.recent_results.len(), 1);
@@ -382,8 +439,8 @@ mod tests {
             now,
         );
         assert_eq!(s.recent_results.len(), 2);
-        assert!(!due(&s, Competition::PremierLeague, now));
-        assert!(!due(&s, Competition::ChampionsLeague, now));
+        assert!(!due(&s, Competition::PremierLeague, now, false));
+        assert!(!due(&s, Competition::ChampionsLeague, now, false));
 
         // UCL failure retains UCL results and leaves the PL cache untouched.
         apply_league(
@@ -402,7 +459,7 @@ mod tests {
             .unwrap()
             .recent_retry_at
             .is_some());
-        assert!(!due(&s, Competition::ChampionsLeague, now));
+        assert!(!due(&s, Competition::ChampionsLeague, now, false));
         assert!(s
             .league_status
             .get(Competition::PremierLeague.slug())

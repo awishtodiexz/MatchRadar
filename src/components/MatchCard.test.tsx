@@ -10,6 +10,15 @@ vi.mock('../useMatchSummary',()=>({useMatchSummary:()=>({data:null,loading:false
 const originalSave=useApp.getState().save;
 afterEach(()=>{cleanup();useApp.setState({save:originalSave});});
 
+it('shows an awaiting-update note instead of Soon when a scheduled kickoff is overdue',()=>{
+ const now=new Date('2026-11-14T12:00:00Z');
+ render(<MatchCard match={{...mockMatches[2],kickoff:'2026-11-14T11:50:00Z'}} settings={defaults} onOpen={()=>{}} now={now}/>);
+ expect(screen.getByText('Awaiting update')).toBeTruthy();
+ expect(screen.queryByText('Soon')).toBeNull();
+ const button=screen.getByRole('button',{name:/Match details:/});
+ expect(document.getElementById(button.getAttribute('aria-describedby')??'')?.textContent).toContain('awaiting match update');
+});
+
 it('offers the same explicit alert choices from the list and details',()=>{
  const save=vi.fn().mockResolvedValue(undefined);useApp.setState({save});
  const match=mockMatches[2];

@@ -257,11 +257,11 @@ test('a notification for a match no longer cached explains the gap and keeps the
 
 test('a season-density fixture list filters and navigates without losing focus', async ({ page }) => {
   const snapshot = largeSnapshot(240);
-  const expectedFollowing = matchesView(snapshot.matches,'Following',snapshot.settings.favorites).length;
+  const expectedFollowing = matchesView(snapshot.matches,'All',snapshot.settings.favorites,true).length;
   await open(page,{snapshot});
   await expect(page.locator('.match-card')).toHaveCount(240);
 
-  await page.getByRole('button',{name:'Following',exact:true}).click();
+  await page.getByRole('button',{name:'Following only',exact:true}).click();
   await expect(page.locator('.match-card')).toHaveCount(expectedFollowing);
   const first = page.getByRole('button',{name:/^Match details:/}).first();
   await first.scrollIntoViewIfNeeded();

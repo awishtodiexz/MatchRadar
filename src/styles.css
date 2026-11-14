@@ -80,6 +80,9 @@ select option {background-color:var(--surface-solid);color:var(--text);}
 .detail-body {padding:0;}
 .schedule-context {display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0 0;color:var(--muted);font-size:var(--font-sm);}
 .schedule-note,.filter-label {font-size:var(--font-sm);color:var(--muted);}
+.following-filter {display:flex;align-items:center;gap:5px;flex:none;min-height:32px;padding:4px 9px;border:1px solid var(--border-strong);border-radius:var(--radius-control);color:var(--muted);font-size:var(--font-sm);}
+.following-filter[aria-pressed=true] {color:var(--accent);background:var(--accent-soft);border-color:var(--accent-border);}
+.following-filter:hover:not(:disabled) {border-color:var(--accent);}
 .filter-label {display:flex;align-items:center;gap:4px;color:var(--accent);}
 .group-title,.team-group-title,.timeline-period,.stat-section-title,.lineups h4,.section-line,.match-centre h3,.lineup-heading {
  display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;margin:16px 0 8px;
@@ -499,20 +502,33 @@ footer {min-height:44px;display:flex;align-items:center;justify-content:space-be
 
 /* @slot:T2 titlebar, ticker, scrollbar */
 .header-actions .icon-button[aria-pressed=true] {color:var(--accent);background:var(--accent-soft);}
-.ticker-mode .header {height:auto;padding-top:6px;padding-bottom:6px;}
-.ticker {flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:6px;padding:6px 12px 10px;}
-.ticker-card {display:grid;grid-template-columns:22px minmax(0,1fr) auto minmax(0,1fr) 22px;align-items:center;gap:8px;width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--surface-soft);color:var(--text);text-align:left;}
-.ticker-card:hover {border-color:var(--accent-border);}
+.ticker-mode .header {height:34px;padding-top:3px;padding-bottom:0;border-bottom:0;}
+.ticker-mode .brand {gap:6px;}
+.ticker-mode .brand-icon {width:20px;height:20px;}
+.ticker-mode .brand h1 {font-size:13px;letter-spacing:-.4px;color:var(--muted);}
+.ticker-mode .brand h1 span {color:inherit;}
+.ticker-mode .header-actions {gap:0;}
+.ticker-mode .header-actions .icon-button {width:26px;height:26px;color:var(--muted);opacity:.55;background:none;}
+.ticker-mode .header-actions .icon-button[aria-pressed=true] {color:var(--accent);background:none;opacity:.8;}
+.ticker-mode .header-actions .icon-button:hover:not(:disabled),.ticker-mode .header-actions .icon-button:focus-visible {opacity:1;background:var(--surface-hover);}
+.ticker-mode .header-actions .close:hover:not(:disabled) {color:var(--danger);}
+.ticker {flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:6px;padding:0 8px 8px;}
+.ticker-stage {display:flex;align-items:center;gap:2px;min-width:0;}
+.ticker-step {display:grid;place-items:center;flex:0 0 24px;width:24px;min-height:36px;padding:0;border-radius:var(--radius-control);color:var(--muted);opacity:.5;}
+.ticker-step:hover:not(:disabled),.ticker-step:focus-visible {opacity:1;color:var(--text);background:var(--surface-hover);}
+.ticker-step:disabled {opacity:.2;}
+.ticker-card {display:grid;grid-template-columns:22px minmax(0,1fr) auto minmax(0,1fr) 22px;align-items:center;gap:4px;flex:1;min-width:0;width:100%;padding:8px 4px;border:1px solid transparent;border-radius:var(--radius-panel);background:none;color:var(--text);text-align:left;}
+.ticker-card:hover {background:var(--surface-soft);}
 .ticker-card .badge {width:22px;height:22px;font-size:7px;}
 .ticker-team {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--font-body);font-weight:650;}
 .ticker-team.home {text-align:left;}
 .ticker-team.away {text-align:right;}
 .ticker-centre {display:flex;flex-direction:column;align-items:center;min-width:0;}
-.ticker-score {font-size:var(--font-brand);font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.ticker-score {font-size:22px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;white-space:nowrap;}
 .ticker-centre.is-live .ticker-score {color:var(--accent);}
 .ticker-meta {display:flex;align-items:center;gap:4px;font-size:9px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap;}
 .ticker-empty {text-align:center;color:var(--muted);font-size:var(--font-body);}
-.ticker-card-empty {display:block;text-align:center;font-size:var(--font-body);font-weight:650;}
+.ticker-card-empty {display:block;flex:none;text-align:center;font-size:var(--font-body);font-weight:650;}
 /* Scrollbars: WebView2 ignores ::-webkit-scrollbar once scrollbar-width/color are set, so only the webkit rules are used here. */
 .match-list::-webkit-scrollbar,.settings-body::-webkit-scrollbar,.detail-body::-webkit-scrollbar {width:5px;height:5px;}
 .match-list::-webkit-scrollbar-track,.settings-body::-webkit-scrollbar-track,.detail-body::-webkit-scrollbar-track {background:transparent;}

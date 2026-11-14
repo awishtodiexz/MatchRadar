@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('explores filters, bells, search and details', async ({ page }) => {
-  for (const name of ['All','Live','Following','Upcoming','Results']) {
+  for (const name of ['All','Live','Upcoming','Results']) {
     await page.getByRole('button',{name,exact:true}).click();
     await expect(page.getByRole('button',{name,exact:true})).toHaveAttribute('aria-pressed','true');
     await expect(page.getByRole('button',{name:/^Match details:/}).first()).toBeVisible();
@@ -66,7 +66,7 @@ test('following-only empty state explains the filter and offers recovery', async
     await expect(button).toHaveAttribute('aria-pressed','false');
   }
   await page.getByRole('button',{name:'Back to matches'}).click();
-  await page.getByRole('button',{name:'Following',exact:true}).click();
+  await page.getByRole('button',{name:'Following only',exact:true}).click();
   await expect(page.getByRole('heading',{name:'No matches involving followed clubs'})).toBeVisible();
   await page.getByRole('button',{name:'Show all matches'}).click();
   await expect(page.getByRole('button',{name:/Match details:.*Arsenal.*Chelsea/})).toBeVisible();
@@ -91,7 +91,8 @@ for (const width of [320,390]) for (const theme of ['dark','light']) for (const 
       const refresh=page.getByRole('button',{name:'Refresh data'});
       await refresh.scrollIntoViewIfNeeded(); await expect(refresh).toBeInViewport();
       await page.screenshot({path:info.outputPath(`${width}-${theme}-${compact}-${opacity}-settings.png`),animations:'disabled'});
-      await page.getByRole('button',{name:'Back to matches'}).click();
+      await page.getByRole('button',{name:/^Back to match/}).click();
+      if(await page.getByRole('heading',{name:'Match details',exact:true}).isVisible())await page.getByRole('button',{name:'Back to matches',exact:true}).click();
       await page.screenshot({path:info.outputPath(`${width}-${theme}-${compact}-${opacity}-home.png`),animations:'disabled'});
       await page.getByRole('button',{name:/Match details:.*Arsenal.*Chelsea/}).click();
       for(const section of ['Commentary','Stats','Lineups']) {

@@ -15,6 +15,7 @@ it('shows loading while a manual retry is pending',async()=>{
  act(()=>result.current.retry());
  expect(result.current.loading).toBe(true);
  await waitFor(()=>expect(bridge.invoke).toHaveBeenCalledTimes(2));
+ expect(bridge.invoke).toHaveBeenLastCalledWith('get_recent_results',{leagues:['eng.1'],force:true});
  await act(async()=>resolve({matches:[],updatedAt:'second',error:null}));
  expect(result.current.loading).toBe(false);
  expect(result.current.data.updatedAt).toBe('second');

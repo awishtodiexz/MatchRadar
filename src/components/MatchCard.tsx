@@ -5,7 +5,7 @@ import { isLive } from '../fixtures';
 import type { Match, Settings } from '../types';
 import { Badge } from './WidgetUi';
 import { closedNote, resultLabel, matchButtonId, timeLabel } from '../presentation';
-import { countdownLabel, shortCountdown } from '../countdown';
+import { awaitingKickoffUpdate, countdownLabel, shortCountdown } from '../countdown';
 
 const clockText = (detail:string) => {
   const stoppage = detail.match(/^(\d+)'\+(\d+)'?$/);
@@ -45,8 +45,9 @@ function alertPresentation(settings:Settings, match:Match) {
 export function MatchCard({match, settings, onOpen, showCompetition=false, now}: {match:Match; settings:Settings; onOpen:()=>void; showCompetition?:boolean; now?:Date}) {
   const alerts = alertPresentation(settings, match);
   const detailId = useId();
+  const awaitingUpdate=match.status==='scheduled'&&awaitingKickoffUpdate(match.kickoff,now);
   const cardDetail = (match.status==='scheduled'
-    ? `Kick-off ${timeLabel(match.kickoff)}`
+    ? `Kick-off ${timeLabel(match.kickoff)}${awaitingUpdate?', awaiting match update':''}`
     : `${match.homeScore ?? '–'} to ${match.awayScore ?? '–'}, ${isLive(match) ? (match.status==='halftime' ? 'half-time' : clockText(match.detail||'live')) : (match.detail || match.status)}${match.scoreStale?' (saved)':''}`)
     + (showCompetition ? `, ${match.league==='championsLeague'?'Champions League':'Premier League'}` : '');
   return <article className="match-row match-card" data-match-id={match.id} aria-labelledby={matchButtonId(match.id)}>
@@ -55,6 +56,7 @@ export function MatchCard({match, settings, onOpen, showCompetition=false, now}:
       <div className={'fixture-time '+(isLive(match)&&!match.scoreStale?'is-live':'')}>
         <span>{match.status==='scheduled'?timeLabel(match.kickoff):isLive(match)?match.status==='halftime'?'HT':clockText(match.detail||'LIVE'):match.status==='fulltime'?resultLabel(match):match.detail||match.status}</span>
         {match.scoreStale&&<small>Saved</small>}
+        {awaitingUpdate&&<small>Awaiting update</small>}
         {showCompetition&&<small className="competition-tag">{match.league==='championsLeague'?'UCL':'PL'}</small>}
       </div>
       <div className="teams">{[match.home,match.away].map(team=><div className="team-line" key={team.id}>

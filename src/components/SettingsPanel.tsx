@@ -12,8 +12,8 @@ import { useApp } from '../store';
 const sections = ['Teams','Appearance','Alerts','App'] as const;
 type Section = typeof sections[number];
 
-export function SettingsPanel({settings, save, back, matches, refresh, refreshing}: {
-  settings:Settings; save:(s:Partial<Settings>)=>Promise<unknown>; back:()=>void; matches:Match[]; refresh:()=>void; refreshing:boolean;
+export function SettingsPanel({settings, save, back, matches, refresh, refreshing, backLabel}: {
+  settings:Settings; save:(s:Partial<Settings>)=>Promise<unknown>; back:()=>void; matches:Match[]; refresh:()=>void; refreshing:boolean;backLabel?:string;
 }) {
   const [section,setSection] = useState<Section>('Teams');
   const [query,setQuery] = useState('');
@@ -123,7 +123,7 @@ export function SettingsPanel({settings, save, back, matches, refresh, refreshin
     finally {setTesting(false);}
   };
   return <>
-    <ViewHeading title="Settings" eyebrow="MAKE IT YOURS" back={back}/>
+    <ViewHeading title="Settings" eyebrow="MAKE IT YOURS" back={back} backLabel={backLabel}/>
     <div className="settings-tabs" role="tablist" aria-label="Settings sections">
       {sections.map((name,index)=><button key={name} role="tab" id={'settings-tab-'+name} aria-controls="settings-panel" aria-selected={section===name} tabIndex={section===name?0:-1} onKeyDown={e=>tabKey(e,index)} onClick={()=>activate(name)}>{name}</button>)}
     </div>
