@@ -116,7 +116,7 @@ select option {background-color:var(--surface-solid);color:var(--text);}
 .card-menu button span {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .card-menu button:hover,.card-menu button:focus-visible {background:var(--accent-soft);color:var(--accent);outline:none;}
 .badge {flex:none;width:20px;height:20px;display:grid;place-items:center;border-radius:var(--radius-sm);background:var(--badge-bg);color:var(--text);font-size:8px;font-weight:700;}
-.badge.has-crest {background:transparent;}
+.badge.has-crest,.badge.badge-blank {background:transparent;}
 .badge img {width:100%;height:100%;object-fit:contain;}
 .fav {color:var(--accent);flex:none;}
 .match-state {text-align:center;}

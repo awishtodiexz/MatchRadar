@@ -261,6 +261,8 @@ export default function App() {
     : (liveEmpty&&liveStatusUnavailable||listError ? 'retry' : null);
   const waiting = historyView?recent.loading&&!matches.length:!allMatches?.length&&(loading||!!snapshot?.refreshing&&!viewStatus.updatedAt&&!viewStatus.fixtureUpdatedAt&&!viewStatus.error);
   const busy = refreshing||!!snapshot?.refreshing;
+  // Only claim completeness for windowed views whose data is confirmed fresh.
+  const listComplete = !waiting&&!!matches.length&&matchView!=='Live'&&!listError&&(historyView?!recent.loading:!viewStatus.partial);
   const refreshBusy = view==='detail'?busy||detailBusy:view==='home'&&historyView?recent.loading:busy;
   const refreshLabel = view==='detail'?'Refresh match details and scores':view==='home'&&historyView?'Refresh results':'Refresh fixtures and scores';
   const status = updateStatus(snapshot,competitionView);
@@ -339,6 +341,8 @@ export default function App() {
     if(!next) return false;
     restoreFocus.current=matchButtonId(next.id);
     setSelected(next);
+    // The details view remounts for the new match; keep keyboard focus in it.
+    setTimeout(()=>(root.current?.querySelector<HTMLElement>('.match-centre [role="tab"][aria-selected="true"]')??root.current?.querySelector<HTMLElement>('[data-view-heading]'))?.focus({preventScroll:true}),0);
     return true;
   };
   const contextMenu = (event:MouseEvent) => {
@@ -409,7 +413,7 @@ export default function App() {
               return [heading,<MatchCard key={match.id} match={match} settings={settings} now={now} onOpen={()=>openMatch(match)} showCompetition={competitionView==='both'} scoreChange={scoreChanges[match.id]&&now.getTime()-scoreChanges[match.id].at<SCORE_CHANGE_MS?scoreChanges[match.id]:undefined}/>];
             })}</section>)}
           {/* Marks a complete list, so a short one does not read as still loading. */}
-          {!waiting&&!!matches.length&&<p className="list-end">{historyView?'That’s every result from the last 14 days':`That’s everything in the next ${windowLabel} days`}</p>}
+          {listComplete&&<p className="list-end">{historyView?`That’s every result${settings?.followedOnly?' for followed clubs':''} from the last 14 days`:`That’s everything${settings?.followedOnly?' for followed clubs':''} in the next ${windowLabel} days`}</p>}
         </div>
       </>}
     {error&&!feedUnavailable&&<div className="error-banner" role="alert"><span data-copyable>{error}</span><button className="icon-button" aria-label="Dismiss message" title="Dismiss message" onClick={()=>useApp.setState({error:null})}><X size={14}/></button></div>}

@@ -49,8 +49,27 @@ describe('keyboard shortcuts', () => {
     expect(followButton(first.home.name)).toBeTruthy();
     fireEvent.keyDown(document.body, { key: ']' });
     expect(followButton(second.home.name)).toBeTruthy();
+    await vi.waitFor(() => expect(document.activeElement?.getAttribute('role')).toBe('tab'));
     fireEvent.keyDown(document.body, { key: '[' });
     expect(followButton(first.home.name)).toBeTruthy();
+  });
+});
+
+describe('end of list marker', () => {
+  it('claims a complete list only when the view is fresh and windowed', async () => {
+    await load(structuredClone(mockSnapshot));
+    const { container, unmount } = render(<App />);
+    expect(container.querySelector('.list-end')?.textContent).toMatch(/everything in the next 14 days/);
+    fireEvent.keyDown(document.body, { key: '2' });
+    expect(container.querySelector('.list-end')).toBeNull();
+    unmount();
+    const failed = structuredClone(mockSnapshot);
+    failed.error = 'ESPN unavailable';
+    failed.leagueStatus = { 'eng.1': { fixtureError: 'ESPN unavailable', scoreError: 'ESPN unavailable' } };
+    await load(failed);
+    const view = render(<App />);
+    expect(view.container.querySelector('.offline-banner')).toBeTruthy();
+    expect(view.container.querySelector('.list-end')).toBeNull();
   });
 });
 

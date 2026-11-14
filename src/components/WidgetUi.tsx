@@ -23,7 +23,8 @@ export function Badge({team, fallback=true}: {team: Team; fallback?: boolean}) {
   const [index, setIndex] = useState(0);
   useEffect(() => setIndex(0), [team.id, team.logo, theme]);
   const src = candidates[index];
-  if (!src && !fallback) return null;
+  // Keep the layout slot, but leave it blank when the caller already shows the code.
+  if (!src && !fallback) return <span className="badge badge-blank" aria-hidden="true"/>;
   return <span className={'badge '+(src?'has-crest':'')} aria-hidden="true">
     {src ? <img src={src} loading="lazy" decoding="async" onError={() => setIndex(i => i + 1)} alt="" /> : <span>{(team.short || team.name.slice(0,3)).slice(0,3).toUpperCase()}</span>}
   </span>;
