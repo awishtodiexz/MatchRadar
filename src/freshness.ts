@@ -17,7 +17,8 @@ export interface ViewStatus {
 }
 
 const earliest = (values: Array<string | null | undefined>): string | null => {
-  const present = values.filter((value): value is string => !!value);
+  const present = values.filter((value): value is string => !!value && Number.isFinite(Date.parse(value)));
+  if (present.length !== values.length) return null;
   return present.length ? present.reduce((a, b) => Date.parse(a) <= Date.parse(b) ? a : b) : null;
 };
 const joinErrors = (labels: string[], errors: Array<string | null | undefined>): string | null => {

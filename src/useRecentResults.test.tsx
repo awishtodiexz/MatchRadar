@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act,cleanup,renderHook,waitFor } from '@testing-library/react';
 import { afterEach,expect,it,vi } from 'vitest';
+import { resultsStatus } from './freshness';
 import { useRecentResults } from './useRecentResults';
 import type { CompetitionView } from './types';
 const bridge=vi.hoisted(()=>({invoke:vi.fn()}));vi.mock('@tauri-apps/api/core',()=>({invoke:bridge.invoke}));afterEach(()=>{cleanup();vi.resetAllMocks();});
@@ -55,4 +56,16 @@ it('stops reporting pending after a competition request fails so the error is ac
  await act(async()=>requests[1].reject(new Error('offline')));
  expect(result.current.loading).toBe(false);
  expect(result.current.data.error).toBeTruthy();
+});
+
+it('exposes a transport failure through the selected competition status and clears it on recovery',async()=>{
+ const checked={matches:[],updatedAt:'2026-11-14T10:00:00Z',error:null,leagues:{'eng.1':{updatedAt:'2026-11-14T10:00:00Z',error:null},'uefa.champions':{updatedAt:null,error:null}}};
+ bridge.invoke.mockResolvedValueOnce(checked).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(checked);
+ const {result}=renderHook(()=>useRecentResults(true));
+ await waitFor(()=>expect(result.current.data.updatedAt).toBeTruthy());
+ act(()=>result.current.retry());
+ await waitFor(()=>expect(resultsStatus(result.current.data).error).toBeTruthy());
+ expect(resultsStatus(result.current.data,'championsLeague').error).toBeNull();
+ act(()=>result.current.retry());
+ await waitFor(()=>expect(resultsStatus(result.current.data).error).toBeNull());
 });

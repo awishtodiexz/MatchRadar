@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { competitionStatus, updateStatus } from './freshness';
+import { competitionStatus, resultsStatus, updateStatus } from './freshness';
 import { mockSnapshot } from './test-fixtures/fixtures';
 
 describe('independent source freshness', () => {
@@ -39,4 +39,18 @@ describe('independent source freshness', () => {
     expect(competitionStatus(snapshot,'premierLeague').updatedAt).toBe('2026-11-06T10:00:00Z');
     expect(updateStatus(snapshot,'both').label).toBe('CONNECTING');
   });
+});
+
+it('requires every selected league to have a valid source timestamp', () => {
+  const checked = '2026-11-14T10:00:00Z';
+  for (const missing of [null, undefined, 'invalid']) {
+    const snapshot = {...mockSnapshot, leagueStatus:{
+      'eng.1':{updatedAt:checked,fixtureUpdatedAt:checked},
+      'uefa.champions':{updatedAt:missing,fixtureUpdatedAt:missing}
+    }};
+    expect(competitionStatus(snapshot,'both').updatedAt).toBeNull();
+    expect(competitionStatus(snapshot,'both').fixtureUpdatedAt).toBeNull();
+    expect(resultsStatus({leagues:{'eng.1':{updatedAt:checked},'uefa.champions':{updatedAt:missing}}},'both').updatedAt).toBeNull();
+  }
+  expect(resultsStatus({leagues:{'eng.1':{updatedAt:checked},'uefa.champions':{updatedAt:'2026-11-14T09:00:00Z'}}},'both').updatedAt).toBe('2026-11-14T09:00:00Z');
 });

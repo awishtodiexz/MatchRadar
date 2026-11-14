@@ -33,7 +33,11 @@ export function useRecentResults(enabled:boolean, view:CompetitionView='premierL
      const leagues=competitionLeagues(view).map(competitionSlug);
      void invoke<RecentResults>('get_recent_results',{leagues})
        .then(result=>{if(!disposed){setData(result);setRequestedView(view);}})
-       .catch(()=>{if(!disposed){setData(old=>({...old,error:'Could not load recent results. Cached results remain available.'}));setRequestedView(view);}})
+       .catch(()=>{if(!disposed){
+         const error='Could not load recent results. Cached results remain available.';
+         setData(old=>({...old,error,leagues:{...old.leagues,...Object.fromEntries(leagues.map(league=>[league,{...old.leagues?.[league],error}]))}}));
+         setRequestedView(view);
+       }})
        .finally(()=>{
          inFlight=false;
          if(disposed)return;
