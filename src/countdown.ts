@@ -5,8 +5,8 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const SOON = 5 * MINUTE;
 
-export function awaitingKickoffUpdate(kickoff:string, now:Date = new Date()):boolean {
-  return now.getTime()-Date.parse(kickoff)>SOON;
+export function awaitingKickoffUpdate(kickoff: string, now: Date = new Date()): boolean {
+  return now.getTime() - Date.parse(kickoff) > SOON;
 }
 
 // Allow five minutes after kickoff for the feed to confirm that play has started.
@@ -31,7 +31,7 @@ const zoneName = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' });
 // Offsets such as "GMT+2" or "UTC+02:00" are not names a reader recognises, so they fall back to "Local".
 export function timezoneLabel(date: Date = new Date()): string {
   try {
-    const name = zoneName.formatToParts(date).find(p => p.type === 'timeZoneName')?.value;
+    const name = zoneName.formatToParts(date).find((p) => p.type === 'timeZoneName')?.value;
     if (!name || /^(GMT|UTC)[+-]/.test(name)) return 'Local';
     return name;
   } catch {

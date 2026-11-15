@@ -20,11 +20,16 @@ async function choose(name: string) {
   const label = name === 'Both' ? 'Both competitions' : name;
   fireEvent.click(picker());
   fireEvent.click(screen.getByRole('option', { name: new RegExp(`^${label}`) }));
-  await waitFor(() => expect(screen.getByRole('button', { name: new RegExp(`Competition: ${label}.*Change competition`) })).toBeTruthy());
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: new RegExp(`Competition: ${label}.*Change competition`) })).toBeTruthy(),
+  );
 }
-const card = (name: string) => screen.queryByRole('button', { name: new RegExp(`Match details:.*${name.split(' versus ').join('.*')}`) });
+const card = (name: string) =>
+  screen.queryByRole('button', { name: new RegExp(`Match details:.*${name.split(' versus ').join('.*')}`) });
 
-beforeEach(async () => { await load(structuredClone(mockSnapshotWithUcl)); });
+beforeEach(async () => {
+  await load(structuredClone(mockSnapshotWithUcl));
+});
 afterEach(cleanup);
 
 describe('unified club following', () => {
@@ -48,7 +53,7 @@ describe('unified club following', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Real Madrid' }));
     await waitFor(() => expect(useApp.getState().snapshot?.settings.favorites).toContain('86'));
     expect(screen.getByRole('button', { name: 'Real Madrid' })).toBeTruthy();
-    expect(useApp.getState().snapshot?.settings.favorites.filter(id => id === '86')).toHaveLength(1);
+    expect(useApp.getState().snapshot?.settings.favorites.filter((id) => id === '86')).toHaveLength(1);
     expect(useApp.getState().snapshot?.settings.matchAlerts['demo-1'].enabled).toBe(true);
   });
 

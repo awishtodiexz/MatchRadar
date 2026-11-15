@@ -91,7 +91,8 @@ npm run dev              # frontend shell; native data is desktop-only
 ### Checks
 
 ```powershell
-npm run verify:fast      # version check, lint, frontend tests and production build
+npm run format           # format the frontend code with Prettier
+npm run verify:fast      # version check, format check, lint, frontend tests and production build
 npm run verify:ui        # Playwright journeys and accessibility checks
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo test --locked --manifest-path src-tauri/Cargo.toml

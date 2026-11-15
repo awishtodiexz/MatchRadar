@@ -1,0 +1,11 @@
+dist
+src-tauri
+verification/artifacts
+playwright-report
+test-results
+tests/fixtures
+docs
+*.md
+package-lock.json
+.empryo
+.claude

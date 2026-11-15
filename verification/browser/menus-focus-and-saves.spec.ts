@@ -5,7 +5,7 @@ import { installBridge } from './bridge';
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 460 });
   await page.clock.install({ time: new Date('2026-10-29T12:00:00Z') });
-  await page.route('https://**/*', route => route.abort());
+  await page.route('https://**/*', (route) => route.abort());
   await installBridge(page);
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('button', { name: /Match details:.*Arsenal.*Chelsea/ })).toBeVisible();
@@ -16,7 +16,7 @@ test('bottom fixture alert menu stays inside the minimum viewport', async ({ pag
   await bells.last().click();
   const menu = page.getByRole('dialog', { name: 'Match alerts' });
   const bounds = await menu.boundingBox();
-  if(!bounds) throw new Error('Alert menu has no visible bounds');
+  if (!bounds) throw new Error('Alert menu has no visible bounds');
   expect(bounds.y).toBeGreaterThanOrEqual(0);
   expect(bounds.y + bounds.height).toBeLessThanOrEqual(460);
   await expect(menu.getByRole('button', { name: 'Muted', exact: true })).toBeInViewport();
@@ -28,10 +28,15 @@ test('minimum viewport retains opaque sticky navigation and canonical live count
   await expect(page.getByLabel('Premier League: 4 live matches')).toBeVisible();
   await expect(page.locator('.hero')).toHaveCount(0);
   const list = page.locator('.match-list');
-  await list.evaluate(element => { element.scrollTop = 100; });
+  await list.evaluate((element) => {
+    element.scrollTop = 100;
+  });
   const heading = page.locator('.match-list > section > .group-title').first();
   for (const element of [tabs, heading]) {
-    const style = await element.evaluate(node => ({ position: getComputedStyle(node).position, background: getComputedStyle(node).backgroundColor }));
+    const style = await element.evaluate((node) => ({
+      position: getComputedStyle(node).position,
+      background: getComputedStyle(node).backgroundColor,
+    }));
     expect(style.position).toBe('sticky');
     expect(style.background).toMatch(/^rgb\(/);
   }
@@ -73,49 +78,55 @@ test('match-card accessible names pass axe without an exemption', async ({ page 
 });
 
 test('failed alert saves report failure and retain the inherited state', async ({ page }) => {
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent('test:set-failures', {detail:{save:1}})));
-  await page.getByRole('button', {name:'Match alerts: Arsenal versus Chelsea, Team default'}).click();
-  const menu = page.getByRole('dialog', {name:'Match alerts'});
-  await menu.getByRole('button', {name:'On', exact:true}).click();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('test:set-failures', { detail: { save: 1 } })));
+  await page.getByRole('button', { name: 'Match alerts: Arsenal versus Chelsea, Team default' }).click();
+  const menu = page.getByRole('dialog', { name: 'Match alerts' });
+  await menu.getByRole('button', { name: 'On', exact: true }).click();
   await expect(menu.getByRole('status')).toHaveText('Could not save alert preference. Please try again.');
-  await expect(menu.getByRole('button', {name:'Team default', exact:true})).toHaveAttribute('aria-pressed', 'true');
+  await expect(menu.getByRole('button', { name: 'Team default', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('a successful queued alert save reports its own outcome after an earlier failure', async ({ page }) => {
-  await installBridge(page, {saveDelayMs:150, failures:{save:1}});
+  await installBridge(page, { saveDelayMs: 150, failures: { save: 1 } });
   await page.reload();
-  await page.getByRole('button', {name:'Match alerts: Arsenal versus Chelsea, Team default'}).click();
-  const menu = page.getByRole('dialog', {name:'Match alerts'});
-  await menu.getByRole('button', {name:'On', exact:true}).click();
-  await menu.getByRole('button', {name:'Muted', exact:true}).click();
+  await page.getByRole('button', { name: 'Match alerts: Arsenal versus Chelsea, Team default' }).click();
+  const menu = page.getByRole('dialog', { name: 'Match alerts' });
+  await menu.getByRole('button', { name: 'On', exact: true }).click();
+  await menu.getByRole('button', { name: 'Muted', exact: true }).click();
   await expect(menu.getByRole('status')).toHaveText('Match alerts: Muted.');
-  await expect(menu.getByRole('button', {name:'Muted', exact:true})).toHaveAttribute('aria-pressed', 'true');
+  await expect(menu.getByRole('button', { name: 'Muted', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('Following selection rolls back when its preference cannot be saved', async ({ page }) => {
   const tabs = page.locator('.match-list');
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent('test:set-failures', {detail:{save:1}})));
-  await tabs.getByRole('button', {name:'Following only', exact:true}).click();
-  await expect(page.getByText('Could not save settings. Please try again.', {exact:true})).toBeVisible();
-  await expect(tabs.getByRole('button', {name:'All', exact:true})).toHaveAttribute('aria-pressed', 'true');
-  await tabs.getByRole('button', {name:'Following only', exact:true}).click();
-  await expect(tabs.getByRole('button', {name:'Following only', exact:true})).toHaveAttribute('aria-pressed', 'true');
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent('test:set-failures', {detail:{save:1}})));
-  await tabs.getByRole('button', {name:'Following only', exact:true}).click();
-  await expect(page.getByText('Could not save settings. Please try again.', {exact:true})).toBeVisible();
-  await expect(tabs.getByRole('button', {name:'Following only', exact:true})).toHaveAttribute('aria-pressed', 'true');
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('test:set-failures', { detail: { save: 1 } })));
+  await tabs.getByRole('button', { name: 'Following only', exact: true }).click();
+  await expect(page.getByText('Could not save settings. Please try again.', { exact: true })).toBeVisible();
+  await expect(tabs.getByRole('button', { name: 'All', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await tabs.getByRole('button', { name: 'Following only', exact: true }).click();
+  await expect(tabs.getByRole('button', { name: 'Following only', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('test:set-failures', { detail: { save: 1 } })));
+  await tabs.getByRole('button', { name: 'Following only', exact: true }).click();
+  await expect(page.getByText('Could not save settings. Please try again.', { exact: true })).toBeVisible();
+  await expect(tabs.getByRole('button', { name: 'Following only', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
 });
 
 test('reset confirmation moves and returns keyboard focus', async ({ page }) => {
-  await page.getByRole('button', {name:'Match alerts: Arsenal versus Chelsea, Team default'}).click();
-  await page.getByRole('dialog', {name:'Match alerts'}).getByRole('button', {name:'On', exact:true}).click();
-  await page.getByRole('dialog', {name:'Match alerts'}).press('Escape');
-  await page.getByRole('button', {name:'Settings', exact:true}).click();
-  await page.getByRole('tab', {name:'Alerts'}).click();
-  const trigger = page.getByRole('button', {name:'Reset match bells to team defaults'});
+  await page.getByRole('button', { name: 'Match alerts: Arsenal versus Chelsea, Team default' }).click();
+  await page.getByRole('dialog', { name: 'Match alerts' }).getByRole('button', { name: 'On', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Match alerts' }).press('Escape');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Alerts' }).click();
+  const trigger = page.getByRole('button', { name: 'Reset match bells to team defaults' });
   await trigger.click();
-  await expect(page.getByRole('button', {name:'Confirm reset'})).toBeFocused();
-  await page.getByRole('button', {name:'Cancel', exact:true}).click();
+  await expect(page.getByRole('button', { name: 'Confirm reset' })).toBeFocused();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(trigger).toBeFocused();
 });
 

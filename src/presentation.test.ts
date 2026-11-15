@@ -30,8 +30,15 @@ describe('time labels', () => {
 });
 
 it('labels completed results by their outcome', () => {
-  const match = {...mockMatches[0], status:'fulltime' as const};
-  for (const [detail, expected] of [['FT', 'FT'], ['AET', 'AET'], ['Final - After Extra Time', 'AET'], ['FT-Pens', 'PEN'], ['Final - Penalties', 'PEN'], ['Forfeit', 'FF']]) {
-    expect(resultLabel({...match, detail})).toBe(expected);
+  const match = { ...mockMatches[0], status: 'fulltime' as const };
+  for (const [detail, expected] of [
+    ['FT', 'FT'],
+    ['AET', 'AET'],
+    ['Final - After Extra Time', 'AET'],
+    ['FT-Pens', 'PEN'],
+    ['Final - Penalties', 'PEN'],
+    ['Forfeit', 'FF'],
+  ]) {
+    expect(resultLabel({ ...match, detail })).toBe(expected);
   }
 });

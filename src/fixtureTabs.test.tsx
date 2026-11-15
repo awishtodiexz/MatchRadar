@@ -20,9 +20,22 @@ async function load(snapshot: Snapshot) {
   useApp.setState({ snapshot, loading: false, error: null });
   await useApp.getState().load();
 }
-const inDays = (days: number, hour: number) => { const d = new Date(); d.setDate(d.getDate() + days); d.setHours(hour, 0, 0, 0); return d.toISOString(); };
-const fixture = (id: string, home: number, away: number, kickoff: string): Match =>
-  ({ id, league: 'premierLeague', competition: 'Premier League', home: clubs[home], away: clubs[away], kickoff, status: 'scheduled', detail: 'Scheduled' });
+const inDays = (days: number, hour: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  d.setHours(hour, 0, 0, 0);
+  return d.toISOString();
+};
+const fixture = (id: string, home: number, away: number, kickoff: string): Match => ({
+  id,
+  league: 'premierLeague',
+  competition: 'Premier League',
+  home: clubs[home],
+  away: clubs[away],
+  kickoff,
+  status: 'scheduled',
+  detail: 'Scheduled',
+});
 
 describe('fixture list tabs and grouping', () => {
   it('shows a match count on each tab without changing its accessible name', async () => {
@@ -49,7 +62,7 @@ describe('fixture list tabs and grouping', () => {
     snapshot.matches = [fixture('other', 9, 10, inDays(3, 13)), fixture('followed', 0, 6, inDays(3, 17))];
     await load(snapshot);
     render(<App />);
-    const labels = screen.getAllByText(/^(Your clubs|Other matches)$/).map(node => node.textContent);
+    const labels = screen.getAllByText(/^(Your clubs|Other matches)$/).map((node) => node.textContent);
     expect(labels).toEqual(['Your clubs', 'Other matches']);
     expect(screen.getByText('2 matches')).toBeTruthy();
   });

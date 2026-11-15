@@ -40,7 +40,13 @@ const events = raw.keyEvents.map((event) => ({
   shortText: event.shortText ?? null,
 }));
 const statistics = raw.boxscore.teams.flatMap((team) =>
-  team.statistics.map((stat) => ({ teamId: team.team.id, name: stat.name, label: stat.label, value: stat.displayValue })));
+  team.statistics.map((stat) => ({
+    teamId: team.team.id,
+    name: stat.name,
+    label: stat.label,
+    value: stat.displayValue,
+  })),
+);
 const players = raw.rosters.flatMap((team) =>
   team.roster.map((player) => ({
     teamId: team.team.id,
@@ -51,10 +57,16 @@ const players = raw.rosters.flatMap((team) =>
     formationPlace: player.formationPlace ?? null,
     subbedIn: player.subbedIn ?? false,
     subbedOut: player.subbedOut ?? false,
-  })));
+  })),
+);
 const substitutions = events
   .filter((event) => event.kind === 'substitution' && event.participants.length === 2)
-  .map((event) => ({ teamId: event.teamId, playerIn: event.participants[0], playerOut: event.participants[1], minute: event.minute }));
+  .map((event) => ({
+    teamId: event.teamId,
+    playerIn: event.participants[0],
+    playerOut: event.participants[1],
+    minute: event.minute,
+  }));
 const scorers = events
   .filter((event) => event.kind === 'goal')
   .map((event) => ({
@@ -89,10 +101,52 @@ const baseSnapshot = {
     goals: false,
   },
   matches: [
-    { id: 'live-city-liverpool', league: 'premierLeague', competition: 'Premier League', home: { id: '382', name: 'Manchester City', short: 'MCI' }, away: { id: '364', name: 'Liverpool', short: 'LIV' }, homeScore: 1, awayScore: 1, kickoff: iso(-67), status: 'live', detail: "67'" },
-    { id: 'live-newcastle-spurs', league: 'premierLeague', competition: 'Premier League', home: { id: '361', name: 'Newcastle United', short: 'NEW' }, away: { id: '367', name: 'Tottenham Hotspur', short: 'TOT' }, homeScore: 0, awayScore: 2, kickoff: iso(-72), status: 'live', detail: "72'" },
-    { id: '401879268', league: 'premierLeague', competition: 'Premier League', home: arsenal, away: leeds, homeScore: 2, awayScore: 1, kickoff: iso(-180), status: 'fulltime', detail: 'Full-time' },
-    { id: 'next-villa-brighton', league: 'premierLeague', competition: 'Premier League', home: { id: '362', name: 'Aston Villa', short: 'AVL' }, away: { id: '331', name: 'Brighton & Hove Albion', short: 'BHA' }, kickoff: iso(150), status: 'scheduled', detail: 'Scheduled' },
+    {
+      id: 'live-city-liverpool',
+      league: 'premierLeague',
+      competition: 'Premier League',
+      home: { id: '382', name: 'Manchester City', short: 'MCI' },
+      away: { id: '364', name: 'Liverpool', short: 'LIV' },
+      homeScore: 1,
+      awayScore: 1,
+      kickoff: iso(-67),
+      status: 'live',
+      detail: "67'",
+    },
+    {
+      id: 'live-newcastle-spurs',
+      league: 'premierLeague',
+      competition: 'Premier League',
+      home: { id: '361', name: 'Newcastle United', short: 'NEW' },
+      away: { id: '367', name: 'Tottenham Hotspur', short: 'TOT' },
+      homeScore: 0,
+      awayScore: 2,
+      kickoff: iso(-72),
+      status: 'live',
+      detail: "72'",
+    },
+    {
+      id: '401879268',
+      league: 'premierLeague',
+      competition: 'Premier League',
+      home: arsenal,
+      away: leeds,
+      homeScore: 2,
+      awayScore: 1,
+      kickoff: iso(-180),
+      status: 'fulltime',
+      detail: 'Full-time',
+    },
+    {
+      id: 'next-villa-brighton',
+      league: 'premierLeague',
+      competition: 'Premier League',
+      home: { id: '362', name: 'Aston Villa', short: 'AVL' },
+      away: { id: '331', name: 'Brighton & Hove Albion', short: 'BHA' },
+      kickoff: iso(150),
+      status: 'scheduled',
+      detail: 'Scheduled',
+    },
   ],
 };
 const snapshotFor = (theme) => ({ ...baseSnapshot, settings: { ...baseSnapshot.settings, theme } });
@@ -139,9 +193,15 @@ const installBridge = ({ snapshot, summary }) => {
 const settle = async (page) => {
   await page.evaluate(() => document.fonts.ready);
   await page.evaluate(async () => {
-    await Promise.all([...document.images].map((image) => image.complete
-      ? undefined
-      : new Promise((done) => { image.onload = image.onerror = done; })));
+    await Promise.all(
+      [...document.images].map((image) =>
+        image.complete
+          ? undefined
+          : new Promise((done) => {
+              image.onload = image.onerror = done;
+            }),
+      ),
+    );
   });
   await page.evaluate(() => {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
@@ -195,7 +255,8 @@ const writeBanner = async (browser) => {
     deviceScaleFactor: 1.5,
     colorScheme: 'dark',
   });
-  await page.setContent(`<!doctype html>
+  await page.setContent(
+    `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -295,17 +356,30 @@ const writeBanner = async (browser) => {
     </div>
   </div>
 </body>
-</html>`, { waitUntil: 'load' });
+</html>`,
+    { waitUntil: 'load' },
+  );
   await settle(page);
   await page.screenshot({ path: join(brand, 'banner.png'), omitBackground: true });
   await page.close();
 };
 
 console.log('Building README images…');
-const server = spawn(process.execPath, [
-  join(root, 'node_modules', 'vite', 'bin', 'vite.js'),
-  'preview', '--configLoader', 'runner', '--host', '127.0.0.1', '--port', '1421', '--strictPort',
-], { cwd: root, stdio: 'inherit' });
+const server = spawn(
+  process.execPath,
+  [
+    join(root, 'node_modules', 'vite', 'bin', 'vite.js'),
+    'preview',
+    '--configLoader',
+    'runner',
+    '--host',
+    '127.0.0.1',
+    '--port',
+    '1421',
+    '--strictPort',
+  ],
+  { cwd: root, stdio: 'inherit' },
+);
 
 let browser;
 try {

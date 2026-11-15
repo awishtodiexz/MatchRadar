@@ -8,17 +8,15 @@ import { installBridge } from './bridge';
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
 async function violations(page: Page) {
-  const result = await new AxeBuilder({ page })
-    .withTags(TAGS)
-    .analyze();
+  const result = await new AxeBuilder({ page }).withTags(TAGS).analyze();
   return result.violations
-    .filter(rule => rule.impact === 'serious' || rule.impact === 'critical')
-    .map(rule => `${rule.id}: ${rule.nodes.map(node => node.target.join(' ')).join(' | ')}`);
+    .filter((rule) => rule.impact === 'serious' || rule.impact === 'critical')
+    .map((rule) => `${rule.id}: ${rule.nodes.map((node) => node.target.join(' ')).join(' | ')}`);
 }
 
 test.beforeEach(async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-29T12:00:00Z') });
-  await page.route('https://**/*', route => route.abort());
+  await page.route('https://**/*', (route) => route.abort());
   await installBridge(page);
   await page.goto('/');
   await expect(page.getByRole('button', { name: /Match details:.*Arsenal.*Chelsea/ })).toBeVisible();
@@ -26,8 +24,9 @@ test.beforeEach(async ({ page }) => {
 
 test('home has no serious accessibility violations in either theme', async ({ page }) => {
   // Score and clock stay available to assistive tech through the description.
-  await expect(page.getByRole('button', { name: /Match details:.*Arsenal.*Chelsea/ }))
-    .toHaveAccessibleDescription( /2 to 1, 67′/);
+  await expect(page.getByRole('button', { name: /Match details:.*Arsenal.*Chelsea/ })).toHaveAccessibleDescription(
+    /2 to 1, 67′/,
+  );
   expect(await violations(page)).toEqual([]);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByRole('tab', { name: 'Appearance', exact: true }).click();

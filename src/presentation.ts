@@ -2,9 +2,9 @@ import type { Match } from './types';
 // Keep non-component helpers separate so component edits retain Vite Fast Refresh.
 // Formatters are immutable and locale-bound for the session; rebuilding one per
 // label cost ~55µs and happens dozens of times per poll.
-const dayMonth = new Intl.DateTimeFormat(undefined, { weekday:'short', day:'numeric', month:'short' });
+const dayMonth = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 // numeric hour: "2:30 PM" in en-US, "14:30" in 24h locales (no leading zero).
-const time = new Intl.DateTimeFormat(undefined, { hour:'numeric', minute:'2-digit' });
+const time = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
 // Saved state is checked for shape, not semantics. A damaged timestamp string
 // must degrade to a readable label instead of throwing during render and
 // blanking the whole widget with no recovery path.
@@ -29,8 +29,9 @@ export const resultLabel = (match: Match) => {
   if (/\baet\b|after extra time/i.test(match.detail)) return 'AET';
   return 'FT';
 };
-export const closedNote = (match: Match) => isAbandoned(match) ? 'This match was abandoned.' : 'This match was cancelled.';
-export const matchButtonId = (id:string) => 'match-open-'+encodeURIComponent(id);
+export const closedNote = (match: Match) =>
+  isAbandoned(match) ? 'This match was abandoned.' : 'This match was cancelled.';
+export const matchButtonId = (id: string) => 'match-open-' + encodeURIComponent(id);
 // "Today"/"Tomorrow"/"Yesterday" reads faster than a date for nearby kick-offs.
 export const relativeDay = (date: string, now = new Date()) => {
   const value = parsed(date);
@@ -42,7 +43,7 @@ export const relativeDay = (date: string, now = new Date()) => {
 // Split "02:30 PM" so the meridiem can be set smaller than the digits.
 export const timeParts = (label: string) => {
   const match = label.match(/^(.*?)(\s*[AaPp]\.?\s?[Mm]\.?)$/);
-  return match ? [match[1], match[2]] as const : [label, ''] as const;
+  return match ? ([match[1], match[2]] as const) : ([label, ''] as const);
 };
 // "Updated 2m ago" reads faster than a wall-clock time for freshness labels.
 // Older than a day falls back to the date so stale data never looks current.
