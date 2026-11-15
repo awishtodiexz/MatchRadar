@@ -42,7 +42,7 @@ describe('keyboard shortcuts', () => {
     const { container } = render(<App />);
     const buttons = [...container.querySelectorAll<HTMLButtonElement>('.match-open')];
     const idOf = (button: Element) => button.closest('[data-match-id]')?.getAttribute('data-match-id');
-    const matchOf = (id?: string | null) => useApp.getState().snapshot!.matches.find(match => match.id === id)!;
+    const matchOf = (id?: string | null) => useApp.getState().snapshot!.matches.find((match) => match.id === id)!;
     const [first, second] = [matchOf(idOf(buttons[0])), matchOf(idOf(buttons[1]))];
     fireEvent.click(buttons[0]);
     const followButton = (name: string) => screen.queryByRole('button', { name: new RegExp(`^(Un)?follow ${name}$`) });
@@ -76,12 +76,12 @@ describe('end of list marker', () => {
 describe('score change marker', () => {
   it('flags a card whose score changed since the previous snapshot', async () => {
     const snapshot = structuredClone(mockSnapshot);
-    const live = snapshot.matches.find(match => match.status === 'live' && match.homeScore != null)!;
+    const live = snapshot.matches.find((match) => match.status === 'live' && match.homeScore != null)!;
     await load(snapshot);
     const { container } = render(<App />);
     expect(container.querySelector('.score-changed')).toBeNull();
     const next = structuredClone(snapshot);
-    const changed = next.matches.find(match => match.id === live.id)!;
+    const changed = next.matches.find((match) => match.id === live.id)!;
     changed.homeScore = (changed.homeScore ?? 0) + 1;
     act(() => useApp.setState({ snapshot: next }));
     const card = container.querySelector(`[data-match-id="${live.id}"]`)!;
@@ -97,7 +97,7 @@ describe('match card menu', () => {
     await load(snapshot);
     const { container } = render(<App />);
     const card = container.querySelector('.match-card')!;
-    const match = snapshot.matches.find(item => item.id === card.getAttribute('data-match-id'))!;
+    const match = snapshot.matches.find((item) => item.id === card.getAttribute('data-match-id'))!;
     fireEvent.contextMenu(card, { clientX: 40, clientY: 80 });
     const menu = screen.getByRole('menu');
     expect(document.activeElement?.textContent).toBe('Open match details');
@@ -125,7 +125,8 @@ describe('lineup position names', () => {
 describe('ticker', () => {
   it('opens the shown match when an open handler is provided', () => {
     const match = mockSnapshot.matches[0];
-    const onOpen = vi.fn(), onExpand = vi.fn();
+    const onOpen = vi.fn(),
+      onExpand = vi.fn();
     render(<TickerView match={match} onExpand={onExpand} onOpen={onOpen} />);
     fireEvent.click(screen.getByTitle('Open this match in MatchRadar'));
     expect(onOpen).toHaveBeenCalledTimes(1);

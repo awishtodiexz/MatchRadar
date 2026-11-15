@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const read = path => readFileSync(join(root, path), 'utf8');
+const read = (path) => readFileSync(join(root, path), 'utf8');
 const pkg = JSON.parse(read('package.json'));
 const cargo = read('src-tauri/Cargo.toml');
 const cargoVersion = cargo.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
@@ -17,7 +17,7 @@ const versions = [
   ['package.json', pkg.version],
   ['src-tauri/Cargo.toml', cargoVersion],
   ['src-tauri/Cargo.lock', lockVersion],
-  ['src-tauri/tauri.conf.json', tauri.version]
+  ['src-tauri/tauri.conf.json', tauri.version],
 ];
 const distinct = new Set(versions.map(([, version]) => version));
 if (!cargoVersion || distinct.size !== 1) {

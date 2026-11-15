@@ -10,6 +10,6 @@ export default defineConfig({
   testDir: '.',
   outputDir: '../artifacts/perf',
   reporter: [['list']],
-  expect: {timeout: 30000},
-  use: {...base.use, trace: 'off', screenshot: 'off'}
+  expect: { timeout: 30000 },
+  use: { ...base.use, trace: 'off', screenshot: 'off' },
 });

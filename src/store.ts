@@ -3,7 +3,16 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { Settings, Snapshot } from './types';
 
 type Patch = Partial<Settings>;
-type Store = { snapshot: Snapshot | null; loading: boolean; error: string | null; opacityPreview: number | null; setOpacityPreview: (value:number|null) => void; load: () => Promise<void>; refresh: () => Promise<void>; save: (patch: Patch) => Promise<boolean> };
+type Store = {
+  snapshot: Snapshot | null;
+  loading: boolean;
+  error: string | null;
+  opacityPreview: number | null;
+  setOpacityPreview: (value: number | null) => void;
+  load: () => Promise<void>;
+  refresh: () => Promise<void>;
+  save: (patch: Patch) => Promise<boolean>;
+};
 const pending: Patch[] = [];
 let queue: Promise<void> = Promise.resolve();
 let readSequence = 0;
@@ -13,19 +22,28 @@ let confirmed: Settings | null = null;
 let feed: Snapshot | null = null;
 const loadError = 'Could not load the widget state.';
 const refreshError = 'Could not refresh matches.';
-const recoveredError = (error:string|null) => error===loadError||error===refreshError?null:error;
+const recoveredError = (error: string | null) => (error === loadError || error === refreshError ? null : error);
 // Paint hint only; Rust remains the authoritative preference store.
-const rememberTheme = (settings: Settings) => {try{localStorage.setItem('matchradar.theme', settings.theme);}catch{/* Storage can be unavailable. */}};
+const rememberTheme = (settings: Settings) => {
+  try {
+    localStorage.setItem('matchradar.theme', settings.theme);
+  } catch {
+    /* Storage can be unavailable. */
+  }
+};
 
 function projected(): Snapshot | null {
   if (!feed || !confirmed) return null;
   const settings: Settings = Object.assign({}, confirmed, ...pending);
-  return {...feed, settings};
+  return { ...feed, settings };
 }
 
 export const useApp = create<Store>((set, get) => ({
-  snapshot: null, loading: true, error: null, opacityPreview: null,
-  setOpacityPreview: (value) => set({opacityPreview: value}),
+  snapshot: null,
+  loading: true,
+  error: null,
+  opacityPreview: null,
+  setOpacityPreview: (value) => set({ opacityPreview: value }),
   load: async () => {
     const sequence = ++readSequence;
     const revision = settingsRevision;
@@ -41,46 +59,54 @@ export const useApp = create<Store>((set, get) => ({
         confirmed = snapshot.settings;
         rememberTheme(confirmed);
       }
-      set(state=>({snapshot: projected(), loading:false, error:recoveredError(state.error)}));
+      set((state) => ({ snapshot: projected(), loading: false, error: recoveredError(state.error) }));
     } catch {
-      if (sequence > acceptedRead) set(state=>({loading:false, error:state.error??(isTauri()?loadError:'Match data is available in the desktop app.')}));
+      if (sequence > acceptedRead)
+        set((state) => ({
+          loading: false,
+          error: state.error ?? (isTauri() ? loadError : 'Match data is available in the desktop app.'),
+        }));
     }
   },
   refresh: async () => {
     try {
-      if (isTauri()) { await invoke('refresh'); await get().load(); }
-      else {
-        if (feed) feed = {...feed, updatedAt:new Date().toISOString()};
-        set(state=>({snapshot:projected(),error:recoveredError(state.error)}));
+      if (isTauri()) {
+        await invoke('refresh');
+        await get().load();
+      } else {
+        if (feed) feed = { ...feed, updatedAt: new Date().toISOString() };
+        set((state) => ({ snapshot: projected(), error: recoveredError(state.error) }));
       }
-    } catch { set(state=>({error:state.error??refreshError})); }
+    } catch {
+      set((state) => ({ error: state.error ?? refreshError }));
+    }
   },
   save: (patch) => {
     pending.push(patch);
-    set({error:null, snapshot:projected()});
+    set({ error: null, snapshot: projected() });
     const task = queue.then(async () => {
       try {
         if (!confirmed) throw new Error('Settings unavailable');
-        const next: Settings = {...confirmed, ...pending[0]};
+        const next: Settings = { ...confirmed, ...pending[0] };
         // Rust returns persisted, normalized preferences; never promote the payload
         // to authoritative state or copy a whole old snapshot on completion.
-        const saved = isTauri() ? await invoke<Settings>('save_settings', {settings:next}) : next;
+        const saved = isTauri() ? await invoke<Settings>('save_settings', { settings: next }) : next;
         confirmed = saved;
         rememberTheme(saved);
         ++settingsRevision;
         pending.shift();
-        set({snapshot:projected()});
+        set({ snapshot: projected() });
         return true;
       } catch {
         pending.shift();
-        set({snapshot:projected(), error:'Could not save settings. Please try again.'});
+        set({ snapshot: projected(), error: 'Could not save settings. Please try again.' });
         // A transport/event error can happen after Rust persisted the write.
         // Reconcile locally without holding up later queued edits or polling ESPN.
         if (isTauri()) void get().load();
         return false;
       }
     });
-    queue = task.then(()=>{});
+    queue = task.then(() => {});
     return task;
-  }
+  },
 }));
