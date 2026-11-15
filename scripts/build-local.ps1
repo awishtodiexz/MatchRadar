@@ -41,6 +41,9 @@ try {
 
     # MSVC and the linker create temporary files under %TEMP%. Keep them inside
     # the ignored target directory so builds are not affected by locked temp files.
+    $startHead = (git rev-parse HEAD).Trim()
+    $startClean = -not (git status --porcelain)
+
     $tempDir = Join-Path $root 'src-tauri\target\.build-temp'
     New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
     $env:TEMP = $tempDir
@@ -57,6 +60,7 @@ try {
         Invoke-Step 'Install locked dependencies' { & $npm ci --no-audit --no-fund }
     }
     Invoke-Step 'Version check' { & node 'scripts/check-version.mjs' }
+    Invoke-Step 'Format check' { & $npm run format:check }
     Invoke-Step 'Lint' { & $npm run lint }
     if (-not $SkipTests) {
         Invoke-Step 'Frontend tests' { & $npm test }
@@ -81,6 +85,14 @@ try {
         Select-Object -First 1
     if (-not $installer) {
         throw 'The build finished but no NSIS installer was produced.'
+    }
+
+    $stamp = Join-Path $installer.DirectoryName 'verified-commit'
+    $sameHead = (git rev-parse HEAD).Trim() -eq $startHead
+    if (-not $SkipTests -and $startClean -and $sameHead) {
+        Set-Content -Path $stamp -Value $startHead -NoNewline
+    } else {
+        Remove-Item $stamp -ErrorAction SilentlyContinue
     }
 
     Write-Host "`nInstaller: $($installer.FullName)" -ForegroundColor Green
