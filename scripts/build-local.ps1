@@ -39,6 +39,11 @@ try {
     Enter-VsDevShell -VsInstallPath $vsPath -SkipAutomaticLocation `
         -DevCmdArguments '-arch=x64 -host_arch=x64' | Out-Null
 
+    $stamp = Join-Path $root 'src-tauri\target\release\bundle\nsis\verified-commit'
+    Remove-Item $stamp -ErrorAction SilentlyContinue
+    $startHead = (git rev-parse HEAD).Trim()
+    $startClean = -not (git status --porcelain)
+
     # MSVC and the linker create temporary files under %TEMP%. Keep them inside
     # the ignored target directory so builds are not affected by locked temp files.
     $tempDir = Join-Path $root 'src-tauri\target\.build-temp'
@@ -57,6 +62,7 @@ try {
         Invoke-Step 'Install locked dependencies' { & $npm ci --no-audit --no-fund }
     }
     Invoke-Step 'Version check' { & node 'scripts/check-version.mjs' }
+    Invoke-Step 'Format check' { & $npm run format:check }
     Invoke-Step 'Lint' { & $npm run lint }
     if (-not $SkipTests) {
         Invoke-Step 'Frontend tests' { & $npm test }
@@ -83,9 +89,15 @@ try {
         throw 'The build finished but no NSIS installer was produced.'
     }
 
+    $installerHash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash
+    $unchanged = (git rev-parse HEAD).Trim() -eq $startHead -and -not (git status --porcelain)
+    if (-not $SkipTests -and $startClean -and $unchanged) {
+        Set-Content -Path $stamp -Value "$startHead $installerHash" -NoNewline
+    }
+
     Write-Host "`nInstaller: $($installer.FullName)" -ForegroundColor Green
     Write-Host "Size:      $($installer.Length) bytes"
-    Write-Host "SHA-256:   $((Get-FileHash $installer.FullName -Algorithm SHA256).Hash)"
+    Write-Host "SHA-256:   $installerHash"
 }
 finally {
     if ($null -ne $originalTemp) { $env:TEMP = $originalTemp }
