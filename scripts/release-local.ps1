@@ -55,7 +55,7 @@ try {
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'GitHub CLI (gh) is required to publish.' }
     $stamp = Join-Path $installer.DirectoryName 'verified-commit'
     $verified = if (Test-Path $stamp) { (Get-Content $stamp -Raw).Trim() } else { '' }
-    if ($verified -ne $head) {
+    if ($verified -ne "$head $hash") {
         throw "No checked build of $head. Run scripts/build-local.ps1 without -SkipTests on a clean main, then publish."
     }
 
