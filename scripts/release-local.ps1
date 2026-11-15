@@ -55,6 +55,11 @@ try {
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'GitHub CLI (gh) is required to publish.' }
     $stamp = Join-Path $installer.DirectoryName 'verified-commit'
     $verified = if (Test-Path $stamp) { (Get-Content $stamp -Raw).Trim() } else { '' }
+    $staging = Join-Path $root 'src-tauri\target\release\upload'
+    Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Path $staging | Out-Null
+    $upload = Copy-Item $installer.FullName (Join-Path $staging $installer.Name) -PassThru
+    $hash = (Get-FileHash $upload.FullName -Algorithm SHA256).Hash
     if ($verified -ne "$head $hash") {
         throw "No checked build of $head. Run scripts/build-local.ps1 without -SkipTests on a clean main, then publish."
     }
@@ -62,7 +67,7 @@ try {
     $notes = "Unsigned Windows x64 installer for MatchRadar $version.`n`nSHA-256: $hash`n`nRequires 64-bit Windows 10/11 with the WebView2 runtime. Quit MatchRadar from the tray before installing. There is no auto-updater; future updates install over this version. If Windows shows a SmartScreen warning, choose More info, then Run anyway."
     $notesPath = Join-Path $installer.DirectoryName "release-notes.txt"
     [IO.File]::WriteAllText($notesPath, $notes, [Text.UTF8Encoding]::new($false))
-    gh release create $Tag "$($installer.FullName)#MatchRadar $version installer" `
+    gh release create $Tag "$($upload.FullName)#MatchRadar $version installer" `
         --target $head --title "MatchRadar $version" --notes-file $notesPath --latest
     if ($LASTEXITCODE -ne 0) { throw "gh release create failed (exit $LASTEXITCODE)." }
     Write-Host "Published $Tag with the locally built installer."
