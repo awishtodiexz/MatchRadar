@@ -14,7 +14,7 @@ function show(settings: Settings = defaults) {
   return {save,onKeyDown,...view};
 }
 
-describe('settings audit', () => {
+describe('settings panel', () => {
   it('clears a nonempty search before letting Escape reach the parent', () => {
     const {onKeyDown} = show();
     const search = screen.getByRole('searchbox', {name:'Search clubs'});

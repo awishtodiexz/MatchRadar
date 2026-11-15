@@ -67,7 +67,7 @@ test('ticker prioritizes followed clubs, cycles, locks across updates, and fits 
   const accessibility=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21a','wcag21aa']).analyze();
   expect(accessibility.violations.filter(rule=>rule.impact==='serious'||rule.impact==='critical')).toEqual([]);
   await page.locator('.shell').hover({position:{x:5,y:80}});
-  await page.screenshot({path:'verification/artifacts/qol1-ticker.png'});
+  await page.screenshot({path:'verification/artifacts/ticker.png'});
   await lock.click();
   await expect(lock).toHaveAttribute('aria-pressed','false');
   await expect(page.locator('.ticker-team.home')).toHaveText('ARS');

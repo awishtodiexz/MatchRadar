@@ -28,7 +28,7 @@ const openMatchAlerts = () => fireEvent.click(screen.getByRole('button',{name:/^
 beforeEach(async()=>{await load(structuredClone(mockSnapshot));});
 afterEach(cleanup);
 
-describe('focused usability refinements',()=>{
+describe('list states',()=>{
   it('distinguishes a quiet live view from a failed scoreboard and hidden live matches',async()=>{
     const base=structuredClone(mockSnapshot);
     await load({...base,matches:base.matches.filter(m=>m.status==='scheduled'),updatedAt:'2026-10-29T12:00:00Z'});

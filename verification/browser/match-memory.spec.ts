@@ -21,7 +21,7 @@ test('commentary keeps its filter, order, and scroll through Settings, ticker mo
   await installBridge(page,{summary});await page.goto('/');
   const card=page.getByRole('button',{name:/Match details:.*Arsenal.*Chelsea/});
   await expect(card).toBeVisible();
-  await page.screenshot({path:'verification/artifacts/qol1-home.png',animations:'disabled'});
+  await page.screenshot({path:'verification/artifacts/match-memory-home.png',animations:'disabled'});
   await card.click();
   await page.getByRole('tab',{name:'Commentary',exact:true}).click();
   await page.getByRole('combobox',{name:'Commentary event type'}).selectOption('goals');
@@ -51,7 +51,7 @@ test('commentary keeps its filter, order, and scroll through Settings, ticker mo
   await expect(page.getByRole('combobox',{name:'Commentary order'})).toHaveValue('oldest');
   await expect(body).toHaveJSProperty('scrollTop',500);
   await body.evaluate(element=>{element.scrollTop=200;});
-  await page.screenshot({path:'verification/artifacts/qol1-restored-commentary.png',animations:'disabled'});
+  await page.screenshot({path:'verification/artifacts/match-memory-restored-commentary.png',animations:'disabled'});
 });
 
 test('lineup team and scroll survive changing sections and reopening the match',async({page})=>{
@@ -123,7 +123,7 @@ test('unconfirmed kickoff changes from Starting soon to Awaiting update after th
   await page.clock.fastForward(6*60_000);
   await expect(page.getByText('Awaiting match update',{exact:true})).toBeVisible();
   await expect(page.getByText('Starting soon',{exact:true})).toHaveCount(0);
-  await page.screenshot({path:'verification/artifacts/qol1-awaiting-update.png',animations:'disabled'});
+  await page.screenshot({path:'verification/artifacts/match-memory-awaiting-update.png',animations:'disabled'});
   await page.getByRole('button',{name:'Ticker mode'}).click();
   await expect(page.getByText('Awaiting update',{exact:true})).toBeVisible();
   await page.getByTitle('Open this match in MatchRadar').click();
