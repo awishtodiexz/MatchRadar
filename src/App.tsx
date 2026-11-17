@@ -431,7 +431,7 @@ export default function App() {
           : upcomingEmpty
             ? `No ${competitionMatchesLabel} are scheduled in the next ${windowLabel} days.`
             : historyView
-              ? `No completed ${competitionMatchesLabel} were found in the previous 14 days.`
+              ? `No completed ${competitionMatchesLabel} were found recently.`
               : `No ${competitionMatchesLabel} are available for the next ${windowLabel} days.`));
   const emptyAction = feedUnavailable
     ? 'retry'
@@ -936,7 +936,7 @@ export default function App() {
             {listComplete && (
               <p className="list-end">
                 {historyView
-                  ? `That’s every result${settings?.followedOnly ? ' for followed clubs' : ''} from the last 14 days`
+                  ? `That’s every recent result${settings?.followedOnly ? ' for followed clubs' : ''}`
                   : `That’s everything${settings?.followedOnly ? ' for followed clubs' : ''} in the next ${windowLabel} days`}
               </p>
             )}

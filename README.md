@@ -100,6 +100,14 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml
 
 Rust tests need the Visual Studio C++ environment. Run them from a Developer PowerShell, or use `.\scripts\build-local.ps1`, which loads it and builds the NSIS installer.
 
+Security software can lock files in your temporary directory, which breaks builds with confusing errors: `npm run build` fails with `[vite:esbuild-transpile] remove ...esbuild-...: Access is denied`, and `cargo test` with `cl : Command line error D8050`. `.\scripts\build-local.ps1` avoids both by redirecting `%TEMP%` into the ignored `src-tauri\target\.build-temp` directory. To run the checks individually, do the same redirect in your shell first:
+
+```powershell
+$env:TMP = Join-Path (Get-Location) 'src-tauri\target\.build-temp'
+$env:TEMP = $env:TMP
+New-Item -ItemType Directory -Force -Path $env:TMP | Out-Null
+```
+
 ### Automatic local rebuilds
 
 ```powershell

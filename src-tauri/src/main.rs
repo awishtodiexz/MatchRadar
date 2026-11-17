@@ -391,7 +391,7 @@ fn fixtures_due(state: &tauri::State<'_, State>, league: Competition, now: DateT
                 .num_minutes();
             // A clock rollback can put the stored timestamp in the future; treat it
             // as due instead of suppressing fixtures until the window catches up.
-            minutes < 0 || minutes >= 360
+            !(0..360).contains(&minutes)
         })
 }
 
