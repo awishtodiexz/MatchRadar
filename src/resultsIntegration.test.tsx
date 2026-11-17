@@ -200,3 +200,31 @@ it('uses a newer corrected result in both the result card and the opened match',
   fireEvent.click(card);
   await waitFor(() => expect(document.querySelector('.detail-score>span')?.textContent).toBe('2 – 1'));
 });
+
+it('marks a complete results list without claiming a day count', async () => {
+  const completed = { ...mockSnapshot.matches[4], id: 'result-1', kickoff: '2026-10-22T16:00:00Z' };
+  const snapshot = { ...structuredClone(mockSnapshot), matches: [], settings: { ...mockSnapshot.settings } };
+  bridge.invoke.mockImplementation(async (cmd: string) => {
+    if (cmd === 'get_snapshot') return snapshot;
+    if (cmd === 'get_recent_results') return { matches: [completed], updatedAt: '2026-10-29T12:00:00Z', error: null };
+    throw Error('Unexpected command ' + cmd);
+  });
+  useApp.setState({ snapshot: null, loading: true, error: null });
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Results' }));
+  await screen.findByRole('button', { name: /Match details:.*Brighton & Hove Albion.*Everton/ });
+  expect(document.querySelector('.list-end')?.textContent).toMatch(/That’s every recent result/);
+});
+
+it('says results were found recently instead of naming a window the backend exceeds', async () => {
+  const snapshot = { ...structuredClone(mockSnapshot), matches: [], settings: { ...mockSnapshot.settings } };
+  bridge.invoke.mockImplementation(async (cmd: string) => {
+    if (cmd === 'get_snapshot') return snapshot;
+    if (cmd === 'get_recent_results') return { matches: [], updatedAt: '2026-10-29T12:00:00Z', error: null };
+    throw Error('Unexpected command ' + cmd);
+  });
+  useApp.setState({ snapshot: null, loading: true, error: null });
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Results' }));
+  await waitFor(() => expect(screen.getByText(/were found recently\./)).toBeTruthy());
+});
