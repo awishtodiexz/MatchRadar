@@ -103,30 +103,28 @@ pub fn plan(snapshot: &mut Snapshot, now: DateTime<Utc>) -> Vec<(String, String)
                         && k - now
                             <= Duration::minutes(snapshot.settings.reminder_minutes.min(120) as i64)
                 });
-            if within_reminder_window {
-                if subscribed || snapshot.settings.reminders {
-                    let reminder_id = format!("{}:reminder", m.id);
-                    let sent = snapshot
-                        .sent_notifications
-                        .iter()
-                        .any(|id| id == &reminder_id);
-                    let is_new = match previous_reminder.as_ref() {
-                        Some(previous) => Some(previous) != reminder_kickoff.as_ref(),
-                        // A migrated state has no recorded kickoff. If the ID was
-                        // already sent, do not replay it merely because the field is new.
-                        None => !sent,
-                    };
-                    if is_new {
-                        if sent {
-                            snapshot.sent_notifications.retain(|id| id != &reminder_id);
-                        }
-                        alerts.push((reminder_id, format!("{name} kicks off soon")));
+            if within_reminder_window && (subscribed || snapshot.settings.reminders) {
+                let reminder_id = format!("{}:reminder", m.id);
+                let sent = snapshot
+                    .sent_notifications
+                    .iter()
+                    .any(|id| id == &reminder_id);
+                let is_new = match previous_reminder.as_ref() {
+                    Some(previous) => Some(previous) != reminder_kickoff.as_ref(),
+                    // A migrated state has no recorded kickoff. If the ID was
+                    // already sent, do not replay it merely because the field is new.
+                    None => !sent,
+                };
+                if is_new {
+                    if sent {
+                        snapshot.sent_notifications.retain(|id| id != &reminder_id);
                     }
-                    // Record the kickoff only once a reminder is allowed. Recording it
-                    // while reminders are disabled would silently consume the current
-                    // reminder when the user turns them on later in the same window.
-                    planned_reminder_kickoff = reminder_kickoff.clone();
+                    alerts.push((reminder_id, format!("{name} kicks off soon")));
                 }
+                // Record the kickoff only once a reminder is allowed. Recording it
+                // while reminders are disabled would silently consume the current
+                // reminder when the user turns them on later in the same window.
+                planned_reminder_kickoff = reminder_kickoff.clone();
             }
             // First/unconfirmed observations establish a baseline. A subscription
             // armed from a recent confirmed score keeps watching the next change.

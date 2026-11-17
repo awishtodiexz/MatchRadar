@@ -9,12 +9,10 @@ use crate::{
 use chrono::{DateTime, Duration, Utc};
 
 pub struct Applied {
-    pub failed: bool,
     pub fixture_failed: bool,
     pub score_failed: bool,
     pub fixture_attempted: bool,
     pub score_attempted: bool,
-    pub retry_after: Option<u64>,
     pub fixture_retry_after: Option<u64>,
     pub score_retry_after: Option<u64>,
     pub any_response: bool,
@@ -141,10 +139,8 @@ pub fn apply_league(
     let score_attempted = scores.matches.is_some() || scores.error.is_some();
     let fixture_failed = fixtures.error.is_some();
     let score_failed = scores.error.is_some();
-    let failed = fixture_failed || score_failed;
     let fixture_retry_after = fixtures.error.as_ref().and_then(|e| e.retry_after);
     let score_retry_after = scores.error.as_ref().and_then(|e| e.retry_after);
-    let retry_after = fixture_retry_after.max(score_retry_after);
     let fixtures_complete = fixtures.matches.is_some() && fixtures.error.is_none();
     let score_ids: Vec<_> = scores
         .matches
@@ -219,12 +215,10 @@ pub fn apply_league(
     recompute_aggregates(snapshot);
 
     Applied {
-        failed,
         fixture_failed,
         score_failed,
         fixture_attempted,
         score_attempted,
-        retry_after,
         fixture_retry_after,
         score_retry_after,
         any_response,
@@ -341,8 +335,14 @@ mod tests {
                     })
                 );
                 assert_eq!(snapshot.partial, fixture_ok != scores_ok);
-                assert_eq!(applied.failed, !(fixture_ok && scores_ok));
-                assert_eq!(snapshot.error.is_some(), applied.failed);
+                assert_eq!(
+                    applied.fixture_failed || applied.score_failed,
+                    !(fixture_ok && scores_ok)
+                );
+                assert_eq!(
+                    snapshot.error.is_some(),
+                    applied.fixture_failed || applied.score_failed
+                );
                 assert_eq!(snapshot.settings, settings);
             }
         }
@@ -507,7 +507,7 @@ mod tests {
             s.fixture_updated_at.as_deref(),
             Some("2026-10-28T06:00:00Z")
         );
-        assert_eq!(applied.retry_after, Some(600));
+        assert_eq!(applied.score_retry_after, Some(600));
         assert_eq!(applied.score_ids, vec!["live"]);
         assert!(
             !s.matches
@@ -529,7 +529,7 @@ mod tests {
             FetchOutcome::default(),
             good(vec![]),
         );
-        assert!(!applied.failed);
+        assert!(!applied.fixture_failed && !applied.score_failed);
         assert!(s.partial);
         assert!(s.fixture_error.is_some());
         assert_eq!(

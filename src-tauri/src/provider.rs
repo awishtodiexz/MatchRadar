@@ -336,7 +336,7 @@ fn normalize(event: &Value, league: Competition) -> Option<Match> {
         away,
         kickoff: kickoff.to_rfc3339(),
         status: mapped.into(),
-        detail: bounded(&detail, 200).unwrap_or_else(|| mapped.into()),
+        detail: bounded(detail, 200).unwrap_or_else(|| mapped.into()),
         competition: league.name().into(),
         leg,
         aggregate,
