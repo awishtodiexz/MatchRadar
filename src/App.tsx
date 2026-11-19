@@ -43,6 +43,36 @@ const SHORTCUT_MESSAGE =
   'Ctrl+Shift+M is used by another app, so the MatchRadar shortcut is off. Open the widget from the tray icon instead.';
 const SCORE_CHANGE_MS = 3 * 60_000;
 type ScoreChange = { at: number; home: boolean; away: boolean };
+type ScoreTracking = {
+  previousScores: Map<string, [Match['homeScore'], Match['awayScore']]>;
+  scoreChanges: Record<string, ScoreChange>;
+};
+
+export function trackScores(matches: Match[], current: ScoreTracking, now: number): ScoreTracking {
+  const previousScores: ScoreTracking['previousScores'] = new Map();
+  const scoreChanges: ScoreTracking['scoreChanges'] = {};
+  for (const match of matches) {
+    const previous = current.previousScores.get(match.id);
+    const change = current.scoreChanges[match.id];
+    if (change && now - change.at < SCORE_CHANGE_MS) scoreChanges[match.id] = change;
+    if (
+      previous &&
+      previous[0] != null &&
+      previous[1] != null &&
+      match.homeScore != null &&
+      match.awayScore != null &&
+      (previous[0] !== match.homeScore || previous[1] !== match.awayScore)
+    )
+      scoreChanges[match.id] = {
+        at: now,
+        home: previous[0] !== match.homeScore,
+        away: previous[1] !== match.awayScore,
+      };
+    previousScores.set(match.id, [match.homeScore, match.awayScore]);
+  }
+  return { previousScores, scoreChanges };
+}
+
 const followsTeam = (match: Match, favorites: string[]) =>
   favorites.includes(match.home.id) || favorites.includes(match.away.id);
 
@@ -82,8 +112,11 @@ export default function App() {
   const recoveryFocus = useRef(false);
   const focusClubSearch = useRef(false);
   // Scores seen on the previous snapshot, to flag a change for a few minutes.
-  const previousScores = useRef(new Map<string, [number | null | undefined, number | null | undefined]>());
-  const [scoreChanges, setScoreChanges] = useState<Record<string, ScoreChange>>({});
+  const [scoreTracking, setScoreTracking] = useState<ScoreTracking>(() => ({
+    previousScores: new Map(),
+    scoreChanges: {},
+  }));
+  const { scoreChanges } = scoreTracking;
   const day = useLocalDay();
   const now = useNow(30_000);
   const native = isTauri();
@@ -186,26 +219,9 @@ export default function App() {
   }, [allMatches]);
   useEffect(() => {
     if (!allMatches) return;
-    const changed: Record<string, ScoreChange> = {};
-    for (const match of allMatches) {
-      const previous = previousScores.current.get(match.id);
-      if (
-        previous &&
-        previous[0] != null &&
-        previous[1] != null &&
-        match.homeScore != null &&
-        match.awayScore != null &&
-        (previous[0] !== match.homeScore || previous[1] !== match.awayScore)
-      )
-        changed[match.id] = {
-          at: Date.now(),
-          home: previous[0] !== match.homeScore,
-          away: previous[1] !== match.awayScore,
-        };
-      previousScores.current.set(match.id, [match.homeScore, match.awayScore]);
-    }
-    if (Object.keys(changed).length) setScoreChanges((current) => ({ ...current, ...changed }));
-  }, [allMatches]);
+    const at = Date.now();
+    setScoreTracking((current) => trackScores(allMatches, current, at));
+  }, [allMatches, now]);
   useEffect(() => {
     setTickerPinned((current) => {
       if (!current) return current;
