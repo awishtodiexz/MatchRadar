@@ -13,7 +13,7 @@ Releases are built and published by hand from a Windows machine with `scripts/re
 1. On a clean, up-to-date `main`, build and check: `powershell -ExecutionPolicy Bypass -File scripts/build-local.ps1`. Without `-SkipTests` on a clean tree it writes `src-tauri/target/release/bundle/nsis/verified-commit` with the commit and installer SHA-256.
 2. Dry run: `powershell -ExecutionPolicy Bypass -File scripts/release-local.ps1 -SkipBuild`. It publishes nothing, prints the trust checks below and exits 1 if any fails.
 3. Review the output. Every check must be `PASS`, and the `Signature` line must say what you expect.
-4. Publish: rerun with `-SkipBuild -Publish`. It repeats all checks, refuses to publish if any fails, confirms `origin/main` equals HEAD, re-hashes the staged copy and creates the release and tag `v<version>` at HEAD with `gh release create`.
+4. Publish: rerun with `-SkipBuild -Publish`. It repeats all checks, refuses to publish if any fails, confirms `origin/main` equals HEAD and that the tag does not exist on `origin`, re-hashes the staged copy and creates the release and tag `v<version>` at HEAD with `gh release create`.
 5. Download the asset from the release page and confirm its SHA-256 matches the notes.
 
 ## Trust checks

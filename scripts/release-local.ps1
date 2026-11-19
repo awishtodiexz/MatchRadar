@@ -102,6 +102,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Could not verify origin/main.' }
     $remote = (git rev-parse origin/main).Trim()
     if ($head -ne $remote) { throw 'Push main before publishing so the tag and installer match.' }
+    $remoteTag = git ls-remote --tags origin "refs/tags/$Tag"
+    if ($LASTEXITCODE -ne 0) { throw "Could not check origin for tag $Tag." }
+    if ($remoteTag) { throw "Tag $Tag already exists on origin. Bump the version for a new release instead of replacing $Tag." }
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'GitHub CLI (gh) is required to publish.' }
     $staging = Join-Path $root 'src-tauri\target\release\upload'
     Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
