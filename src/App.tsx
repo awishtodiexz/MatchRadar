@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { LogicalSize } from '@tauri-apps/api/dpi';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Lock, Maximize2, Minimize2, Pin, Radio, RefreshCw, Settings2, Star, Unlock, X } from 'lucide-react';
 import logo from './assets/logo.png';
@@ -18,6 +17,7 @@ import {
 } from './freshness';
 import { useApp } from './store';
 import { useLocalDay } from './useLocalDay';
+import { useTickerMode } from './useTickerMode';
 import { useNotificationNavigation } from './useNotificationNavigation';
 import { useRecentResults } from './useRecentResults';
 import { mergeResults, matchesView } from './matchViews';
@@ -96,14 +96,12 @@ export default function App() {
   const [systemTheme, setSystemTheme] = useState<'dark' | 'light'>(() =>
     window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark',
   );
-  // Session-only slim mode; the widget's full size is remembered so it can be restored.
-  const [ticker, setTicker] = useState(false);
+  const { ticker, toggleTicker: changeTicker } = useTickerMode();
   const [tickerPinned, setTickerPinned] = useState<Match | null>(null);
   const detailRefresh = useRef<MatchDetailsHandle>(null);
   const matchSessions = useRef(new Map<string, MatchMemory>());
   const settingsReturn = useRef<'home' | 'detail'>('home');
   const [detailBusy, setDetailBusy] = useState(false);
-  const tickerRestoreSize = useRef<{ width: number; height: number } | null>(null);
   const root = useRef<HTMLElement>(null);
   const restoreFocus = useRef('settings-control');
   const homeScroll = useRef(0);
@@ -545,27 +543,7 @@ export default function App() {
   };
   const toggleTicker = async () => {
     const next = !ticker;
-    if (native) {
-      const win = getCurrentWindow();
-      try {
-        if (next) {
-          const size = (await win.innerSize()).toLogical(await win.scaleFactor());
-          tickerRestoreSize.current = { width: size.width, height: size.height };
-          await win.setMinSize(new LogicalSize(320, 112));
-          await win.setSize(new LogicalSize(Math.max(320, Math.min(size.width, 420)), 112));
-        } else {
-          const saved = tickerRestoreSize.current ?? { width: 390, height: 700 };
-          await win.setSize(new LogicalSize(saved.width, saved.height));
-          await win.setMinSize(new LogicalSize(320, 460));
-        }
-      } catch {
-        // Best effort: never leave the window stuck at the ticker's minimum height.
-        if (next) void win.setMinSize(new LogicalSize(320, 460)).catch(() => {});
-        useApp.setState({ error: 'Could not resize the widget.' });
-        return false;
-      }
-    }
-    setTicker(next);
+    if (!(await changeTicker())) return false;
     if (!next)
       requestAnimationFrame(() =>
         root.current
