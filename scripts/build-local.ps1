@@ -74,6 +74,9 @@ try {
     Invoke-Step 'Rust format check' {
         cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
     }
+    Invoke-Step 'Rust lint' {
+        cargo clippy --locked --all-targets --manifest-path src-tauri/Cargo.toml -- -D warnings
+    }
     if (-not $SkipTests) {
         Invoke-Step 'Rust tests' {
             cargo test --locked --manifest-path src-tauri/Cargo.toml
