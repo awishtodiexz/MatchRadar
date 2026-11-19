@@ -1260,6 +1260,7 @@ pub enum Phase {
     Final,
     Other,
 }
+const MAX_METADATA_KEYS: usize = 256;
 pub struct Cache {
     entries: StdMutex<HashMap<String, Details>>,
     blocked: StdMutex<HashMap<String, i64>>,
@@ -1427,6 +1428,25 @@ pub fn deserialize_cache<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Details>
     Ok(entries)
 }
 impl Cache {
+    fn key_lock(&self, key: &str, now: i64) -> Option<Arc<AsyncMutex<()>>> {
+        let mut locks = lock(&self.key_locks);
+        locks.retain(|_, value| Arc::strong_count(value) > 1);
+        let mut blocked = lock(&self.blocked);
+        blocked.retain(|_, until| *until > now);
+        if let Some(existing) = locks.get(key) {
+            return Some(existing.clone());
+        }
+        // Reserve a cooldown slot for every in-flight key. Never evict a live
+        // lock or an active cooldown to admit another request.
+        let reserved = blocked.len() + locks.keys().filter(|k| !blocked.contains_key(*k)).count();
+        if !blocked.contains_key(key) && reserved >= MAX_METADATA_KEYS {
+            return None;
+        }
+        let value = Arc::new(AsyncMutex::new(()));
+        locks.insert(key.to_owned(), value.clone());
+        Some(value)
+    }
+
     pub fn seed(&self, saved: &[Details]) {
         if self.seeded.swap(true, Ordering::Relaxed) {
             return;
@@ -1497,10 +1517,12 @@ impl Cache {
         }
         // One in-flight request per match. Different matches no longer queue behind
         // the same cache mutex for the full network round-trip.
-        let key_lock = lock(&self.key_locks)
-            .entry(key.clone())
-            .or_insert_with(|| Arc::new(AsyncMutex::new(())))
-            .clone();
+        let Some(key_lock) = self.key_lock(&key, now.timestamp()) else {
+            return saved_or_error(
+                lock(&self.entries).get(&key).cloned(),
+                "Summary request capacity reached; try again later".into(),
+            );
+        };
         let _guard = key_lock.lock().await;
         let old = lock(&self.entries).get(&key).cloned();
         if let Some(d) = &old {
@@ -1687,3 +1709,82 @@ async fn fetch(
 #[cfg(test)]
 #[path = "details_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod metadata_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn metadata_maps_are_bounded_across_many_failed_keys() {
+        let cache = Cache::default();
+        let now = Utc::now();
+        let mut fetched = 0;
+        for id in 0..MAX_METADATA_KEYS * 4 {
+            assert!(cache
+                .get_with(
+                    Competition::PremierLeague,
+                    &id.to_string(),
+                    Phase::Live,
+                    false,
+                    now,
+                    || async {
+                        fetched += 1;
+                        Err(Failure::temporary("offline"))
+                    }
+                )
+                .await
+                .is_err());
+            assert!(lock(&cache.key_locks).len() <= MAX_METADATA_KEYS);
+            assert!(lock(&cache.blocked).len() <= MAX_METADATA_KEYS);
+        }
+        assert_eq!(fetched, MAX_METADATA_KEYS);
+        assert_eq!(lock(&cache.blocked).len(), MAX_METADATA_KEYS);
+        cache
+            .get_with(
+                Competition::PremierLeague,
+                "0",
+                Phase::Live,
+                false,
+                now,
+                || async { panic!("an active cooldown must survive capacity pressure") },
+            )
+            .await
+            .unwrap_err();
+    }
+
+    #[test]
+    fn idle_locks_and_expired_cooldowns_are_pruned() {
+        let cache = Cache::default();
+        assert!(cache.key_lock("empty", 100).is_some());
+        lock(&cache.blocked).insert("expired".into(), 100);
+        lock(&cache.blocked).insert("active".into(), 101);
+        for id in 0..MAX_METADATA_KEYS * 4 {
+            assert!(cache.key_lock(&id.to_string(), 100).is_some());
+            assert_eq!(lock(&cache.key_locks).len(), 1);
+        }
+        assert_eq!(
+            *lock(&cache.blocked),
+            HashMap::from([("active".into(), 101)])
+        );
+        assert!(cache.key_lock("later", 101).is_some());
+        assert!(lock(&cache.blocked).is_empty());
+    }
+
+    #[tokio::test]
+    async fn active_locks_are_shared_even_at_capacity() {
+        let cache = Cache::default();
+        let held: Vec<_> = (0..MAX_METADATA_KEYS)
+            .map(|id| cache.key_lock(&id.to_string(), 100).unwrap())
+            .collect();
+        assert!(cache.key_lock("overflow", 100).is_none());
+        let shared = cache.key_lock("0", 100).unwrap();
+        assert!(Arc::ptr_eq(&held[0], &shared));
+        let guard = held[0].lock().await;
+        assert!(shared.try_lock().is_err());
+        drop(guard);
+        assert!(shared.try_lock().is_ok());
+        drop(held);
+        assert!(cache.key_lock("overflow", 100).is_some());
+        assert_eq!(lock(&cache.key_locks).len(), 2);
+    }
+}
