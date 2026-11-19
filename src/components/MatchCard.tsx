@@ -1,11 +1,11 @@
-import { Bell, BellOff, BellRing, ChevronRight, ClipboardCopy, PanelRightOpen, Star } from 'lucide-react';
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { Bell, BellOff, BellRing, ClipboardCopy, PanelRightOpen, Star } from 'lucide-react';
+import { memo, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useApp } from '../store';
 import { isLive } from '../fixtures';
-import type { Match, Settings } from '../types';
+import type { Match, Settings, Team } from '../types';
 import { Badge } from './WidgetUi';
-import { closedNote, resultLabel, matchButtonId, timeLabel } from '../presentation';
+import { resultLabel, matchButtonId, timeLabel } from '../presentation';
 import { awaitingKickoffUpdate, countdownLabel, shortCountdown } from '../countdown';
 
 const clockText = (detail: string) => {
@@ -18,52 +18,51 @@ const alertExpiry = (kickoff: string) => {
   const parsed = Date.parse(kickoff);
   return new Date((Number.isFinite(parsed) ? parsed : Date.now()) + 30 * 86400000).toISOString();
 };
+const alertsClosed = (match: Match) => match.status === 'fulltime' || match.status === 'cancelled';
 
-function alertPresentation(settings: Settings, match: Match) {
-  const preference = settings.matchAlerts[match.id];
-  const state = preference ? (preference.enabled ? 'on' : 'muted') : 'team';
-  const ended = match.status === 'fulltime';
-  const cancelled = match.status === 'cancelled';
-  const postponed = match.status === 'postponed';
-  const closed = ended || cancelled;
+function defaultAlertDescription(settings: Settings, match: Match) {
   const followed = [match.home, match.away].filter((team) => settings.favorites.includes(team.id));
   const defaultTypes = [
     settings.reminders && `${settings.reminderMinutes}-minute reminders`,
     settings.starts && 'match start',
     settings.goals && 'goals',
   ].filter(Boolean);
-  const defaultDescription =
-    followed.length === 0
-      ? 'No alerts: you don’t follow either team.'
-      : defaultTypes.length === 0
-        ? 'No alerts: all team alert types are off in Settings.'
-        : `Alerts for ${defaultTypes.join(', ')} because you follow ${followed.map((team) => team.name).join(' and ')}.`;
-  const base =
-    state === 'on'
-      ? 'Kick-off reminders, match start and goal alerts are on for this match.'
-      : state === 'muted'
-        ? 'No alerts for this match, even for followed clubs.'
-        : defaultDescription;
-  // A cancelled match has not "ended", and a postponed one can still alert later.
-  const description = ended
-    ? 'This match has ended.'
-    : cancelled
-      ? closedNote(match)
-      : postponed
-        ? 'This match is postponed; alerts resume if it is rescheduled.'
-        : base;
-  return {
-    defaultDescription,
-    state,
-    ended,
-    cancelled,
-    closed,
-    postponed,
-    description,
-    enabled: state === 'on',
-    label: state === 'on' ? 'On' : state === 'muted' ? 'Muted' : 'Team default',
-  };
+  return followed.length === 0
+    ? 'No alerts: you don’t follow either team.'
+    : defaultTypes.length === 0
+      ? 'No alerts: all team alert types are off in Settings.'
+      : `Alerts for ${defaultTypes.join(', ')} because you follow ${followed.map((team) => team.name).join(' and ')}.`;
 }
+
+const MatchTeams = memo(function MatchTeams({
+  home,
+  away,
+  homeFavorite,
+  awayFavorite,
+  loser,
+}: {
+  home: Team;
+  away: Team;
+  homeFavorite: boolean;
+  awayFavorite: boolean;
+  loser: string | null;
+}) {
+  return (
+    <div className="teams">
+      {[home, away].map((team, index) => (
+        <div className={'team-line' + (team.id === loser ? ' is-beaten' : '')} key={team.id}>
+          <Badge team={team} />
+          <span className="team-name" title={team.name}>
+            {team.name}
+          </span>
+          {(index === 0 ? homeFavorite : awayFavorite) && (
+            <Star aria-hidden="true" className="fav" size={11} fill="currentColor" />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+});
 
 export function MatchCard({
   match,
@@ -80,15 +79,18 @@ export function MatchCard({
   now?: Date;
   scoreChange?: { home: boolean; away: boolean };
 }) {
-  const alerts = alertPresentation(settings, match);
   const detailId = useId();
   const openButton = useRef<HTMLButtonElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const awaitingUpdate = match.status === 'scheduled' && awaitingKickoffUpdate(match.kickoff, now);
+  const scheduled = match.status === 'scheduled';
+  const live = isLive(match);
+  const liveClass = live && !match.scoreStale ? ' is-live' : '';
+  const kickoffTime = scheduled ? timeLabel(match.kickoff) : '';
+  const awaitingUpdate = scheduled && awaitingKickoffUpdate(match.kickoff, now);
   const cardDetail =
-    (match.status === 'scheduled'
-      ? `Kick-off ${timeLabel(match.kickoff)}${awaitingUpdate ? ', awaiting match update' : ''}`
-      : `${match.homeScore ?? '–'} to ${match.awayScore ?? '–'}, ${isLive(match) ? (match.status === 'halftime' ? 'half-time' : clockText(match.detail || 'live')) : match.detail || match.status}${match.scoreStale ? ' (saved)' : ''}`) +
+    (scheduled
+      ? `Kick-off ${kickoffTime}${awaitingUpdate ? ', awaiting match update' : ''}`
+      : `${match.homeScore ?? '–'} to ${match.awayScore ?? '–'}, ${live ? (match.status === 'halftime' ? 'half-time' : clockText(match.detail || 'live')) : match.detail || match.status}${match.scoreStale ? ' (saved)' : ''}`) +
     (showCompetition ? `, ${match.league === 'championsLeague' ? 'Champions League' : 'Premier League'}` : '') +
     (scoreChange ? ', score just changed' : '');
   const loser =
@@ -126,11 +128,11 @@ export function MatchCard({
         title={scoreChange ? 'Score just changed · view match details' : 'View match details · right-click for more'}
       >
         <span className="sr-only">Match details: </span>
-        <div className={'fixture-time ' + (isLive(match) && !match.scoreStale ? 'is-live' : '')}>
+        <div className={'fixture-time' + liveClass}>
           <span>
-            {match.status === 'scheduled'
-              ? timeLabel(match.kickoff)
-              : isLive(match)
+            {scheduled
+              ? kickoffTime
+              : live
                 ? match.status === 'halftime'
                   ? 'HT'
                   : clockText(match.detail || 'LIVE')
@@ -144,55 +146,46 @@ export function MatchCard({
             <small className="competition-tag">{match.league === 'championsLeague' ? 'UCL' : 'PL'}</small>
           )}
         </div>
-        <div className="teams">
-          {[match.home, match.away].map((team) => (
-            <div className={'team-line' + (team.id === loser ? ' is-beaten' : '')} key={team.id}>
-              <Badge team={team} />
-              <span className="team-name" title={team.name}>
-                {team.name}
-              </span>
-              {settings.favorites.includes(team.id) && (
-                <Star aria-hidden="true" className="fav" size={11} fill="currentColor" />
-              )}
+        <MatchTeams
+          home={match.home}
+          away={match.away}
+          homeFavorite={settings.favorites.includes(match.home.id)}
+          awayFavorite={settings.favorites.includes(match.away.id)}
+          loser={loser}
+        />
+        <div className={'match-state' + liveClass}>
+          {scheduled ? (
+            <span className="scheduled-score" title={countdownLabel(match.kickoff, now) ?? undefined}>
+              {shortCountdown(match.kickoff, now) ?? '–'}
+            </span>
+          ) : (
+            <div className="scores">
+              <strong
+                className={
+                  [match.home.id === loser && 'is-beaten', scoreChange?.home && 'just-changed']
+                    .filter(Boolean)
+                    .join(' ') || undefined
+                }
+              >
+                {match.homeScore ?? '–'}
+              </strong>
+              <strong
+                className={
+                  [match.away.id === loser && 'is-beaten', scoreChange?.away && 'just-changed']
+                    .filter(Boolean)
+                    .join(' ') || undefined
+                }
+              >
+                {match.awayScore ?? '–'}
+              </strong>
             </div>
-          ))}
+          )}
         </div>
-        <div className={'match-state ' + (isLive(match) && !match.scoreStale ? 'is-live' : '')}>
-          <div className={'result ' + (match.status === 'scheduled' ? 'scheduled' : '')}>
-            {match.status === 'scheduled' ? (
-              <span className="scheduled-score" title={countdownLabel(match.kickoff, now) ?? undefined}>
-                {shortCountdown(match.kickoff, now) ?? '–'}
-              </span>
-            ) : (
-              <div className="scores">
-                <strong
-                  className={
-                    [match.home.id === loser && 'is-beaten', scoreChange?.home && 'just-changed']
-                      .filter(Boolean)
-                      .join(' ') || undefined
-                  }
-                >
-                  {match.homeScore ?? '–'}
-                </strong>
-                <strong
-                  className={
-                    [match.away.id === loser && 'is-beaten', scoreChange?.away && 'just-changed']
-                      .filter(Boolean)
-                      .join(' ') || undefined
-                  }
-                >
-                  {match.awayScore ?? '–'}
-                </strong>
-              </div>
-            )}
-          </div>
-        </div>
-        <ChevronRight size={13} className="row-arrow" aria-hidden="true" />
       </button>
       <span id={detailId} className="sr-only">
         {cardDetail}
       </span>
-      {!alerts.closed && <MatchAlertsButton match={match} settings={settings} list />}
+      {!alertsClosed(match) && <MatchAlertsButton match={match} settings={settings} list />}
       {menu && (
         <CardMenu
           match={match}
@@ -327,14 +320,15 @@ export function MatchAlertsButton({
   settings: Settings;
   list?: boolean;
 }) {
-  const save = useApp((state) => state.save);
   const heading = useRef<HTMLHeadingElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const [open, setOpen] = useState(false);
   const menuId = useId();
-  const alerts = alertPresentation(settings, match);
+  const preference = settings.matchAlerts[match.id];
+  const state = preference ? (preference.enabled ? 'on' : 'muted') : 'team';
+  const label = state === 'on' ? 'On' : state === 'muted' ? 'Muted' : 'Team default';
   const [feedback, setFeedback] = useState('');
   useLayoutEffect(() => {
     if (!open) return;
@@ -384,7 +378,7 @@ export function MatchAlertsButton({
   }, [open]);
   const persist = async (matchAlerts: Settings['matchAlerts'], label: string) => {
     setFeedback('Saving…');
-    const saved = await save({ matchAlerts });
+    const saved = await useApp.getState().save({ matchAlerts });
     setFeedback(saved ? `Match alerts: ${label}.` : 'Could not save alert preference. Please try again.');
   };
   const change = (enabled: boolean) => {
@@ -398,22 +392,22 @@ export function MatchAlertsButton({
     delete next[match.id];
     void persist(next, 'Team default');
   };
-  if (alerts.closed) return null;
+  if (alertsClosed(match)) return null;
   return (
     <div className="alert-control">
       <button
         ref={trigger}
         className={'icon-button alert-trigger' + (list ? ' match-bell' : '')}
-        data-alert-state={alerts.state}
-        aria-label={`Match alerts: ${match.home.name} versus ${match.away.name}, ${alerts.label}`}
+        data-alert-state={state}
+        aria-label={`Match alerts: ${match.home.name} versus ${match.away.name}, ${label}`}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title={titleFor(alerts)}
+        title={`Match alerts: ${label}`}
         onClick={() => setOpen((value) => !value)}
       >
-        {alerts.enabled ? (
+        {state === 'on' ? (
           <BellRing size={17} fill="currentColor" />
-        ) : alerts.state === 'muted' ? (
+        ) : state === 'muted' ? (
           <BellOff size={17} />
         ) : (
           <Bell size={17} />
@@ -443,26 +437,28 @@ export function MatchAlertsButton({
           <p className="field-note">
             {match.home.name} vs {match.away.name}
           </p>
-          {alerts.postponed && <p className="field-note">{alerts.description}</p>}
+          {match.status === 'postponed' && (
+            <p className="field-note">This match is postponed; alerts resume if it is rescheduled.</p>
+          )}
           <div className="alert-options">
             <div className="alert-option">
               <button
                 className="outline-button"
                 aria-labelledby={`${menuId}-team`}
                 aria-describedby={`${menuId}-team-description`}
-                aria-pressed={alerts.state === 'team'}
+                aria-pressed={state === 'team'}
                 onClick={reset}
               >
                 <strong id={`${menuId}-team`}>Team default</strong>
               </button>
-              <small id={`${menuId}-team-description`}>{alerts.defaultDescription}</small>
+              <small id={`${menuId}-team-description`}>{defaultAlertDescription(settings, match)}</small>
             </div>
             <div className="alert-option">
               <button
                 className="outline-button"
                 aria-labelledby={`${menuId}-on`}
                 aria-describedby={`${menuId}-on-description`}
-                aria-pressed={alerts.state === 'on'}
+                aria-pressed={state === 'on'}
                 onClick={() => change(true)}
               >
                 <strong id={`${menuId}-on`}>On</strong>
@@ -476,7 +472,7 @@ export function MatchAlertsButton({
                 className="outline-button"
                 aria-labelledby={`${menuId}-muted`}
                 aria-describedby={`${menuId}-muted-description`}
-                aria-pressed={alerts.state === 'muted'}
+                aria-pressed={state === 'muted'}
                 onClick={() => change(false)}
               >
                 <strong id={`${menuId}-muted`}>Muted</strong>
@@ -491,12 +487,4 @@ export function MatchAlertsButton({
       )}
     </div>
   );
-}
-
-// Tooltip for the details-header bell only; the list-card bell keeps its own title.
-function titleFor(alerts: ReturnType<typeof alertPresentation>) {
-  if (alerts.closed) return alerts.description;
-  if (alerts.enabled) return 'Match alerts: On';
-  if (alerts.state === 'muted') return 'Match alerts: Muted';
-  return 'Match alerts: Team default';
 }

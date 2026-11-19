@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { installBridge } from '../browser/bridge';
 import { largeSnapshot } from '../fixtures/large';
 import { mockSnapshot } from '../../src/test-fixtures/fixtures';
+import { matchesView } from '../../src/matchViews';
 
 // Render/inspection benchmark, not a gate. The only assertions are correctness
 // smoke checks; the measurements are written as JSON evidence.
@@ -35,8 +36,17 @@ async function measure(
   await page.setViewportSize({ width: 390, height: 700 });
   await page.route('https://**/*', (route) => route.abort());
   await installBridge(page, { snapshot });
+  const expectedFollowing = matchesView(snapshot.matches, 'All', snapshot.settings.favorites, true).length;
   const runs: Run[] = [];
   for (let run = 0; run < RUNS; run++) {
+    const trace = process.env.MATCHRADAR_PROFILE === '1' && cardCount === 240 && run === 0;
+    const traceEvents: unknown[] = [];
+    if (trace) {
+      cdp.on('Tracing.dataCollected', ({ value }) => traceEvents.push(...value));
+      await cdp.send('Tracing.start', {
+        categories: 'devtools.timeline,disabled-by-default-devtools.timeline,blink.user_timing',
+      });
+    }
     const started = Date.now();
     await page.goto('/');
     await expect(page.getByRole('button', { name: /^Match details:/ }).first()).toBeVisible();
@@ -64,16 +74,26 @@ async function measure(
       await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       return performance.now() - start;
     });
-    const filterMs = await page.evaluate(async () => {
-      const button = [...document.querySelectorAll<HTMLButtonElement>('.centre-tabs button')].find(
-        (entry) => entry.textContent === 'Following',
-      );
+    const filter = page.getByRole('button', { name: 'Following only', exact: true });
+    const filterMs = await filter.evaluate(async (button: HTMLButtonElement, trace) => {
+      if (trace) performance.mark('filter-start');
       const start = performance.now();
-      button?.click();
+      button.click();
       await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-      return performance.now() - start;
-    });
+      const duration = performance.now() - start;
+      if (trace) performance.mark('filter-end');
+      return duration;
+    }, trace);
+    if (trace) {
+      const complete = new Promise<void>((resolve) => cdp.once('Tracing.tracingComplete', () => resolve()));
+      await cdp.send('Tracing.end');
+      await complete;
+      fs.mkdirSync(OUT, { recursive: true });
+      fs.writeFileSync(`${OUT}/large-240-trace.json`, JSON.stringify({ traceEvents }));
+    }
     expect(metrics.cards).toBe(cardCount);
+    await expect(filter).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.match-card')).toHaveCount(expectedFollowing);
     await page.locator('.match-list').evaluate((element) => {
       element.scrollTop = 0;
     });
@@ -123,6 +143,7 @@ async function report(page: import('@playwright/test').Page, name: string, runs:
 }
 
 test('large fixture list render (240 matches)', async ({ page }) => {
+  test.setTimeout(30_000);
   await page.addInitScript(() => {
     const bench = { longTasks: [] as Array<[number, number]>, layoutShift: 0 };
     (window as unknown as { __BENCH__: typeof bench }).__BENCH__ = bench;
