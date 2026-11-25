@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { MatchCentre } from './MatchCentre';
+import { MatchCentreView } from './MatchCentre';
 import { positionGroup } from './MatchLineups';
 import { formatStatisticValue } from './MatchStats';
 import { mockSnapshot } from '../test-fixtures/fixtures';
 import type { MatchSummary } from '../useMatchSummary';
 const state = vi.hoisted(() => ({
+  id: 'demo-1',
   data: {
     matchId: '1',
     updatedAt: '2026-10-29T12:00:00Z',
@@ -32,29 +33,17 @@ const state = vi.hoisted(() => ({
   retry: vi.fn(),
   refresh: vi.fn(),
   refreshing: false,
-  real: false,
 }));
-const bridge = vi.hoisted(() => ({ invoke: vi.fn() }));
-vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => state.real, invoke: bridge.invoke }));
-// Most tests use the fixed state above; only the refresh test runs the real hook over the mocked invoke.
-vi.mock('../useMatchSummary', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../useMatchSummary')>();
-  return {
-    useMatchSummary: (...args: Parameters<typeof actual.useMatchSummary>) =>
-      state.real ? actual.useMatchSummary(...args) : state,
-  };
-});
 const initial = structuredClone(state.data);
 afterEach(() => {
   cleanup();
   state.data = structuredClone(initial);
   state.loading = false;
   state.error = null;
-  state.real = false;
-  bridge.invoke.mockReset();
+  state.refreshing = false;
 });
 it('offers available sections and displays explicit zero stats and player names', () => {
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Commentary' }));
   expect(screen.getByText("45+2'")).toBeTruthy();
   expect(screen.getByText('Verified provider goal')).toBeTruthy();
@@ -64,7 +53,7 @@ it('offers available sections and displays explicit zero stats and player names'
   expect(screen.getByText('A long player name')).toBeTruthy();
 });
 it('offers one details freshness line in every section and a retry only for saved details', () => {
-  const { unmount } = render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  const { unmount } = render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   for (const name of ['Overview', 'Stats', 'Lineups', 'Commentary']) {
     fireEvent.click(screen.getByRole('tab', { name }));
     expect(screen.getAllByText(/Match details updated/)).toHaveLength(1);
@@ -73,7 +62,7 @@ it('offers one details freshness line in every section and a retry only for save
   }
   unmount();
   state.data = { ...state.data, stale: true };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   for (const name of ['Overview', 'Stats', 'Lineups', 'Commentary']) {
     fireEvent.click(screen.getByRole('tab', { name }));
     fireEvent.click(screen.getByRole('button', { name: 'Refresh match details' }));
@@ -81,7 +70,7 @@ it('offers one details freshness line in every section and a retry only for save
   }
 });
 it('uses the existing tabs to access Stats and Commentary without repeated Overview links', () => {
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   expect(screen.queryByRole('button', { name: /Match commentary|Full statistics/ })).toBeNull();
   fireEvent.click(screen.getByRole('tab', { name: 'Stats' }));
   expect(screen.getByRole('table', { name: 'Team statistics' })).toBeTruthy();
@@ -91,7 +80,7 @@ it('uses the existing tabs to access Stats and Commentary without repeated Overv
 it('keeps sections available when their data is empty', () => {
   const old = state.data;
   state.data = { ...old, events: [], statistics: [], players: [] };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   expect(screen.getByRole('tab', { name: 'Commentary' })).toBeTruthy();
   expect(screen.getByRole('region', { name: 'Match information' })).toBeTruthy();
   fireEvent.click(screen.getByRole('tab', { name: 'Commentary' }));
@@ -101,7 +90,7 @@ it('keeps sections available when their data is empty', () => {
 });
 it('retains visible detail content without inserting a skeleton during a refresh', () => {
   state.loading = true;
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   expect(screen.queryByLabelText('Loading match details')).toBeNull();
   expect(screen.getByRole('tab', { name: 'Commentary' })).toBeTruthy();
   expect(screen.getByRole('region', { name: 'Match centre' }).getAttribute('aria-busy')).toBe('true');
@@ -110,7 +99,7 @@ it('retains visible detail content without inserting a skeleton during a refresh
 it('shows a supplied venue and clear pre-match copy without empty tabs', () => {
   const old = state.data;
   state.data = { ...old, venue: 'Villa Park', events: [], statistics: [], players: [] };
-  render(<MatchCentre match={{ ...mockSnapshot.matches[0], status: 'scheduled' }} />);
+  render(<MatchCentreView match={{ ...mockSnapshot.matches[0], status: 'scheduled' }} summary={state} />);
   expect(screen.getByText('Villa Park')).toBeTruthy();
   expect(screen.getByText('Lineups and live coverage appear closer to kick-off.')).toBeTruthy();
   expect(screen.getByRole('tab', { name: 'Commentary' })).toBeTruthy();
@@ -118,7 +107,7 @@ it('shows a supplied venue and clear pre-match copy without empty tabs', () => {
 });
 
 it('compares each statistic once and distinguishes a missing value from zero', () => {
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Stats' }));
   const row = screen.getByRole('row', { name: /Red cards/ });
   expect(row.textContent).toBe('0Red cards—');
@@ -138,7 +127,7 @@ it('highlights comparable ESPN statistics while keeping disciplinary counts neut
       { teamId: '363', name: 'passPct', label: 'Pass Completion %', value: '0.7' },
     ],
   };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Stats' }));
   expect(screen.getByRole('columnheader', { name: 'Passing' })).toBeTruthy();
   expect(screen.getByRole('row', { name: /Possession/ }).querySelector('.stat-leading')?.textContent).toBe('58.2%');
@@ -153,7 +142,7 @@ it('groups known positions without inventing a position for unknown players', ()
     ...old,
     players: [...old.players, { teamId: '359', name: 'Unknown Player', position: '', starter: true }],
   };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Lineups' }));
   expect(screen.getByText('Goalkeepers')).toBeTruthy();
   expect(screen.getByText('Other positions')).toBeTruthy();
@@ -162,7 +151,7 @@ it('groups known positions without inventing a position for unknown players', ()
 });
 
 it('explains when one team has no lineup rather than showing an empty starting XI', () => {
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Lineups' }));
   expect(screen.getByText('Starting XI')).toBeTruthy();
   fireEvent.click(screen.getByRole('tab', { name: /Chelsea/ }));
@@ -185,7 +174,7 @@ it('shows scorers, formation, jersey numbers and substitutes without inventing d
       { teamId: '359', name: 'Leandro Trossard', position: 'SUB', starter: false, jersey: '19', subbedIn: true },
     ],
   };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   expect(screen.getByLabelText('Goalscorers')).toBeTruthy();
   expect(screen.getByText('Bukayo Saka')).toBeTruthy();
   fireEvent.click(screen.getByRole('tab', { name: 'Lineups' }));
@@ -213,7 +202,7 @@ it('shows real venue, attendance, form and team leaders on Overview', () => {
     },
     leaders: [{ teamId: '359', category: 'Shots', name: 'Bukayo Saka', jersey: '7', position: 'RW', value: '3' }],
   };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   expect(screen.getByText('Elland Road')).toBeTruthy();
   expect(screen.getByText('36,924')).toBeTruthy();
   expect(screen.getByRole('heading', { name: /Form/ })).toBeTruthy();
@@ -240,7 +229,7 @@ it('filters the timeline to key events without losing the full list', () => {
       },
     ],
   };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Commentary' }));
   expect(screen.getByText('Foul by a defender.')).toBeTruthy();
   const type = screen.getByRole('combobox', { name: 'Commentary event type' }) as HTMLSelectElement;
@@ -266,7 +255,7 @@ it('draws the selected team formation and changes the pitch with its tab', () =>
       formationPlace: i + 1,
     }));
   state.data = { ...old, formations: { '359': '4-3-3', '363': '4-3-3' }, players: [...squad('359'), ...squad('363')] };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Lineups' }));
   const pitch = document.querySelector('.lineup-pitch');
   expect(pitch).toBeTruthy();
@@ -281,14 +270,14 @@ it('draws the selected team formation and changes the pitch with its tab', () =>
 });
 
 it('labels timeline periods and event types', () => {
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Commentary' }));
   expect(screen.getByText('First half')).toBeTruthy();
   expect(screen.getByText('Goal', { selector: '.event-kind' })).toBeTruthy();
 });
 
 it('exposes selected panels and supports arrow, Home and End keyboard navigation', () => {
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   const overview = screen.getByRole('tab', { name: 'Overview' });
   overview.focus();
   fireEvent.keyDown(overview, { key: 'End' });
@@ -339,7 +328,7 @@ it('includes all compact goals and substitutions in Overview but excludes routin
       })),
     ],
   };
-  const { container } = render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  const { container } = render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   expect(container.querySelectorAll('.match-events .event')).toHaveLength(22);
   expect(container.querySelectorAll('.overview-scorers li')).toHaveLength(0);
   expect(screen.getByText('Second half')).toBeTruthy();
@@ -363,7 +352,7 @@ it('keeps low possession percentages as percentage points and scales ratio metri
     ...state.data,
     statistics: [stat('possessionPct', '1'), { ...stat('possessionPct', '99'), teamId: '363' }],
   };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Stats' }));
   const row = screen.getByRole('row', { name: /Possession/ });
   expect(row.textContent).toBe('1%Possession99%');
@@ -387,7 +376,7 @@ it('shows both on and off times for a substitute who later leaves the pitch', ()
       { teamId: '359', playerIn: 'Replacement', playerOut: 'Bench Player', minute: "80'" },
     ],
   };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Lineups' }));
   const row = screen
     .getAllByText('Bench Player')
@@ -397,7 +386,7 @@ it('shows both on and off times for a substitute who later leaves the pitch', ()
   expect(row?.querySelector('.sub-marker.off')?.getAttribute('title')).toBe("Substituted off at 80'");
 });
 it('labels both statistic columns with their teams and uses a singular metric count', () => {
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Stats' }));
   expect(screen.getByText('All statistics · 1 metric')).toBeTruthy();
   expect(screen.getByRole('columnheader', { name: 'Arsenal' })).toBeTruthy();
@@ -420,7 +409,7 @@ it('reports how many commentary events a filter hides and offers a clear reset',
       },
     ],
   };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Commentary' }));
   fireEvent.change(screen.getByRole('combobox', { name: 'Commentary event type' }), { target: { value: 'cards' } });
   expect(screen.getByText(/0 of 2 events/)).toBeTruthy();
@@ -458,7 +447,7 @@ it('keeps half-time, full-time and VAR reviews in the commentary key-event filte
       },
     ],
   };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Commentary' }));
   fireEvent.change(screen.getByRole('combobox', { name: 'Commentary event type' }), { target: { value: 'key' } });
   expect(screen.getByText('Half-time.')).toBeTruthy();
@@ -467,7 +456,7 @@ it('keeps half-time, full-time and VAR reviews in the commentary key-event filte
   state.data = old;
 });
 it('supports Home and End on the lineup team tabs', () => {
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Lineups' }));
   const arsenal = screen.getByRole('tab', { name: /Arsenal/ });
   const chelsea = screen.getByRole('tab', { name: /Chelsea/ });
@@ -491,13 +480,13 @@ it('explains why a complete starting XI has no formation pitch', () => {
       starter: true,
     })),
   };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Lineups' }));
   expect(screen.getByText('Formation unavailable for this lineup.')).toBeTruthy();
   state.data = old;
 });
 it('does not describe announced pre-match lineups as unavailable until kick-off', () => {
-  render(<MatchCentre match={{ ...mockSnapshot.matches[0], status: 'scheduled' }} />);
+  render(<MatchCentreView match={{ ...mockSnapshot.matches[0], status: 'scheduled' }} summary={state} />);
   const lineups = screen.getByRole('tab', { name: 'Lineups' });
   expect(lineups.getAttribute('aria-description')).toBeNull();
   expect(lineups.getAttribute('title')).toBeNull();
@@ -506,7 +495,7 @@ it('does not describe announced pre-match lineups as unavailable until kick-off'
 it('says unannounced pre-match lineups appear when announced, not only after kick-off', () => {
   const old = state.data;
   state.data = { ...old, players: [] };
-  render(<MatchCentre match={{ ...mockSnapshot.matches[0], status: 'scheduled' }} />);
+  render(<MatchCentreView match={{ ...mockSnapshot.matches[0], status: 'scheduled' }} summary={state} />);
   const lineups = screen.getByRole('tab', { name: 'Lineups' });
   expect(lineups.getAttribute('aria-description')).toBe('Available when the lineups are announced');
   expect(lineups.getAttribute('title')).toBe('Available when the lineups are announced');
@@ -516,28 +505,19 @@ it('says unannounced pre-match lineups appear when announced, not only after kic
 it('shows available empty states before kick-off', () => {
   const old = state.data;
   state.data = { ...old, events: [], statistics: [], players: [] };
-  render(<MatchCentre match={{ ...mockSnapshot.matches[0], status: 'scheduled' }} />);
+  render(<MatchCentreView match={{ ...mockSnapshot.matches[0], status: 'scheduled' }} summary={state} />);
   fireEvent.click(screen.getByRole('tab', { name: 'Stats' }));
   expect(screen.getByRole('tab', { name: 'Stats' }).getAttribute('aria-selected')).toBe('true');
   expect(screen.getByText('Statistics are not available for this match.')).toBeTruthy();
   expect(screen.queryByRole('table', { name: 'Team statistics' })).toBeNull();
   state.data = old;
 });
-it('forces a cache-bypassing details refresh from the saved-details retry', async () => {
-  const id = mockSnapshot.matches[0].id;
-  state.real = true;
-  bridge.invoke.mockResolvedValue({ ...structuredClone(initial), matchId: id, stale: true, error: null });
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
-  await screen.findByText(/Saved details · updated/);
-  bridge.invoke.mockClear();
-  const refresh = screen.getByRole('button', { name: 'Refresh match details' });
-  fireEvent.click(refresh);
-  expect(bridge.invoke).toHaveBeenCalledWith('get_match_details', { id, force: true });
-  expect(refresh.hasAttribute('disabled')).toBe(true);
-  await waitFor(
-    () => expect(screen.getByRole('button', { name: 'Refresh match details' }).hasAttribute('disabled')).toBe(false),
-    { timeout: 2000 },
-  );
+it('disables the saved-details retry while a refresh is running', () => {
+  state.data = { ...state.data, stale: true };
+  state.refreshing = true;
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
+  expect(screen.getByRole('button', { name: 'Refresh match details' }).hasAttribute('disabled')).toBe(true);
+  state.refreshing = false;
 });
 
 const stat = (teamId: string, name: string, value: string) => ({ teamId, name, label: name, value });
@@ -553,7 +533,7 @@ it('splits each comparison bar at the true home/away ratio and only colours the 
       ...pair('wonCorners', '0', '4'),
     ],
   };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   openTab('Stats');
   const bar = (label: RegExp) => screen.getByRole('row', { name: label }).querySelector('.stat-bar') as HTMLElement;
   const possession = bar(/Possession/);
@@ -591,7 +571,7 @@ it('opens on the key statistics, with a toggle for every metric and a category f
       ...extra.flatMap((name) => pair(name, '3', '4')),
     ],
   };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   openTab('Stats');
   expect(screen.getByText('Key statistics · 3 of 11')).toBeTruthy();
   expect(screen.getAllByRole('row').filter((row) => row.classList.contains('stat-row'))).toHaveLength(3);
@@ -606,13 +586,13 @@ it('opens on the key statistics, with a toggle for every metric and a category f
   expect(screen.queryByRole('button', { name: /Show all/ })).toBeNull();
 });
 it('hides the Coach row when no coach is supplied and shows it when there is one', () => {
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   openTab('Lineups');
   expect(screen.queryByText('Coach')).toBeNull();
   expect(screen.queryByText(/Not provided by ESPN/)).toBeNull();
   cleanup();
   state.data = { ...state.data, coaches: [{ teamId: '359', name: 'Mikel Arteta' }] };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   openTab('Lineups');
   expect(screen.getByText('Coach').closest('.coach-row')?.textContent).toContain('Mikel Arteta');
   cleanup();
@@ -623,7 +603,7 @@ it('hides the Coach row when no coach is supplied and shows it when there is one
       { teamId: '359', name: 'Albert Stuivenberg' },
     ],
   };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   openTab('Lineups');
   expect(screen.getByText('Coaches').closest('.coach-row')?.textContent).toContain('Mikel Arteta, Albert Stuivenberg');
 });
@@ -651,7 +631,7 @@ it('merges substitutions into the bench: used subs first by minute with who they
       { teamId: '359', playerIn: 'Early Sub', playerOut: 'Starter One', minute: "58'" },
     ],
   };
-  const { container } = render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  const { container } = render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   openTab('Lineups');
   const rows = [...container.querySelectorAll('.bench-list li')];
   expect(rows.map((row) => row.querySelector('.bench-name')?.firstChild?.textContent)).toEqual([
@@ -700,7 +680,7 @@ it('badges pitch players with goals, cards and the minute they were subbed off',
     ],
     substitutions: [{ teamId: '359', playerIn: 'Bench', playerOut: 'Player 9', minute: "74'" }],
   };
-  const { container } = render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  const { container } = render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   openTab('Lineups');
   const player = (n: number) =>
     [...container.querySelectorAll('.pitch-player')].find(
@@ -717,7 +697,7 @@ it('badges pitch players with goals, cards and the minute they were subbed off',
   expect(player(1).querySelector('.pitch-badge')).toBeNull();
 });
 it('offers Key events as an event-type option instead of a separate All/Key toggle', () => {
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   openTab('Commentary');
   expect(screen.queryByRole('group', { name: 'Commentary filter' })).toBeNull();
   const type = screen.getByRole('combobox', { name: 'Commentary event type' }) as HTMLSelectElement;
@@ -757,7 +737,7 @@ it("writes added time as 90+11' in commentary and gives every event its team cre
       },
     ],
   };
-  const { container } = render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  const { container } = render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   openTab('Commentary');
   expect(screen.getByText("90+11'")).toBeTruthy();
   expect(screen.queryByText("90'+11'")).toBeNull();
@@ -770,12 +750,12 @@ it("writes added time as 90+11' in commentary and gives every event its team cre
 it('words the Overview freshness line relatively with the absolute time as a tooltip', () => {
   const now = new Date(Date.now() - 9 * 60 * 1000).toISOString();
   state.data = { ...state.data, updatedAt: now };
-  const { unmount } = render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  const { unmount } = render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   const line = screen.getByText('Match details updated 9m ago');
   expect(line.getAttribute('title')).toBeTruthy();
   expect(line.getAttribute('title')).not.toMatch(/9m ago/);
   unmount();
   state.data = { ...state.data, stale: true };
-  render(<MatchCentre match={mockSnapshot.matches[0]} />);
+  render(<MatchCentreView match={mockSnapshot.matches[0]} summary={state} />);
   expect(screen.getByText('Saved details · updated 9m ago')).toBeTruthy();
 });

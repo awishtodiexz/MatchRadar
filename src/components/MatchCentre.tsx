@@ -1,9 +1,8 @@
 import { useId, useLayoutEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import type { Match } from '../types';
-import { isLive } from '../fixtures';
 import { dateLabel, relativeAge, timeLabel } from '../presentation';
-import { useMatchSummary } from '../useMatchSummary';
+import type { useMatchSummary } from '../useMatchSummary';
 import { MatchStats } from './MatchStats';
 import { MatchLineups } from './MatchLineups';
 import { MatchPreview } from './MatchPreview';
@@ -14,11 +13,6 @@ import { COMMENTARY_TYPES, createMatchMemory, MATCH_SECTIONS } from '../matchMem
 import type { MatchMemory, MatchSection } from '../matchMemory';
 
 export type MatchSummaryState = ReturnType<typeof useMatchSummary>;
-
-export function MatchCentre({ match }: { match: Match }) {
-  const summary = useMatchSummary(match.id, isLive(match), match.status === 'fulltime');
-  return <MatchCentreView match={match} summary={summary} />;
-}
 
 /** Match centre driven by a summary the parent already owns (one poller per match). */
 export function MatchCentreView({
