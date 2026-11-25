@@ -46,6 +46,24 @@ test('showing filtered-out matches returns keyboard focus to the first card', as
   await expect(page.getByRole('button', { name: /Match details:.*Arsenal.*Chelsea/ })).toBeFocused();
 });
 
+test('every in-progress card keeps its alert button visible inside the minimum viewport', async ({ page }) => {
+  await open(page);
+  for (const id of ['demo-1', 'demo-2', 'demo-7', 'demo-11']) {
+    const bell = page.locator(`[data-match-id="${id}"] .match-bell`);
+    await expect(bell).toBeVisible();
+    const boxes = await page.evaluate((matchId) => {
+      const card = document.querySelector(`[data-match-id="${matchId}"]`);
+      const control = card?.querySelector('.match-bell');
+      if (!card || !control) return null;
+      return { card: card.getBoundingClientRect(), control: control.getBoundingClientRect(), width: innerWidth };
+    }, id);
+    if (!boxes) throw new Error(`Missing alert control for ${id}`);
+    expect(boxes.control.left).toBeGreaterThanOrEqual(boxes.card.left);
+    expect(boxes.control.right).toBeLessThanOrEqual(boxes.card.right + 1);
+    expect(boxes.control.right).toBeLessThanOrEqual(boxes.width);
+  }
+});
+
 test('a failed live update offers one retry even with cached upcoming matches', async ({ page }) => {
   const snapshot = structuredClone(mockSnapshot);
   snapshot.matches = snapshot.matches.filter((match) => match.status === 'scheduled');
