@@ -251,7 +251,7 @@ fn save_settings(
     if enable_start_hidden && app.autolaunch().is_enabled().unwrap_or(false) {
         // Rewrite the Run entry so an older install gains the --hidden argument.
         if let Err(error) = app.autolaunch().enable() {
-            eprintln!("MatchRadar autostart: {error}");
+            log_provider(&format!("autostart: {error}"));
         }
     }
     app.emit("snapshot-updated", ())
