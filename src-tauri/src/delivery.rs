@@ -320,7 +320,9 @@ pub fn submit_due(
     if removed == 0 && !snapshot.revalidate_pending && (due.is_empty() || waiting_retry) {
         return Ok(());
     }
-    save(snapshot)?;
+    if removed > 0 || snapshot.revalidate_pending {
+        save(snapshot)?;
+    }
     if snapshot.revalidate_pending || waiting_retry {
         return Ok(());
     }
@@ -348,6 +350,7 @@ pub fn submit_due(
             continue;
         }
         let event = &snapshot.pending_notifications[index];
+        let mut acknowledge = false;
         match submit(event) {
             Ok(()) => {
                 snapshot.sent_notifications.push(id);
@@ -357,6 +360,7 @@ pub fn submit_due(
                         .sent_notifications
                         .drain(..snapshot.sent_notifications.len() - 1000);
                 }
+                acknowledge = true;
             }
             Err(error) => {
                 let (reason, unavailable) = match error {
@@ -393,7 +397,9 @@ pub fn submit_due(
                 }
             }
         }
-        save(snapshot)?;
+        if acknowledge {
+            save(snapshot)?;
+        }
     }
     Ok(())
 }

@@ -221,11 +221,15 @@ fn a_wake_with_nothing_due_does_not_pay_for_a_save() {
     .unwrap();
     assert_eq!(saves, 0);
     // A due event still stages and persists before native submission.
-    s.pending_notifications[0].next_attempt_at = (now() - Duration::minutes(1)).to_rfc3339();
+    s.pending_notifications[0].next_attempt_at = now().to_rfc3339();
+    let mut calls = 0;
     submit_due(
         &mut s,
-        now,
-        |_| Ok(()),
+        || now() + Duration::minutes(1),
+        |_| {
+            calls += 1;
+            Ok(())
+        },
         |_| {
             saves += 1;
             Ok(())
@@ -233,7 +237,8 @@ fn a_wake_with_nothing_due_does_not_pay_for_a_save() {
         |_| {},
     )
     .unwrap();
-    assert!(saves > 0);
+    assert_eq!(calls, 1);
+    assert_eq!(saves, 2);
 }
 
 #[test]
@@ -835,7 +840,7 @@ fn persistence_failure_prevents_submission_and_failed_ack_does_not_resubmit_in_p
         },
         |_| {
             saves += 1;
-            if saves == 2 {
+            if saves == 1 {
                 Err("disk full before submission".into())
             } else {
                 Ok(())
@@ -856,7 +861,7 @@ fn persistence_failure_prevents_submission_and_failed_ack_does_not_resubmit_in_p
         },
         |_| {
             saves += 1;
-            if saves == 3 {
+            if saves == 2 {
                 Err("acknowledgment save failed".into())
             } else {
                 Ok(())
