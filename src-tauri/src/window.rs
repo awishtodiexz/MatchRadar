@@ -194,7 +194,9 @@ pub(crate) fn logical_size(window: &tauri::WebviewWindow) -> Result<ExpandedSize
     ExpandedSize::from_physical(size.width, size.height, scale)
         .ok_or_else(|| "Invalid widget dimensions or display scale".into())
 }
-pub(crate) fn logical_size_unbounded(window: &tauri::WebviewWindow) -> Result<ExpandedSize, String> {
+pub(crate) fn logical_size_unbounded(
+    window: &tauri::WebviewWindow,
+) -> Result<ExpandedSize, String> {
     let size = window
         .inner_size()
         .map_err(|e| format!("Read widget dimensions: {e}"))?;

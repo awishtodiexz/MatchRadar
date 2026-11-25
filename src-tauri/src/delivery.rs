@@ -432,8 +432,7 @@ pub fn keep_baselines_warm(snapshot: &mut Snapshot, now: DateTime<Utc>) {
     let seen_at = now.to_rfc3339();
     for (id, baseline) in snapshot.alert_baselines.iter_mut() {
         let warm = snapshot.matches.iter().any(|m| &m.id == id)
-            && date(&baseline.seen_at)
-                .is_some_and(|seen| now - seen <= Duration::minutes(10));
+            && date(&baseline.seen_at).is_some_and(|seen| now - seen <= Duration::minutes(10));
         if warm {
             baseline.seen_at = seen_at.clone();
         }

@@ -766,11 +766,7 @@ mod tests {
             good(vec![stripped]),
         );
         assert_eq!(
-            s.matches
-                .iter()
-                .find(|m| m.id == "pen")
-                .unwrap()
-                .shootout,
+            s.matches.iter().find(|m| m.id == "pen").unwrap().shootout,
             Some(crate::model::Shootout { home: 4, away: 3 })
         );
     }

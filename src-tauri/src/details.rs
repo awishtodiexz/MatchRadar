@@ -1651,8 +1651,8 @@ fn parse_response(
     }
     let value: Value = serde_json::from_slice(bytes)
         .map_err(|e| Failure::temporary(format!("Summary {id} JSON: {e}")))?;
-    let details =
-        normalize(&value, id, league).map_err(|e| Failure::temporary(format!("Summary {id}: {e}")))?;
+    let details = normalize(&value, id, league)
+        .map_err(|e| Failure::temporary(format!("Summary {id}: {e}")))?;
     Ok((details, value))
 }
 fn summary_url(league: Competition) -> String {

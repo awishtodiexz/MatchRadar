@@ -153,7 +153,11 @@ fn a_goal_first_confirmed_while_suspended_is_announced() {
     let mut resumed = subscribed("live");
     resumed.settings.goals = true;
     resumed.matches[0].status = "suspended".into();
-    enqueue(&mut resumed, &["match-1".into()], now() - Duration::minutes(1));
+    enqueue(
+        &mut resumed,
+        &["match-1".into()],
+        now() - Duration::minutes(1),
+    );
     resumed.matches[0].status = "live".into();
     resumed.matches[0].home_score = Some(1);
     enqueue(&mut resumed, &["match-1".into()], now());
@@ -202,8 +206,7 @@ fn revalidate_keeps_a_live_baseline_warm_through_an_outage() {
 #[test]
 fn a_wake_with_nothing_due_does_not_pay_for_a_save() {
     let mut s = reminder();
-    s.pending_notifications[0].next_attempt_at =
-        (now() + Duration::minutes(30)).to_rfc3339();
+    s.pending_notifications[0].next_attempt_at = (now() + Duration::minutes(30)).to_rfc3339();
     let mut saves = 0;
     submit_due(
         &mut s,
@@ -218,8 +221,7 @@ fn a_wake_with_nothing_due_does_not_pay_for_a_save() {
     .unwrap();
     assert_eq!(saves, 0);
     // A due event still stages and persists before native submission.
-    s.pending_notifications[0].next_attempt_at =
-        (now() - Duration::minutes(1)).to_rfc3339();
+    s.pending_notifications[0].next_attempt_at = (now() - Duration::minutes(1)).to_rfc3339();
     submit_due(
         &mut s,
         now,

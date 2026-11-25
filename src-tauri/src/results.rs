@@ -138,7 +138,9 @@ fn apply_league(
             // Result batches can omit shootoutScore where the scoreboard had it;
             // keep a known tally instead of replacing it with None.
             if m.shootout.is_none() && m.status == "fulltime" {
-                if let Some(previous) = existing.iter().find(|p| p.id == m.id && p.kickoff == m.kickoff)
+                if let Some(previous) = existing
+                    .iter()
+                    .find(|p| p.id == m.id && p.kickoff == m.kickoff)
                 {
                     m.shootout = previous.shootout;
                 }
@@ -609,7 +611,11 @@ mod tests {
             now + Duration::hours(1),
         );
         assert_eq!(
-            s.recent_results.iter().find(|m| m.id == "pen").unwrap().shootout,
+            s.recent_results
+                .iter()
+                .find(|m| m.id == "pen")
+                .unwrap()
+                .shootout,
             Some(crate::model::Shootout { home: 4, away: 3 })
         );
     }
