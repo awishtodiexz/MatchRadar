@@ -28,7 +28,8 @@
     "verify:ui": "npm run build && playwright test --config verification/playwright.config.ts",
     "screenshots": "npm run build && node verification/capture-screenshots.mjs",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "verify:bench": "npm run build && playwright test --config verification/bench/playwright.bench.config.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

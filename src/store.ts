@@ -10,7 +10,7 @@ type Store = {
   opacityPreview: number | null;
   setOpacityPreview: (value: number | null) => void;
   load: () => Promise<void>;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<boolean>;
   save: (patch: Patch) => Promise<boolean>;
 };
 const pending: Patch[] = [];
@@ -88,8 +88,10 @@ export const useApp = create<Store>((set, get) => ({
         if (feed) feed = { ...feed, updatedAt: new Date().toISOString() };
         set((state) => ({ snapshot: projected(), error: recoveredError(state.error) }));
       }
+      return true;
     } catch {
       set((state) => ({ error: state.error ?? refreshError }));
+      return false;
     }
   },
   save: (patch) => {

@@ -566,7 +566,7 @@ export default function App() {
   const doRefresh = async () => {
     setRefreshing(true);
     try {
-      await refresh();
+      return await refresh();
     } finally {
       setRefreshing(false);
     }
@@ -579,10 +579,13 @@ export default function App() {
       recent.retry();
     } else if (!refreshCooling) {
       // Rust coalesces fixture clicks closer than 15 seconds. Say so in the UI
-      // instead of letting a second click become a silent no-op.
-      setRefreshCooling(true);
-      setTimeout(() => setRefreshCooling(false), 15_000);
-      void doRefresh();
+      // instead of letting a successful second click become a silent no-op; a
+      // failed refresh stays retryable.
+      void doRefresh().then((ok) => {
+        if (!ok) return;
+        setRefreshCooling(true);
+        setTimeout(() => setRefreshCooling(false), 15_000);
+      });
     }
   };
   const retryFeed = (event: MouseEvent<HTMLButtonElement>) => {

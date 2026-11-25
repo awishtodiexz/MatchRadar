@@ -89,7 +89,11 @@ fn persist_periodic(state: &State) -> Result<(), String> {
 /// Append one diagnostic line, rotating the log once it passes 1 MB.
 fn append_log(path: &Path, message: &str) {
     if fs::metadata(path).is_ok_and(|metadata| metadata.len() > 1_000_000) {
-        let _ = fs::rename(path, path.with_extension("log.1"));
+        let rotated = path.with_extension("log.1");
+        // Windows rename does not replace an existing destination; rotation would
+        // silently stop after the first rollover and the active log would grow forever.
+        let _ = fs::remove_file(&rotated);
+        let _ = fs::rename(path, rotated);
     }
     if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path) {
         let _ = writeln!(file, "{message}");
@@ -1118,6 +1122,24 @@ mod native_tests {
         assert!(!starts_in_tray(true, false));
         assert!(!starts_in_tray(false, true));
         assert!(!starts_in_tray(false, false));
+    }
+
+    #[test]
+    fn log_rotation_replaces_a_previous_windows_backup() {
+        let directory = std::env::temp_dir().join(format!(
+            "matchradar-log-test-{}-{}",
+            std::process::id(),
+            Utc::now().timestamp_nanos_opt().unwrap()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("provider.log");
+        let rotated = path.with_extension("log.1");
+        fs::write(&path, vec![b'x'; 1_000_001]).unwrap();
+        fs::write(&rotated, "previous backup").unwrap();
+        append_log(&path, "next line");
+        assert_eq!(fs::read(&rotated).unwrap().len(), 1_000_001);
+        assert!(fs::metadata(&path).unwrap().len() < 100);
+        let _ = fs::remove_dir_all(directory);
     }
 
     #[test]
