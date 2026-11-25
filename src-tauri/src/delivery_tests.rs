@@ -67,6 +67,174 @@ fn temporary() -> Result<(), SubmissionError> {
 }
 
 #[test]
+fn warmed_baselines_keep_a_goal_scored_during_deferral_inside_the_window() {
+    let deferral_start = now() - Duration::minutes(1);
+    let deferral_end = now() + Duration::minutes(15);
+    // Without warming, a baseline observed >5 minutes before the post-deferral
+    // confirmation is dropped by alerts::plan's fresh_score check.
+    let mut cold = subscribed("live");
+    cold.settings.goals = true;
+    enqueue(&mut cold, &["match-1".into()], deferral_start);
+    cold.matches[0].home_score = Some(1);
+    enqueue(&mut cold, &["match-1".into()], deferral_end);
+    assert!(cold.pending_notifications.is_empty());
+
+    // The deferred branch wakes at live cadence and runs revalidate each wake.
+    let mut s = subscribed("live");
+    s.settings.goals = true;
+    enqueue(&mut s, &["match-1".into()], deferral_start);
+    for wake in 0..15 {
+        revalidate(&mut s, &[], deferral_start + Duration::minutes(wake + 1));
+    }
+    s.matches[0].home_score = Some(1);
+    enqueue(&mut s, &["match-1".into()], deferral_end);
+    assert_eq!(s.pending_notifications.len(), 1);
+}
+
+#[test]
+fn warmed_baselines_keep_a_kickoff_during_deferral_inside_the_start_window() {
+    let deferral_start = now() - Duration::minutes(1);
+    let deferral_end = now() + Duration::minutes(12);
+    // Without warming, a baseline observed >10 minutes before the post-deferral
+    // confirmation is dropped by alerts::plan's fresh_start check.
+    let mut cold = subscribed("scheduled");
+    cold.settings.starts = true;
+    enqueue(&mut cold, &["match-1".into()], deferral_start);
+    cold.matches[0].status = "live".into();
+    enqueue(&mut cold, &["match-1".into()], deferral_end);
+    assert!(cold.pending_notifications.is_empty());
+
+    let mut s = subscribed("scheduled");
+    s.settings.starts = true;
+    enqueue(&mut s, &["match-1".into()], deferral_start);
+    for wake in 0..12 {
+        revalidate(&mut s, &[], deferral_start + Duration::minutes(wake + 1));
+    }
+    s.matches[0].status = "live".into();
+    enqueue(&mut s, &["match-1".into()], deferral_end);
+    assert_eq!(s.pending_notifications.len(), 1);
+}
+
+#[test]
+fn a_genuine_observation_gap_is_not_replayed_as_a_new_goal() {
+    // A baseline persisted hours ago must stay cold: the score change confirmed
+    // after a real gap (overnight, app closed) is history, not a new event.
+    let mut s = subscribed("live");
+    s.settings.goals = true;
+    enqueue(&mut s, &["match-1".into()], now() - Duration::hours(6));
+    s.matches[0].home_score = Some(1);
+    revalidate(&mut s, &["match-1".into()], now());
+    enqueue(&mut s, &["match-1".into()], now());
+    assert!(s.pending_notifications.is_empty());
+
+    // A failed cycle after reopening must not resurrect the stale baseline
+    // either: the warm only extends a chain still inside the window.
+    let mut cold = subscribed("live");
+    cold.settings.goals = true;
+    enqueue(&mut cold, &["match-1".into()], now() - Duration::hours(6));
+    revalidate(&mut cold, &[], now());
+    cold.matches[0].home_score = Some(1);
+    enqueue(&mut cold, &["match-1".into()], now() + Duration::minutes(1));
+    assert!(cold.pending_notifications.is_empty());
+}
+
+#[test]
+fn a_goal_first_confirmed_while_suspended_is_announced() {
+    // Suspension reports the goal late: still a goal, not a correction.
+    let mut s = subscribed("live");
+    s.settings.goals = true;
+    enqueue(&mut s, &["match-1".into()], now() - Duration::minutes(1));
+    s.matches[0].status = "suspended".into();
+    s.matches[0].home_score = Some(1);
+    enqueue(&mut s, &["match-1".into()], now());
+    assert_eq!(s.pending_notifications.len(), 1);
+
+    // And a goal first visible when play resumes is not eaten either.
+    let mut resumed = subscribed("live");
+    resumed.settings.goals = true;
+    resumed.matches[0].status = "suspended".into();
+    enqueue(&mut resumed, &["match-1".into()], now() - Duration::minutes(1));
+    resumed.matches[0].status = "live".into();
+    resumed.matches[0].home_score = Some(1);
+    enqueue(&mut resumed, &["match-1".into()], now());
+    assert_eq!(resumed.pending_notifications.len(), 1);
+}
+
+#[test]
+fn a_backward_clock_step_does_not_drop_a_queued_alert() {
+    // The event was queued while the clock ran ahead; stepping back must not
+    // drop it, because its baseline already advanced and it cannot re-plan.
+    let mut s = goal();
+    cleanup(&mut s, now() - Duration::minutes(2));
+    assert_eq!(s.pending_notifications.len(), 1);
+    let mut sink = Sink::default();
+    run(&mut s, now(), &mut sink);
+    assert_eq!(sink.calls, ["match-1:score:1:0"]);
+}
+
+#[test]
+fn revalidate_keeps_a_live_baseline_warm_through_an_outage() {
+    // Failed poll cycles call revalidate with no confirmed scores; the live
+    // baseline must still be refreshed or alerts::plan's fresh_score drops the
+    // first post-outage goal even though the app kept polling every minute.
+    let t0 = now() - Duration::minutes(2);
+    let t1 = now() + Duration::minutes(5);
+    let mut s = subscribed("live");
+    s.settings.goals = true;
+    enqueue(&mut s, &["match-1".into()], t0);
+    for minute in 1..=7 {
+        revalidate(&mut s, &[], t0 + Duration::minutes(minute));
+    }
+    s.matches[0].home_score = Some(1);
+    enqueue(&mut s, &["match-1".into()], t1);
+    assert_eq!(s.pending_notifications.len(), 1);
+
+    // Control: the same seven-minute confirmation gap without the warm is
+    // outside the five-minute window and the goal is dropped.
+    let mut cold = subscribed("live");
+    cold.settings.goals = true;
+    enqueue(&mut cold, &["match-1".into()], t0);
+    cold.matches[0].home_score = Some(1);
+    enqueue(&mut cold, &["match-1".into()], t1);
+    assert!(cold.pending_notifications.is_empty());
+}
+
+#[test]
+fn a_wake_with_nothing_due_does_not_pay_for_a_save() {
+    let mut s = reminder();
+    s.pending_notifications[0].next_attempt_at =
+        (now() + Duration::minutes(30)).to_rfc3339();
+    let mut saves = 0;
+    submit_due(
+        &mut s,
+        now,
+        |_| Ok(()),
+        |_| {
+            saves += 1;
+            Ok(())
+        },
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(saves, 0);
+    // A due event still stages and persists before native submission.
+    s.pending_notifications[0].next_attempt_at =
+        (now() - Duration::minutes(1)).to_rfc3339();
+    submit_due(
+        &mut s,
+        now,
+        |_| Ok(()),
+        |_| {
+            saves += 1;
+            Ok(())
+        },
+        |_| {},
+    )
+    .unwrap();
+    assert!(saves > 0);
+}
+
+#[test]
 fn enabling_match_alerts_at_two_three_delivers_two_four_once_after_restart() {
     let mut s = subscribed("live");
     s.settings.match_alerts.clear();
@@ -576,13 +744,19 @@ fn successful_poll_cycle_plans_each_reminder_once_across_revalidate_and_enqueue(
 #[test]
 fn cached_reminder_planning_never_invents_score_events() {
     let mut s = goal();
-    let seen_at = s.alert_baselines["match-1"].seen_at.clone();
+    let revalidate_at = now() + Duration::seconds(30);
     s.matches[0].home_score = Some(2);
-    revalidate(&mut s, &[], now() + Duration::seconds(30));
+    revalidate(&mut s, &[], revalidate_at);
     assert_eq!(s.pending_notifications.len(), 1);
     assert_eq!(s.pending_notifications[0].id, "match-1:score:1:0");
     assert_eq!(s.alert_baselines["match-1"].home, Some(1));
-    assert_eq!(s.alert_baselines["match-1"].seen_at, seen_at);
+    // The unconfirmed score stays out of the baseline's score state, but the
+    // failed cycle still re-warms seen_at so a real goal mid-outage is not
+    // dropped by the freshness window.
+    assert_eq!(
+        s.alert_baselines["match-1"].seen_at,
+        revalidate_at.to_rfc3339()
+    );
 }
 
 #[test]

@@ -24,6 +24,8 @@ export interface BridgeOptions {
   saveDelayMs?: number;
   /** Artificial latency for get_recent_results, used to observe pending states. */
   resultsDelayMs?: number;
+  /** Artificial latency for get_snapshot, used to observe the loading skeleton. */
+  loadDelayMs?: number;
 }
 
 // Test-only desktop bridge. It is injected by Playwright and is never bundled.
@@ -44,6 +46,7 @@ export async function installBridge(page: Page, options: BridgeOptions = {}) {
       savePersistsBeforeFail,
       saveDelayMs,
       resultsDelayMs,
+      loadDelayMs,
     }) => {
       let state = snapshot;
       let nextOnRefresh: unknown = null;
@@ -118,6 +121,7 @@ export async function installBridge(page: Page, options: BridgeOptions = {}) {
               remaining.load--;
               throw new Error('IPC unavailable');
             }
+            await wait(loadDelayMs);
             return state;
           }
           if (command === 'refresh') {
@@ -233,6 +237,7 @@ export async function installBridge(page: Page, options: BridgeOptions = {}) {
       savePersistsBeforeFail: options.savePersistsBeforeFail,
       saveDelayMs: options.saveDelayMs,
       resultsDelayMs: options.resultsDelayMs,
+      loadDelayMs: options.loadDelayMs,
     },
   );
 }

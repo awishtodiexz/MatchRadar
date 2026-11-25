@@ -92,6 +92,7 @@ const baseSnapshot = {
     alwaysOnTop: true,
     startHidden: false,
     reducedMotion: true,
+    singleKeyShortcuts: true,
     opacity: 96,
     theme: 'dark',
     competitionView: 'premierLeague',

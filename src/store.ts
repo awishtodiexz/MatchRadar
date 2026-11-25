@@ -19,14 +19,23 @@ let readSequence = 0;
 let acceptedRead = 0;
 let settingsRevision = 0;
 let confirmed: Settings | null = null;
+// A transport error can hide a write Rust already persisted; until a read
+// dispatched after the failure lands, `confirmed` is a guess and must not be
+// the base of another write. `reconcileAfter` pins that ordering.
+let settingsUnverified = false;
+let reconcileAfter = 0;
+let reconcile: Promise<void> | null = null;
 let feed: Snapshot | null = null;
 const loadError = 'Could not load the widget state.';
 const refreshError = 'Could not refresh matches.';
 const recoveredError = (error: string | null) => (error === loadError || error === refreshError ? null : error);
-// Paint hint only; Rust remains the authoritative preference store.
-const rememberTheme = (settings: Settings) => {
+// Paint hints only; Rust remains the authoritative preference store. Without
+// them the shell would boot dark and unreduced on every launch, then flip when
+// the snapshot lands.
+const rememberAppearance = (settings: Settings) => {
   try {
     localStorage.setItem('matchradar.theme', settings.theme);
+    localStorage.setItem('matchradar.reducedMotion', String(settings.reducedMotion));
   } catch {
     /* Storage can be unavailable. */
   }
@@ -55,9 +64,11 @@ export const useApp = create<Store>((set, get) => ({
       feed = snapshot;
       // A read started before a save acknowledgement can contain old preferences
       // and still carry fresh matches/errors. Accept its data, not its settings.
-      if (revision === settingsRevision || !confirmed) {
+      const postFailure = sequence > reconcileAfter;
+      if (revision === settingsRevision || !confirmed || (settingsUnverified && postFailure)) {
         confirmed = snapshot.settings;
-        rememberTheme(confirmed);
+        if (postFailure) settingsUnverified = false;
+        rememberAppearance(confirmed);
       }
       set((state) => ({ snapshot: projected(), loading: false, error: recoveredError(state.error) }));
     } catch {
@@ -87,12 +98,21 @@ export const useApp = create<Store>((set, get) => ({
     const task = queue.then(async () => {
       try {
         if (!confirmed) throw new Error('Settings unavailable');
+        if (isTauri() && settingsUnverified) {
+          // The previous write may have landed on disk anyway; reconcile before
+          // merging or this save can overwrite the change that did persist.
+          await (reconcile ??
+            get()
+              .load()
+              .catch(() => {}));
+          if (settingsUnverified) throw new Error('Could not reconcile settings');
+        }
         const next: Settings = { ...confirmed, ...pending[0] };
         // Rust returns persisted, normalized preferences; never promote the payload
         // to authoritative state or copy a whole old snapshot on completion.
         const saved = isTauri() ? await invoke<Settings>('save_settings', { settings: next }) : next;
         confirmed = saved;
-        rememberTheme(saved);
+        rememberAppearance(saved);
         ++settingsRevision;
         pending.shift();
         set({ snapshot: projected() });
@@ -101,8 +121,14 @@ export const useApp = create<Store>((set, get) => ({
         pending.shift();
         set({ snapshot: projected(), error: 'Could not save settings. Please try again.' });
         // A transport/event error can happen after Rust persisted the write.
-        // Reconcile locally without holding up later queued edits or polling ESPN.
-        if (isTauri()) void get().load();
+        // Reconcile locally; a read dispatched now postdates the write handler.
+        if (isTauri()) {
+          settingsUnverified = true;
+          reconcileAfter = readSequence;
+          reconcile = get()
+            .load()
+            .catch(() => {});
+        }
         return false;
       }
     });

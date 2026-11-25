@@ -82,35 +82,41 @@ export function MatchCentreView({
   return (
     <section className="match-centre" aria-label="Match centre" aria-busy={loading}>
       <div className="centre-tabs scoped-tabs" role="tablist" aria-label="Match centre sections">
-        {tabs.map((name, index) => (
-          <button
-            key={name}
-            role="tab"
-            id={sectionId + '-' + name}
-            aria-controls={sectionId + '-panel'}
-            aria-selected={tab === name}
-            tabIndex={tab === name ? 0 : -1}
-            onClick={() => select(name)}
-            onKeyDown={(event) => {
-              const next =
-                event.key === 'ArrowRight'
-                  ? (index + 1) % tabs.length
-                  : event.key === 'ArrowLeft'
-                    ? (index + tabs.length - 1) % tabs.length
-                    : event.key === 'Home'
-                      ? 0
-                      : event.key === 'End'
-                        ? tabs.length - 1
-                        : undefined;
-              if (next === undefined) return;
-              event.preventDefault();
-              select(tabs[next]);
-              document.getElementById(sectionId + '-' + tabs[next])?.focus();
-            }}
-          >
-            {name}
-          </button>
-        ))}
+        {tabs.map((name, index) => {
+          const upcoming = match.status === 'scheduled' && name !== 'Overview';
+          return (
+            <button
+              key={name}
+              role="tab"
+              id={sectionId + '-' + name}
+              className={upcoming ? 'tab-upcoming' : undefined}
+              aria-controls={sectionId + '-panel'}
+              aria-selected={tab === name}
+              aria-description={upcoming ? 'Available once the match starts' : undefined}
+              title={upcoming ? 'Available once the match starts' : undefined}
+              tabIndex={tab === name ? 0 : -1}
+              onClick={() => select(name)}
+              onKeyDown={(event) => {
+                const next =
+                  event.key === 'ArrowRight'
+                    ? (index + 1) % tabs.length
+                    : event.key === 'ArrowLeft'
+                      ? (index + tabs.length - 1) % tabs.length
+                      : event.key === 'Home'
+                        ? 0
+                        : event.key === 'End'
+                          ? tabs.length - 1
+                          : undefined;
+                if (next === undefined) return;
+                event.preventDefault();
+                select(tabs[next]);
+                document.getElementById(sectionId + '-' + tabs[next])?.focus();
+              }}
+            >
+              {name}
+            </button>
+          );
+        })}
       </div>
       <div
         className="centre-panel"
@@ -215,7 +221,11 @@ export function MatchCentreView({
               )}
             </>
           ) : (
-            <p className="field-note">No commentary is available for this match.</p>
+            <p className="field-note">
+              {match.status === 'scheduled'
+                ? 'Commentary will be available once the match starts.'
+                : 'No commentary is available for this match.'}
+            </p>
           ))}
         {tab === 'Stats' && data && (
           <>
@@ -251,7 +261,11 @@ export function MatchCentreView({
           />
         )}
         {(tab === 'Stats' || tab === 'Lineups') && !data && !loading && (
-          <p className="field-note">{tab} are not available for this match.</p>
+          <p className="field-note">
+            {match.status === 'scheduled'
+              ? `${tab} will be available once the match starts.`
+              : `No ${tab.toLowerCase()} are available for this match.`}
+          </p>
         )}
       </div>
     </section>

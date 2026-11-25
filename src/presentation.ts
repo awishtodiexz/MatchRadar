@@ -25,9 +25,26 @@ export const isAbandoned = (match: Match) => match.status === 'cancelled' && mat
 export const isForfeit = (match: Match) => match.status === 'fulltime' && match.detail === 'Forfeit';
 export const resultLabel = (match: Match) => {
   if (isForfeit(match)) return 'FF';
-  if (/\bpen(?:alties|alty|s)?\b/i.test(match.detail)) return 'PEN';
+  if (match.shootout || /\bpen(?:alties|alty|s)?\b/i.test(match.detail)) return 'PEN';
   if (/\baet\b|after extra time/i.test(match.detail)) return 'AET';
   return 'FT';
+};
+export const shootoutResult = (match: Match) => {
+  const tally = match.shootout;
+  if (match.status !== 'fulltime' || !tally || tally.home === tally.away) return null;
+  const side = tally.home > tally.away ? 'home' : 'away';
+  return {
+    side,
+    tally: `${tally.home}–${tally.away}`,
+    outcome: `${match[side].name} won ${Math.max(tally.home, tally.away)}–${Math.min(tally.home, tally.away)} on penalties`,
+  };
+};
+export const resultWinner = (match: Match) => {
+  if (match.status !== 'fulltime') return null;
+  if (resultLabel(match) === 'PEN') return shootoutResult(match)?.side ?? null;
+  const { homeScore, awayScore } = match;
+  if (homeScore == null || awayScore == null || homeScore === awayScore) return null;
+  return homeScore > awayScore ? 'home' : 'away';
 };
 export const closedNote = (match: Match) =>
   isAbandoned(match) ? 'This match was abandoned.' : 'This match was cancelled.';

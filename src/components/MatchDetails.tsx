@@ -6,7 +6,15 @@ import { MatchCentreView } from './MatchCentre';
 import type { Match, Settings, Team } from '../types';
 import { isLive } from '../fixtures';
 import { Badge, CompetitionMark } from './WidgetUi';
-import { dateLabel, resultLabel, relativeDay, timeLabel, timeParts } from '../presentation';
+import {
+  dateLabel,
+  resultLabel,
+  resultWinner,
+  shootoutResult,
+  relativeDay,
+  timeLabel,
+  timeParts,
+} from '../presentation';
 import { MatchAlertsButton } from './MatchCard';
 import { useMatchSummary, type MatchSummary } from '../useMatchSummary';
 import { countdownLabel, timezoneLabel, useNow } from '../countdown';
@@ -131,15 +139,8 @@ export function MatchDetails({
   const score = showKickoff ? timeLabel(match.kickoff) : `${match.homeScore ?? '–'} – ${match.awayScore ?? '–'}`;
   const [clock, meridiem] = timeParts(score);
   const context = [match.leg, match.aggregate && `Aggregate ${match.aggregate}`].filter(Boolean).join(' · ');
-  const winner =
-    match.status === 'fulltime' &&
-    match.homeScore != null &&
-    match.awayScore != null &&
-    match.homeScore !== match.awayScore
-      ? match.homeScore > match.awayScore
-        ? 'home'
-        : 'away'
-      : null;
+  const winner = resultWinner(match);
+  const shootout = shootoutResult(match);
   return (
     <>
       <div className="detail-route">
@@ -151,12 +152,15 @@ export function MatchDetails({
           Match details
         </h2>
         {collapsed || lineupView ? (
-          <div className="mini-score" aria-label={`${match.home.name} ${score} ${match.away.name}, ${statusText}`}>
+          <div
+            className="mini-score"
+            aria-label={`${match.home.name} ${score} ${match.away.name}, ${shootout?.outcome ?? statusText}`}
+          >
             <Badge team={match.home} />
             <span>{teamCode(match.home)}</span>
             <div>
               <strong>{score}</strong>
-              <small>{statusText}</small>
+              <small>{shootout ? `PEN ${shootout.tally}` : statusText}</small>
             </div>
             <span>{teamCode(match.away)}</span>
             <Badge team={match.away} />
@@ -173,7 +177,10 @@ export function MatchDetails({
         className="detail-body"
         ref={body}
         onScroll={(event) => {
-          if (restoredSection.current === section) memory.scroll[section] = event.currentTarget.scrollTop;
+          // Record every scroll, not only post-restore ones: a user who scrolls
+          // while the summary is still loading must keep that position when the
+          // restore pass arms, not be dragged back to the top.
+          memory.scroll[section] = event.currentTarget.scrollTop;
           if (!lineupView)
             setCollapsed(
               event.currentTarget.scrollTop > 0 &&
@@ -226,6 +233,12 @@ export function MatchDetails({
               </time>
             )}
             {context && <> · {context}</>}
+            {shootout && (
+              <>
+                <br />
+                <strong>{shootout.outcome}</strong>
+              </>
+            )}
           </p>
         </div>
         <MatchCentreView

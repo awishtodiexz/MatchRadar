@@ -31,6 +31,11 @@ export function SettingsPanel({
   const [query, setQuery] = useState('');
   const [showOtherClubs, setShowOtherClubs] = useState(false);
   const [notice, setNotice] = useState('');
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+  // The notice renders at the very bottom of a scrollable panel; keep it visible.
+  useEffect(() => {
+    noticeRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [notice]);
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [startupError, setStartupError] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -420,7 +425,6 @@ export function SettingsPanel({
                 value={opacity}
                 onChange={(e) => previewOpacity(Number(e.target.value))}
                 onPointerUp={() => commitOpacity(opacity)}
-                onKeyUp={() => commitOpacity(opacity)}
                 onBlur={() => commitOpacity(opacity)}
               />
             </label>
@@ -478,7 +482,7 @@ export function SettingsPanel({
                   <p>Reset all match bells to team defaults?</p>
                   <button
                     ref={resetConfirmation}
-                    className="text-button"
+                    className="text-button danger"
                     onClick={() => {
                       setConfirmReset(false);
                       panel.current?.focus();
@@ -549,6 +553,12 @@ export function SettingsPanel({
                 Could not read the Windows startup setting. Reopen Settings to try again.
               </p>
             )}
+            <Toggle
+              label="Single-key shortcuts"
+              description="Use 1-4, R, /, [ and ] without holding a modifier. Escape and Ctrl+Shift+M are unchanged."
+              value={settings.singleKeyShortcuts !== false}
+              onChange={(singleKeyShortcuts) => update({ singleKeyShortcuts })}
+            />
             <div className="about">
               <CircleHelp size={17} />
               <p>
@@ -556,6 +566,10 @@ export function SettingsPanel({
                 with ESPN, the Premier League, or UEFA.
               </p>
             </div>
+            <p className="field-note">
+              A SAVED tag means MatchRadar kept the last confirmed score because the feed could not confirm a newer one
+              — it is not a final score.
+            </p>
             <button
               className="outline-button"
               onClick={() => void copyDiagnostics()}
@@ -569,13 +583,14 @@ export function SettingsPanel({
               Ctrl+Shift+M anywhere to show it again, and choose Quit in the tray to exit.
             </p>
             <p className="field-note">
-              Keyboard: 1–4 switch views · R refreshes · / finds a club · [ and ] step through matches · Esc goes back.
-              Right-click a match for more actions.
+              {settings.singleKeyShortcuts !== false &&
+                'Keyboard: 1-4 switch views, R refreshes, / finds a club, and [ and ] step through matches. '}
+              Esc goes back. Right-click a match for more actions.
             </p>
           </>
         )}
         {notice && (
-          <p className="notice" role="status">
+          <p className="notice" role="status" ref={noticeRef}>
             {notice}
           </p>
         )}

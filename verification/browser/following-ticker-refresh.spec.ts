@@ -123,6 +123,107 @@ test('footer refresh updates open match details and scores without leaving Stats
   await expect(refresh).toBeEnabled();
 });
 
+test('the ticker stays inside the window at every reachable size', async ({ page }) => {
+  await installBridge(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Ticker mode' }).click();
+  // Ticker mode drops the minimum to 320x112 but maxHeight stays 1100, so every
+  // size between is user-reachable; only 320x112 was previously covered.
+  for (const size of [
+    { width: 320, height: 112 },
+    { width: 320, height: 200 },
+    { width: 320, height: 460 },
+    { width: 420, height: 112 },
+    { width: 600, height: 1100 },
+  ]) {
+    await page.setViewportSize(size);
+    await expect(page.locator('.ticker')).toBeVisible();
+    const stage = await page.locator('.ticker-stage').boundingBox();
+    expect(stage, `stage missing at ${size.width}x${size.height}`).toBeTruthy();
+    expect(stage!.x).toBeGreaterThanOrEqual(0);
+    expect(stage!.y).toBeGreaterThanOrEqual(0);
+    expect(stage!.x + stage!.width).toBeLessThanOrEqual(size.width);
+    expect(stage!.y + stage!.height).toBeLessThanOrEqual(size.height);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    expect(overflow, `horizontal overflow at ${size.width}x${size.height}`).toBe(false);
+  }
+});
+
+test('tray Settings and match notifications expand the ticker to the requested destination', async ({ page }) => {
+  await installBridge(page);
+  await page.goto('/');
+  const ticker = page.getByRole('button', { name: 'Ticker mode' });
+  await ticker.click();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('test:emit', { detail: { event: 'open-settings' } })));
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeFocused();
+  await page.getByRole('button', { name: 'Back to matches' }).click();
+  await ticker.click();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('test:notification-click', { detail: 'demo-2' })));
+  await expect(page.getByRole('tab', { name: 'Overview' })).toBeFocused();
+  await expect(page.locator('.detail-hero')).toContainText('Liverpool');
+  await expect(ticker).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('every user-initiated ticker exit has exactly one focus writer - the pressed control', async ({ page }) => {
+  // A claimed exit must suppress the transition effect's focus writer entirely.
+  // Instrumented focus() calls catch a stray write even when Chromium's own
+  // click focus or a later rAF would mask where it landed.
+  await page.addInitScript(() => {
+    const calls: string[] = [];
+    const original = HTMLElement.prototype.focus;
+    Reflect.set(window, '__FOCUS_CALLS__', calls);
+    HTMLElement.prototype.focus = function (options?: FocusOptions) {
+      calls.push(this.id || this.getAttribute('aria-label') || this.className.toString());
+      return original.call(this, options);
+    };
+  });
+  await installBridge(page);
+  await page.goto('/');
+  const ticker = page.getByRole('button', { name: 'Ticker mode' });
+  const focusCalls = () => page.evaluate(() => Reflect.get(window, '__FOCUS_CALLS__') as string[]);
+  for (let round = 0; round < 8; round++) {
+    await ticker.click();
+    await expect(page.locator('.ticker')).toBeVisible();
+    await page.evaluate(() => (Reflect.get(window, '__FOCUS_CALLS__') as string[]).splice(0));
+    await ticker.click();
+    // A snapshot commit interleaved mid-exit used to resurrect the suppressed
+    // writer: the claim died with its rAF, and a passive effect lagging the
+    // frame then wrote #settings-control itself.
+    if (round % 2 === 1)
+      await page.evaluate(
+        (snapshot) => window.dispatchEvent(new CustomEvent('test:set-snapshot', { detail: snapshot })),
+        structuredClone(mockSnapshot),
+      );
+    // The exit plan is consumed by the transition effect as the only allowed
+    // writer; a stray call to a card button or #settings-control fails here.
+    await expect(ticker).toBeFocused();
+    expect(await focusCalls(), `stray focus writer on toggle exit ${round}`).toEqual(['Ticker mode']);
+  }
+  // The ticker-card exit owns focus for the whole expansion into the match.
+  for (let round = 0; round < 4; round++) {
+    await ticker.click();
+    await page.evaluate(() => (Reflect.get(window, '__FOCUS_CALLS__') as string[]).splice(0));
+    await page.getByTitle('Open this match in MatchRadar').click();
+    await expect(page.getByRole('tab', { name: 'Overview' })).toBeFocused();
+    const calls = await focusCalls();
+    expect(new Set(calls).size, `competing focus writers on card exit ${round}`).toBe(1);
+    expect(calls[0], `focus did not land on the centre tab ${round}`).toContain('Overview');
+  }
+});
+
+test('ticker browsing honors Following only and does not implicitly lock', async ({ page }) => {
+  const snapshot = structuredClone(mockSnapshot);
+  snapshot.settings.favorites = ['364', '382'];
+  snapshot.settings.followedOnly = true;
+  await installBridge(page, { snapshot });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Ticker mode' }).click();
+  await expect(page.locator('.ticker-team.home')).toHaveText('LIV');
+  await page.getByRole('button', { name: 'Next ticker match' }).click();
+  await expect(page.locator('.ticker-team.home')).not.toHaveText('ARS');
+  await expect(page.getByRole('button', { name: 'Lock ticker match' })).toHaveAttribute('aria-pressed', 'false');
+});
+
 test('footer refresh bypasses the Results cache instead of refreshing the fixture feed', async ({ page }) => {
   await installBridge(page);
   await page.goto('/');

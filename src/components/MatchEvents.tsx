@@ -199,7 +199,7 @@ export function MatchEvents({
                     aria-label={
                       commentary
                         ? undefined
-                        : `${formatMinute(event.minute)} ${team?.name ?? 'Match'}: ${eventLabel(event.kind)}, ${label}${/sub/i.test(event.kind) && names[1] ? `, for ${names[1]}` : ''}`
+                        : `${formatMinute(event.minute)} ${team?.name ?? 'Match'}: ${eventLabel(event.kind)}, ${label}${/sub/i.test(event.kind) && names[1] ? `, for ${names[1]}` : ''}${scores.has(event.id) ? `, score now ${scores.get(event.id)}` : ''}${isGoal(event.kind) && names[1] ? `, assisted by ${names[1]}` : ''}`
                     }
                   >
                     <time>{formatMinute(event.minute) || (event.kind === 'kickoff' ? "0'" : '—')}</time>

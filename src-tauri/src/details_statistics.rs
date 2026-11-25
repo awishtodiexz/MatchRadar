@@ -266,17 +266,17 @@ pub(super) async fn enrich(client: &reqwest::Client, details: &mut Details, team
             Ok(value) if merge(details, team, &value) => {}
             Ok(_) => {
                 complete = false;
-                eprintln!(
-                    "MatchRadar statistics: {} team {team}: invalid or empty match totals",
+                crate::log_provider(&format!(
+                    "statistics: {} team {team}: invalid or empty match totals",
                     details.match_id
-                );
+                ));
             }
             Err(error) => {
                 complete = false;
-                eprintln!(
-                    "MatchRadar statistics: {} team {team}: {error}",
+                crate::log_provider(&format!(
+                    "statistics: {} team {team}: {error}",
                     details.match_id
-                );
+                ));
             }
         }
     }

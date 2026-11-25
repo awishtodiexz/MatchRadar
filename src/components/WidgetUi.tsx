@@ -20,7 +20,7 @@ function useCrestTheme(): 'light' | 'dark' {
 
 export function Badge({ team, fallback = true }: { team: Team; fallback?: boolean }) {
   const theme = useCrestTheme();
-  const candidates = useMemo(() => crestCandidates(team, theme), [team.id, team.logo, theme]);
+  const candidates = useMemo(() => crestCandidates(team, theme), [team, theme]);
   const [index, setIndex] = useState(0);
   useEffect(() => setIndex(0), [team.id, team.logo, theme]);
   const src = candidates[index];

@@ -1,5 +1,5 @@
 //! Provider backoff is a deadline, so UI wakes cannot bypass Retry-After.
-use crate::model::Match;
+use crate::model::{Competition, Match, Snapshot};
 use chrono::{DateTime, Utc};
 use std::time::{Duration, Instant};
 #[derive(Default)]
@@ -23,6 +23,36 @@ impl RequestGate {
 pub fn sleep_chunk(delay: Duration) -> Duration {
     delay.min(Duration::from_secs(86400))
 }
+// A deferred wake must come back around at the live cadence: each chunk re-runs
+// revalidate so baselines stay inside the alert freshness windows and kickoff
+// reminders are planned as their windows open mid-deferral. Sleeping the whole
+// Retry-After would let a goal scored during the deferral expire unseen.
+pub fn deferred_sleep(delay: Duration) -> Duration {
+    delay.min(Duration::from_secs(LIVE_CADENCE_SECONDS))
+}
+// The combined aggregate is the max across leagues: borrowing it for a league
+// that already has its own status row suppresses that league's fixture retry for
+// up to six hours when the other league alone stays fresh.
+pub fn fixtures_due(snapshot: &Snapshot, league: Competition, now: DateTime<Utc>) -> bool {
+    let per_league = snapshot
+        .league_status
+        .get(league.slug())
+        .and_then(|status| status.fixture_updated_at.clone());
+    let legacy = (league == Competition::PremierLeague && snapshot.league_status.is_empty())
+        .then(|| snapshot.fixture_updated_at.clone())
+        .flatten();
+    per_league
+        .or(legacy)
+        .and_then(|value| DateTime::parse_from_rfc3339(&value).ok())
+        .is_none_or(|updated| {
+            let minutes = now
+                .signed_duration_since(updated.with_timezone(&Utc))
+                .num_minutes();
+            // A clock rollback can put the stored timestamp in the future; treat it
+            // as due instead of suppressing fixtures until the window catches up.
+            !(0..360).contains(&minutes)
+        })
+}
 pub fn failure_delay(failures: u32, retry_after: Option<u64>) -> u64 {
     // A server-requested cooldown is honoured, but a bogus header must not freeze
     // updates for days. 60s..1h keeps Retry-After useful and recoverable.
@@ -32,6 +62,24 @@ pub fn failure_delay(failures: u32, retry_after: Option<u64>) -> u64 {
             .min(3600)
     })
 }
+/// Score-fetch retry delay. While matches poll at the 60s live cadence, cap
+/// transport-error backoff at that cadence: two back-to-back failures would
+/// otherwise push the next poll past the five-minute alert baseline window
+/// (alerts::fresh_score) and silently swallow a goal scored during the outage.
+/// A server-requested Retry-After is still honoured as-is.
+pub fn score_delay(failures: u32, retry_after: Option<u64>, live_cadence: bool) -> u64 {
+    let delay = failure_delay(failures, retry_after);
+    if live_cadence && retry_after.is_none() {
+        delay.min(LIVE_CADENCE_SECONDS)
+    } else {
+        delay
+    }
+}
+/// The once-a-minute cadence used while a match is live, at halftime, or a
+/// kickoff has just passed unconfirmed. Score retries during this window must
+/// stay inside it or the five-minute alert baseline goes stale.
+pub const LIVE_CADENCE_SECONDS: u64 = 60;
+
 /// A kickoff that has passed while the provider still reports the match as
 /// scheduled is about to start (ESPN often flips state minutes late). Keep
 /// polling at live cadence through this window so the start and early goals
@@ -55,7 +103,7 @@ pub fn base_poll_seconds(matches: &[Match], now: DateTime<Utc>) -> u64 {
         .iter()
         .any(|m| matches!(m.status.as_str(), "live" | "halftime") || pending_kickoff(m))
     {
-        60
+        LIVE_CADENCE_SECONDS
     } else if matches.iter().any(|m| {
         // A suspended game can resume at any time; check it at the matchday rate.
         m.status == "suspended"
@@ -124,6 +172,51 @@ mod tests {
         assert_eq!(failure_delay(2, Some(600)), 600);
         assert_eq!(failure_delay(2, Some(7200)), 3600);
         assert_eq!(failure_delay(2, Some(0)), 60);
+    }
+    #[test]
+    fn fixtures_due_ignores_the_other_leagues_freshness() {
+        let now = Utc::now();
+        let mut s = Snapshot::default();
+        s.league_status.insert(
+            Competition::PremierLeague.slug().into(),
+            crate::model::LeagueStatus::default(),
+        );
+        // The combined aggregate is fresh from UCL, but PL's own row has no
+        // fixture timestamp after its month query failed. The aggregate must
+        // not suppress PL's retry for the six-hour fixture window.
+        s.fixture_updated_at = Some((now - chrono::Duration::minutes(1)).to_rfc3339());
+        assert!(fixtures_due(&s, Competition::PremierLeague, now));
+    }
+    #[test]
+    fn live_score_backoff_stays_within_alert_baseline_window() {
+        // Regression: two transport failures used to back scores off 120s then
+        // 240s, pushing the next poll past alerts::fresh_score's five-minute
+        // baseline and swallowing a goal scored during the outage.
+        assert_eq!(score_delay(1, None, true), 60);
+        assert_eq!(score_delay(2, None, true), 60);
+        // Off the live cadence the full backoff still applies.
+        assert_eq!(score_delay(2, None, false), 240);
+        // A server-requested cooldown is honoured even while live.
+        assert_eq!(score_delay(1, Some(600), true), 600);
+    }
+    #[test]
+    fn deferred_wakes_rechunk_to_the_live_cadence() {
+        // A long Retry-After must still return to the deferred branch every
+        // minute so baselines re-warm and reminder windows get planned; sleeping
+        // the whole deferral let a mid-deferral goal expire unseen.
+        assert_eq!(
+            deferred_sleep(Duration::from_secs(3600)),
+            Duration::from_secs(60)
+        );
+        assert_eq!(
+            deferred_sleep(Duration::from_secs(300)),
+            Duration::from_secs(60)
+        );
+        // The tail of a deferral sleeps only what remains, never past the deadline.
+        assert_eq!(
+            deferred_sleep(Duration::from_secs(45)),
+            Duration::from_secs(45)
+        );
     }
     #[test]
     fn huge_headers_do_not_overflow_timers_or_erase_cooldown() {

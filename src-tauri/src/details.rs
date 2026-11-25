@@ -984,6 +984,11 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
             .then(a.seconds.total_cmp(&b.seconds))
             .then(a.id.cmp(&b.id))
     });
+    if events.len() > 1000 {
+        // keyEvents and commentary each carry up to 1000 entries; the merged feed
+        // must satisfy the cache/display cap itself or the whole panel is lost.
+        events.drain(..events.len() - 1000);
+    }
     scorer_rows.sort_by(|a, b| {
         a.0.total_cmp(&b.0)
             .then(a.1.name.cmp(&b.1.name))
@@ -1581,7 +1586,7 @@ impl Cache {
             .timestamp()
             .saturating_add(error.retry_after.unwrap_or(60).clamp(60, 3600) as i64);
         lock(&self.blocked).insert(key.to_string(), until);
-        eprintln!("MatchRadar summaries: {}", error.message);
+        crate::log_provider(&format!("summaries: {}", error.message));
         saved_or_error(old, error.message)
     }
 }
@@ -1612,7 +1617,7 @@ fn parse_response(
     status: u16,
     retry: Option<u64>,
     bytes: &[u8],
-) -> Result<Details, Failure> {
+) -> Result<(Details, Value), Failure> {
     if !(200..300).contains(&status) {
         return Err(Failure {
             message: format!("Summary {id}: HTTP {status}"),
@@ -1624,7 +1629,9 @@ fn parse_response(
     }
     let value: Value = serde_json::from_slice(bytes)
         .map_err(|e| Failure::temporary(format!("Summary {id} JSON: {e}")))?;
-    normalize(&value, id, league).map_err(|e| Failure::temporary(format!("Summary {id}: {e}")))
+    let details =
+        normalize(&value, id, league).map_err(|e| Failure::temporary(format!("Summary {id}: {e}")))?;
+    Ok((details, value))
 }
 fn summary_url(league: Competition) -> String {
     format!(
@@ -1650,7 +1657,7 @@ async fn fetch(
         .and_then(|h| h.to_str().ok())
         .and_then(|s| crate::provider::retry_after(s, Utc::now()));
     if !(200..300).contains(&status) {
-        return parse_response(id, league, status, retry, &[]);
+        return parse_response(id, league, status, retry, &[]).map(|(details, _)| details);
     }
     if response.content_length().is_some_and(|n| n > 4_000_000) {
         return Err(Failure::temporary("Summary exceeds size limit"));
@@ -1666,9 +1673,7 @@ async fn fetch(
         }
         bytes.extend_from_slice(&chunk);
     }
-    let mut details = parse_response(id, league, status, retry, &bytes)?;
-    let value: Value =
-        serde_json::from_slice(&bytes).map_err(|e| Failure::temporary(e.to_string()))?;
+    let (mut details, value) = parse_response(id, league, status, retry, &bytes)?;
     let competition = &value["header"]["competitions"][0];
     if competition["status"]["type"]["state"]
         .as_str()

@@ -4,7 +4,8 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   timeout: 15000,
-  maxFailures: 2,
+  // No early bail: one red regression used to hide the other ~96% of the gate.
+  maxFailures: 0,
   outputDir: './artifacts/browser',
   updateSnapshots: 'none',
   reporter: 'list',
@@ -13,6 +14,9 @@ export default defineConfig({
     channel: 'msedge',
     locale: 'en-GB',
     timezoneId: 'Europe/London',
+    // The widget's real window is 390x700 (320..600 x 460..1100; the ticker can
+    // shrink to 112). Tests that need another size still call setViewportSize.
+    viewport: { width: 390, height: 700 },
     reducedMotion: 'reduce',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',

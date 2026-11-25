@@ -194,6 +194,39 @@ pub(crate) fn logical_size(window: &tauri::WebviewWindow) -> Result<ExpandedSize
     ExpandedSize::from_physical(size.width, size.height, scale)
         .ok_or_else(|| "Invalid widget dimensions or display scale".into())
 }
+pub(crate) fn logical_size_unbounded(window: &tauri::WebviewWindow) -> Result<ExpandedSize, String> {
+    let size = window
+        .inner_size()
+        .map_err(|e| format!("Read widget dimensions: {e}"))?;
+    let scale = window
+        .scale_factor()
+        .map_err(|e| format!("Read widget display scale: {e}"))?;
+    ExpandedSize::from_physical_unbounded(size.width, size.height, scale)
+        .ok_or_else(|| "Invalid widget dimensions or display scale".into())
+}
+// The window-state plugin can restore a size the app would never choose, such
+// as ticker mode's 112px strip. `current` is the unbounded logical size, so a
+// value outside ExpandedSize's bounds marks an out-of-range restore; the
+// persisted expanded size is the preferred target. When the floor had to raise
+// either axis, the restore is another mode's dimensions: its other axis is not
+// the user's expanded dimension either, so fall back to the default. An
+// over-ceiling restore still carries real expanded dimensions and is only
+// clamped.
+pub(crate) fn restore_target(
+    current: ExpandedSize,
+    persisted: Option<ExpandedSize>,
+) -> Option<ExpandedSize> {
+    let bounded = current.bounded();
+    if current == bounded {
+        return None;
+    }
+    let fallback = if current.width < bounded.width || current.height < bounded.height {
+        ExpandedSize::default()
+    } else {
+        current
+    };
+    Some(persisted.unwrap_or(fallback).bounded())
+}
 pub(crate) fn resize(window: &tauri::WebviewWindow, size: ExpandedSize) -> Result<(), String> {
     let size = size.bounded();
     window
@@ -234,6 +267,79 @@ mod tests {
 
     fn primary() -> Bounds {
         rect(0, 0, 1920, 1040)
+    }
+
+    #[test]
+    fn restore_target_only_fires_for_out_of_bounds_restores() {
+        let ticker = ExpandedSize {
+            width: 390.0,
+            height: 112.0,
+        };
+        // A ticker strip's dimensions are not expanded dimensions: with no
+        // persisted expanded size the target is the default, not the strip's
+        // width under the expanded floor.
+        assert_eq!(restore_target(ticker, None), Some(ExpandedSize::default()));
+        assert_eq!(
+            restore_target(
+                ExpandedSize {
+                    width: 420.0,
+                    height: 112.0
+                },
+                None
+            ),
+            Some(ExpandedSize::default())
+        );
+        // A DPI squeeze below the 320px width floor is foreign geometry too:
+        // keeping the 320px clamp would invent a width the user never set.
+        assert_eq!(
+            restore_target(
+                ExpandedSize {
+                    width: 260.0,
+                    height: 466.7
+                },
+                None
+            ),
+            Some(ExpandedSize::default())
+        );
+        assert_eq!(
+            restore_target(
+                ticker,
+                Some(ExpandedSize {
+                    width: 390.0,
+                    height: 700.0
+                })
+            ),
+            Some(ExpandedSize {
+                width: 390.0,
+                height: 700.0
+            })
+        );
+        assert_eq!(
+            restore_target(
+                ExpandedSize {
+                    width: 390.0,
+                    height: 700.0
+                },
+                Some(ExpandedSize {
+                    width: 390.0,
+                    height: 460.0
+                })
+            ),
+            None
+        );
+        assert_eq!(
+            restore_target(
+                ExpandedSize {
+                    width: 390.0,
+                    height: 1300.0
+                },
+                None
+            ),
+            Some(ExpandedSize {
+                width: 390.0,
+                height: 1100.0
+            })
+        );
     }
 
     #[test]

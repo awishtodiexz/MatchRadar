@@ -9,6 +9,7 @@ export const defaults: Settings = {
   alwaysOnTop: true,
   startHidden: false,
   reducedMotion: false,
+  singleKeyShortcuts: true,
   opacity: 96,
   theme: 'dark',
   competitionView: 'premierLeague',

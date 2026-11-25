@@ -101,7 +101,9 @@ describe('list states', () => {
       settings: { ...mockSnapshot.settings, favorites: [], followedOnly: true },
     });
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: 'Show all matches' }));
+    const show = screen.getByRole('button', { name: 'Show all matches' });
+    show.focus();
+    fireEvent.click(show);
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: detailName })));
   });
   it('exposes the score and status as the match card description', () => {

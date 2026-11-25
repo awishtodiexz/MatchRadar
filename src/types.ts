@@ -15,6 +15,7 @@ export interface Match {
   away: Team;
   homeScore?: number | null;
   awayScore?: number | null;
+  shootout?: { home: number; away: number } | null;
   kickoff: string;
   status: Status;
   detail: string;
@@ -49,6 +50,7 @@ export interface Settings {
   alwaysOnTop: boolean;
   startHidden: boolean;
   reducedMotion: boolean;
+  singleKeyShortcuts: boolean;
   opacity: number;
   theme: 'dark' | 'light' | 'system';
   competitionView: CompetitionView;

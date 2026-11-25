@@ -113,14 +113,22 @@ fn still_relevant(
     }
 }
 
-pub fn cleanup(snapshot: &mut Snapshot, now: DateTime<Utc>) {
+/// Returns how many state mutations the pass made, so callers can skip
+/// persisting a snapshot nothing changed in.
+pub fn cleanup(snapshot: &mut Snapshot, now: DateTime<Utc>) -> usize {
     let mut seen = HashSet::new();
     let mut dropped_reminders = Vec::new();
+    let mut changed = 0usize;
+    let pending_before = snapshot.pending_notifications.len();
     snapshot.pending_notifications = std::mem::take(&mut snapshot.pending_notifications)
         .into_iter()
         .filter(|event| {
             let keep = valid(event)
-                && date(&event.created_at).is_some_and(|t| t <= now)
+                // A backward clock step must not drop an already-queued alert:
+                // its baseline advanced when it was planned, so the drop is
+                // unrecoverable. Only a creation date beyond any plausible
+                // step marks the record as corrupt.
+                && date(&event.created_at).is_some_and(|t| t <= now + Duration::days(1))
                 && date(&event.expires_at).is_some_and(|t| t > now)
                 && !snapshot.sent_notifications.contains(&event.id)
                 && eligible(snapshot, event)
@@ -137,13 +145,16 @@ pub fn cleanup(snapshot: &mut Snapshot, now: DateTime<Utc>) {
         })
         .take(MAX_PENDING)
         .collect();
+    changed += pending_before - snapshot.pending_notifications.len();
     // A reminder that never reached the OS must not leave its kickoff marked as
     // reminded. Clearing the marker lets a later mute/unmute, reminder-time change
     // or reschedule plan the reminder again; the sent list still suppresses an
     // already-delivered reminder.
     for match_id in dropped_reminders {
         if let Some(baseline) = snapshot.alert_baselines.get_mut(&match_id) {
-            baseline.reminder_kickoff = None;
+            if baseline.reminder_kickoff.take().is_some() {
+                changed += 1;
+            }
         }
     }
     // Corrupt/far-future cooldowns must not disable alerts indefinitely after a clock change.
@@ -153,8 +164,10 @@ pub fn cleanup(snapshot: &mut Snapshot, now: DateTime<Utc>) {
         .and_then(date)
         .is_some_and(|t| t > now && t - now <= Duration::minutes(UNAVAILABLE_MINUTES))
     {
+        changed += usize::from(snapshot.notification_retry_after.is_some());
         snapshot.notification_retry_after = None;
     }
+    changed
 }
 
 fn build_event(
@@ -284,23 +297,16 @@ pub fn submit_due(
     mut log: impl FnMut(&str),
 ) -> Result<(), String> {
     let now = clock();
-    cleanup(snapshot, now);
+    let removed = cleanup(snapshot, now);
     if snapshot.pending_notifications.is_empty() {
         snapshot.revalidate_pending = false;
     }
-    save(snapshot)?;
-    if snapshot.revalidate_pending {
-        return Ok(());
-    }
-    if snapshot
+    let waiting_retry = snapshot
         .notification_retry_after
         .as_deref()
         .and_then(date)
-        .is_some_and(|t| t > now)
-    {
-        return Ok(());
-    }
-    let due: Vec<_> = snapshot
+        .is_some_and(|t| t > now);
+    let due: Vec<String> = snapshot
         .pending_notifications
         .iter()
         .filter(|event| {
@@ -308,6 +314,16 @@ pub fn submit_due(
         })
         .map(|event| event.id.clone())
         .collect();
+    // A wake with nothing cleaned up, nothing to plan, and nothing submittable
+    // must not cost the double fsync `save` performs; poll wakes arrive every
+    // minute while a backed-off event sits in the queue.
+    if removed == 0 && !snapshot.revalidate_pending && (due.is_empty() || waiting_retry) {
+        return Ok(());
+    }
+    save(snapshot)?;
+    if snapshot.revalidate_pending || waiting_retry {
+        return Ok(());
+    }
     for id in due {
         let Some(index) = snapshot
             .pending_notifications
@@ -405,11 +421,33 @@ fn queue_cached_reminders(snapshot: &mut Snapshot, now: DateTime<Utc>) {
     cleanup(snapshot, now);
 }
 
+// A server-requested deferral parks the poll loop without new observations.
+// Refresh seen_at on baselines of matches still tracked so the first
+// post-deferral confirmation counts as recent instead of being dropped by the
+// 5-minute goal and 10-minute start windows. Only a baseline still inside the
+// outer window is extended: a chain of failed or deferred cycles never lets
+// the clock run out, while a genuinely old observation (hours away with the
+// app closed) stays cold and its first confirmed score is not replayed.
+pub fn keep_baselines_warm(snapshot: &mut Snapshot, now: DateTime<Utc>) {
+    let seen_at = now.to_rfc3339();
+    for (id, baseline) in snapshot.alert_baselines.iter_mut() {
+        let warm = snapshot.matches.iter().any(|m| &m.id == id)
+            && date(&baseline.seen_at)
+                .is_some_and(|seen| now - seen <= Duration::minutes(10));
+        if warm {
+            baseline.seen_at = seen_at.clone();
+        }
+    }
+}
+
 // Called after every poll cycle, even a failed one. Cached reminders are planned
 // first; then migrated pending alerts stay held until their matches are freshly
-// confirmed.
+// confirmed. Tracked baselines are re-warmed too: a cycle that confirmed nothing
+// produced no observation, so the failure must not run the five-minute goal or
+// ten-minute start windows down and swallow an event that happened mid-outage.
 pub fn revalidate(snapshot: &mut Snapshot, score_ids: &[String], now: DateTime<Utc>) {
     queue_cached_reminders(snapshot, now);
+    keep_baselines_warm(snapshot, now);
     if !snapshot.revalidate_pending {
         return;
     }

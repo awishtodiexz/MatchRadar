@@ -175,6 +175,7 @@ fn mock_at(now: DateTime<Utc>) -> Vec<Match> {
                 away: team(ai, an, as_),
                 home_score: *home_score,
                 away_score: *away_score,
+                shootout: None,
                 kickoff: (if *hi == "382" && *ai == "360" {
                     now + Duration::minutes(15)
                 } else if *hi == "367" && *ai == "362" {

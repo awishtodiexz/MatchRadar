@@ -108,12 +108,19 @@ fn fixture_merge(mut base: Vec<Match>, fixtures: &mut FetchOutcome, complete: bo
             {
                 m.home_score = previous.home_score;
                 m.away_score = previous.away_score;
+                m.shootout = previous.shootout;
                 m.status = previous.status.clone();
                 m.detail = previous.detail.clone();
+            }
+            // A batch that omits shootoutScore must not erase a known tally
+            // either; the field is monotone like status and scores.
+            if m.status == "fulltime" && m.shootout.is_none() && previous.shootout.is_some() {
+                m.shootout = previous.shootout;
             }
             if m.status == previous.status
                 && m.home_score == previous.home_score
                 && m.away_score == previous.away_score
+                && m.shootout == previous.shootout
             {
                 m.score_updated_at = previous.score_updated_at.clone();
             }
@@ -180,7 +187,20 @@ pub fn apply_league(
 
     base = fixture_merge(base, &mut fixtures, fixtures_complete);
     if let Some(updates) = scores.matches.clone() {
+        // The daily scoreboard can omit shootoutScore where the month query had
+        // it; capture known tallies before the id-keyed merge replaces records.
+        let tallies: std::collections::HashMap<(String, String), crate::model::Shootout> = base
+            .iter()
+            .filter_map(|m| m.shootout.map(|s| ((m.id.clone(), m.kickoff.clone()), s)))
+            .collect();
         base = provider::merge(base, updates);
+        for m in &mut base {
+            if m.status == "fulltime" && m.shootout.is_none() {
+                if let Some(tally) = tallies.get(&(m.id.clone(), m.kickoff.clone())) {
+                    m.shootout = Some(*tally);
+                }
+            }
+        }
     }
     if any_response {
         base.retain(|m| in_window(m, now, league));
@@ -712,5 +732,46 @@ mod tests {
             now() + Duration::minutes(2),
         );
         assert_eq!(s.matches[0].score_updated_at, None);
+    }
+    #[test]
+    fn fixture_merge_keeps_a_known_shootout_tally_when_the_batch_omits_it() {
+        let mut previous = fixture("pen", "fulltime", 0, 1);
+        previous.away_score = Some(1);
+        previous.shootout = Some(crate::model::Shootout { home: 4, away: 3 });
+        let mut stripped = previous.clone();
+        stripped.shootout = None;
+        let merged = fixture_merge(vec![previous], &mut good(vec![stripped]), true);
+        assert_eq!(
+            merged[0].shootout,
+            Some(crate::model::Shootout { home: 4, away: 3 })
+        );
+    }
+    #[test]
+    fn score_merge_keeps_a_known_shootout_tally_when_the_day_omits_it() {
+        // The fixture-path carry is lost if the daily scoreboard merge that
+        // follows it in the same apply call replaces the record wholesale.
+        let mut previous = fixture("pen", "fulltime", 0, 1);
+        previous.away_score = Some(1);
+        previous.shootout = Some(crate::model::Shootout { home: 4, away: 3 });
+        let mut s = Snapshot {
+            matches: vec![previous.clone()],
+            ..Snapshot::default()
+        };
+        let mut stripped = previous;
+        stripped.shootout = None;
+        apply(
+            &mut s,
+            Competition::PremierLeague,
+            FetchOutcome::default(),
+            good(vec![stripped]),
+        );
+        assert_eq!(
+            s.matches
+                .iter()
+                .find(|m| m.id == "pen")
+                .unwrap()
+                .shootout,
+            Some(crate::model::Shootout { home: 4, away: 3 })
+        );
     }
 }

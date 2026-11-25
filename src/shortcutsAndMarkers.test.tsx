@@ -37,6 +37,17 @@ describe('keyboard shortcuts', () => {
     fireEvent.keyDown(search, { key: 'Escape' });
   });
 
+  it('leaves single-key shortcuts inert when the setting disables them', async () => {
+    const snapshot = structuredClone(mockSnapshot);
+    snapshot.settings.singleKeyShortcuts = false;
+    await load(snapshot);
+    render(<App />);
+    fireEvent.keyDown(document.body, { key: '2' });
+    expect(pressed(/^Live/)).not.toBe('true');
+    fireEvent.keyDown(document.body, { key: '/' });
+    expect(screen.queryByRole('searchbox', { name: 'Search clubs' })).toBeNull();
+  });
+
   it('steps to the next match in list order with ] from the details view', async () => {
     await load(structuredClone(mockSnapshot));
     const { container } = render(<App />);

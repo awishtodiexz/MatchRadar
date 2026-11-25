@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -52,11 +52,20 @@ export default function App() {
   const [themeHint] = useState<'dark' | 'light'>(() => {
     try {
       const theme = localStorage.getItem('matchradar.theme');
-      return theme === 'light' || (theme === 'system' && window.matchMedia?.('(prefers-color-scheme: light)').matches)
-        ? 'light'
-        : 'dark';
+      if (theme === 'light' || (theme === 'system' && window.matchMedia?.('(prefers-color-scheme: light)').matches))
+        return 'light';
+      // A first launch has no hint; the OS preference is a better default than
+      // always painting dark for a light-theme user.
+      return theme === 'dark' || !window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'dark' : 'light';
     } catch {
       return 'dark';
+    }
+  });
+  const [motionHint] = useState(() => {
+    try {
+      return localStorage.getItem('matchradar.reducedMotion') === 'true';
+    } catch {
+      return false;
     }
   });
   const [matchView, setMatchView] = useState<MatchView>('All');
@@ -68,18 +77,26 @@ export default function App() {
   );
   // Session-only slim mode; the widget's full size is remembered so it can be restored.
   const [ticker, setTicker] = useState(false);
+  const [tickerBrowseId, setTickerBrowseId] = useState<string | null>(null);
   const [tickerPinned, setTickerPinned] = useState<Match | null>(null);
   const detailRefresh = useRef<MatchDetailsHandle>(null);
   const matchSessions = useRef(new Map<string, MatchMemory>());
   const settingsReturn = useRef<'home' | 'detail'>('home');
   const [detailBusy, setDetailBusy] = useState(false);
   const tickerRestoreSize = useRef<{ width: number; height: number } | null>(null);
+  const tickerMode = useRef(false);
+  const tickerResize = useRef(Promise.resolve(true));
   const root = useRef<HTMLElement>(null);
   const restoreFocus = useRef('settings-control');
   const homeScroll = useRef(0);
   const previousView = useRef(view);
+  const wasTicker = useRef(ticker);
+  // A user-initiated ticker exit's focus plan: set before the exit, consumed by
+  // the transition effect once its target mounts, so exactly one focus writer
+  // exists no matter how commits, snapshots and frames interleave.
+  const tickerExitFocus = useRef<null | { target: 'ticker' | 'centre'; attempts: number }>(null);
   const notificationFocus = useRef(0);
-  const recoveryFocus = useRef(false);
+  const recoveryFocus = useRef<HTMLButtonElement | null>(null);
   const focusClubSearch = useRef(false);
   // Scores seen on the previous snapshot, to flag a change for a few minutes.
   const previousScores = useRef(new Map<string, [number | null | undefined, number | null | undefined]>());
@@ -90,6 +107,41 @@ export default function App() {
   const settings = snapshot?.settings;
   const allMatches = snapshot?.matches;
   const opacityValue = opacityPreview ?? settings?.opacity ?? 96;
+  const setTickerMode = useCallback(
+    (next: boolean) => {
+      const resize = tickerResize.current.then(async () => {
+        if (tickerMode.current === next) return true;
+        if (native) {
+          const win = getCurrentWindow();
+          try {
+            if (next) {
+              const size = (await win.innerSize()).toLogical(await win.scaleFactor());
+              tickerRestoreSize.current = { width: size.width, height: size.height };
+              await win.setMinSize(new LogicalSize(320, 112));
+              await win.setSize(new LogicalSize(Math.max(320, Math.min(size.width, 420)), 112));
+            } else {
+              const saved = tickerRestoreSize.current ?? { width: 390, height: 700 };
+              await win.setSize(new LogicalSize(saved.width, saved.height));
+              await win.setMinSize(new LogicalSize(320, 460));
+            }
+          } catch {
+            // The mode never flipped, so restore the min size matching the mode
+            // we are still in; a failed entry must not leave the 112px floor behind.
+            void win.setMinSize(new LogicalSize(320, tickerMode.current ? 112 : 460)).catch(() => {});
+            useApp.setState({ error: 'Could not resize the widget.' });
+            return false;
+          }
+        }
+        tickerMode.current = next;
+        setTicker(next);
+        if (!next) setTickerBrowseId(null);
+        return true;
+      });
+      tickerResize.current = resize;
+      return resize;
+    },
+    [native],
+  );
   const panelOpacity = Math.min(100, Math.max(70, opacityValue));
   const competitionView = settings?.competitionView ?? 'premierLeague';
   const competitionTitle = competitionView === 'both' ? 'Both competitions' : competitionName(competitionView);
@@ -120,16 +172,28 @@ export default function App() {
       ) ?? selected)
     : null;
   const tickerOptions = useMemo(
-    () => tickerMatches(competitionMatches, settings?.favorites ?? [], now.getTime()),
-    [competitionMatches, settings?.favorites, now],
+    () =>
+      tickerMatches(
+        matchesView(competitionMatches, 'All', settings?.favorites ?? [], settings?.followedOnly),
+        settings?.favorites ?? [],
+        now.getTime(),
+      ),
+    [competitionMatches, settings?.favorites, settings?.followedOnly, now],
   );
-  const pinnedMatch = tickerPinned
-    ? (allMatches?.find((match) => match.id === tickerPinned.id) ?? {
-        ...tickerPinned,
-        scoreStale: isInProgress(tickerPinned) || tickerPinned.scoreStale,
-      })
-    : null;
-  const tickerMatch = pinnedMatch ?? (view === 'detail' ? detailMatch : null) ?? tickerOptions[0] ?? null;
+  const followsTickerFilter = (match: Match) => !settings?.followedOnly || followsTeam(match, settings.favorites);
+  const pinnedMatch =
+    tickerPinned && followsTickerFilter(tickerPinned)
+      ? (allMatches?.find((match) => match.id === tickerPinned.id) ??
+          // A lock is a promise: a match that leaves the feed stays pinned as a
+          // saved-score copy until the user unlocks or changes the list scope.
+          { ...tickerPinned, scoreStale: true })
+      : null;
+  const tickerMatch =
+    pinnedMatch ??
+    tickerOptions.find((match) => match.id === tickerBrowseId) ??
+    (view === 'detail' && detailMatch && followsTickerFilter(detailMatch) ? detailMatch : null) ??
+    tickerOptions[0] ??
+    null;
   const tickerChoices =
     tickerMatch && !tickerOptions.some((match) => match.id === tickerMatch.id)
       ? [tickerMatch, ...tickerOptions]
@@ -137,7 +201,10 @@ export default function App() {
   const cycleTicker = (direction: number) => {
     const index = tickerChoices.findIndex((match) => match.id === tickerMatch?.id);
     const next = tickerChoices[(index + direction + tickerChoices.length) % tickerChoices.length];
-    if (next) setTickerPinned(next);
+    if (next) {
+      if (pinnedMatch) setTickerPinned(next);
+      else setTickerBrowseId(next.id);
+    }
   };
   const rememberHome = () => {
     homeScroll.current = root.current?.querySelector('.match-list')?.scrollTop ?? 0;
@@ -159,6 +226,7 @@ export default function App() {
   };
   useNotificationNavigation(native, (target) => {
     homeScroll.current = root.current?.querySelector('.match-list')?.scrollTop ?? homeScroll.current;
+    void setTickerMode(false);
     if (target.match) {
       matchSessions.current.delete(target.match.id);
       setNotificationRequest(target.requestId);
@@ -204,15 +272,34 @@ export default function App() {
         };
       previousScores.current.set(match.id, [match.homeScore, match.awayScore]);
     }
-    if (Object.keys(changed).length) setScoreChanges((current) => ({ ...current, ...changed }));
+    // Both maps are keyed by match id; drop entries for matches that left the
+    // fixture window and change flags past their display window.
+    const liveIds = new Set(allMatches.map((match) => match.id));
+    for (const id of previousScores.current.keys()) {
+      if (!liveIds.has(id)) previousScores.current.delete(id);
+    }
+    const cutoff = Date.now() - SCORE_CHANGE_MS;
+    setScoreChanges((current) => {
+      const next = { ...current, ...changed };
+      let touched = Object.keys(changed).length > 0;
+      for (const [id, change] of Object.entries(next)) {
+        if (!liveIds.has(id) || change.at < cutoff) {
+          delete next[id];
+          touched = true;
+        }
+      }
+      return touched ? next : current;
+    });
   }, [allMatches]);
   useEffect(() => {
     setTickerPinned((current) => {
       if (!current) return current;
-      return (
-        allMatches?.find((match) => match.id === current.id) ??
-        (isInProgress(current) && !current.scoreStale ? { ...current, scoreStale: true } : current)
-      );
+      const fresh = allMatches?.find((match) => match.id === current.id);
+      if (fresh) return fresh;
+      // The lock contract (pinned by the ticker browser spec) is persistence:
+      // mark the copy stale once and keep showing it rather than swapping to an
+      // unrelated match and silently releasing.
+      return current.scoreStale ? current : { ...current, scoreStale: true };
     });
   }, [allMatches]);
   useEffect(() => {
@@ -235,6 +322,7 @@ export default function App() {
             settingsReturn.current = previousView.current === 'detail' ? 'detail' : 'home';
           if (previousView.current === 'home') restoreFocus.current = 'settings-control';
           setView('settings');
+          void setTickerMode(false);
         },
       ],
       [
@@ -262,13 +350,49 @@ export default function App() {
       disposed = true;
       listeners.forEach((fn) => fn());
     };
-  }, [load, native]);
+  }, [load, native, setTickerMode]);
   useEffect(() => {
-    if (previousView.current === view) return;
+    // Leaving ticker re-mounts the list even though `view` never changed, so it
+    // counts as a transition back for the scroll and focus restore below. The
+    // ticker toggle refocuses the control that was pressed via rAF, so a second
+    // focus writer here would race it — but tray/notification exits have no
+    // pressed control and still need the heading/tab restore.
+    const leftTicker = wasTicker.current && !ticker;
+    const enteredTicker = !wasTicker.current && ticker;
+    wasTicker.current = ticker;
+    if (ticker) {
+      // Only a real re-entry cancels a pending exit-focus plan: an unrelated
+      // commit (say, a window-resize listener's setState) that lands while the
+      // exit is still in flight must not disarm it.
+      tickerExitFocus.current = null; // MUTANT e
+      return;
+    }
+    if (previousView.current === view && !leftTicker) return;
     previousView.current = view;
     if (view === 'home') {
       const list = root.current?.querySelector('.match-list');
       if (list) list.scrollTop = homeScroll.current;
+    }
+    // The ticker exit's pressed control owns focus for the whole exit —
+    // including a follow-on view commit (openFromTicker changes view too) — so
+    // this effect writes it as the single writer rather than racing an rAF that
+    // a lagging passive effect could outlive. The plan is consumed on its
+    // target's first mounted pass and bounded to two passes so a target that
+    // never mounts cannot suppress later restores forever. Tray and
+    // notification exits arm no plan, so the restore below still runs for them.
+    if (tickerExitFocus.current) {
+      const plan = tickerExitFocus.current;
+      plan.attempts += 1;
+      const target = root.current?.querySelector<HTMLElement>(
+        plan.target === 'centre' ? '.match-centre > .centre-tabs [aria-selected="true"]' : '[aria-label="Ticker mode"]',
+      );
+      if (target || plan.attempts >= 2) {
+        tickerExitFocus.current = null;
+        (target ?? document.getElementById('settings-control'))?.focus({ preventScroll: true });
+      }
+      return;
+    }
+    if (view === 'home') {
       (document.getElementById(restoreFocus.current) ?? document.getElementById('settings-control'))?.focus({
         preventScroll: true,
       });
@@ -276,7 +400,7 @@ export default function App() {
       focusClubSearch.current = false;
       root.current?.querySelector<HTMLElement>('.settings-body input[type="search"]')?.focus();
     } else root.current?.querySelector<HTMLElement>('[data-view-heading]')?.focus();
-  }, [view]);
+  }, [ticker, view]);
   // The shortcut notice is informational; do not let it hold space for the whole session.
   useEffect(() => {
     if (error !== SHORTCUT_MESSAGE) return;
@@ -287,14 +411,21 @@ export default function App() {
   }, [error]);
   // A new filter or competition is a new list; do not strand the viewport at
   // the old scroll offset. Returning from details is handled above instead.
+  // The bookmark itself must reset too: the control can change while the list
+  // is not mounted (e.g. switching competition from inside Settings).
   useEffect(() => {
+    homeScroll.current = 0;
     if (view !== 'home') return;
     const list = root.current?.querySelector<HTMLElement>('.match-list');
     if (list) list.scrollTop = 0;
+    // 'view' is deliberately excluded: re-running on view changes would wipe the
+    // bookmark that returning from details restores.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [competitionView, matchView, settings?.followedOnly]);
   useEffect(() => {
     setTickerPinned(null);
-  }, [competitionView]);
+    setTickerBrowseId(null);
+  }, [competitionView, settings?.followedOnly]);
   useEffect(() => {
     const preference = window.matchMedia?.('(prefers-color-scheme: light)');
     if (!preference) return;
@@ -303,7 +434,7 @@ export default function App() {
     return () => preference.removeEventListener('change', changed);
   }, []);
   useEffect(() => {
-    if (view !== 'detail' || !selected || !notificationFocus.current) return;
+    if (ticker || view !== 'detail' || !selected || !notificationFocus.current) return;
     const timer = setTimeout(() => {
       notificationFocus.current = 0;
       const target =
@@ -312,7 +443,7 @@ export default function App() {
       target?.focus();
     }, 0);
     return () => clearTimeout(timer);
-  }, [view, selected, notificationRequest]);
+  }, [ticker, view, selected, notificationRequest]);
   const viewMatches = useMemo(
     () => matchesView(sourceMatches ?? [], matchView, settings?.favorites ?? [], settings?.followedOnly ?? false),
     [sourceMatches, matchView, settings?.favorites, settings?.followedOnly],
@@ -381,8 +512,8 @@ export default function App() {
   const upcomingEmpty = matchView === 'Upcoming' && viewEmpty;
   const windowLabel = competitionView === 'both' ? 30 : competitionView === 'championsLeague' ? 30 : 14;
   const selectMatchView = (next: MatchView) => setMatchView(next);
-  const showAllMatches = () => {
-    recoveryFocus.current = true;
+  const showAllMatches = (event: MouseEvent<HTMLButtonElement>) => {
+    recoveryFocus.current = document.activeElement === event.currentTarget ? event.currentTarget : null;
     if (settings?.followedOnly) void save({ followedOnly: false });
     else selectMatchView('All');
   };
@@ -485,8 +616,8 @@ export default function App() {
     } else if (view === 'home' && historyView) recent.retry();
     else void doRefresh();
   };
-  const retryFeed = () => {
-    recoveryFocus.current = true;
+  const retryFeed = (event: MouseEvent<HTMLButtonElement>) => {
+    recoveryFocus.current = document.activeElement === event.currentTarget ? event.currentTarget : null;
     if (feedUnavailable) {
       void doRefresh();
       return;
@@ -499,71 +630,45 @@ export default function App() {
   // still empty) instead of dropping it onto the document body.
   useEffect(() => {
     if (view !== 'home') {
-      recoveryFocus.current = false;
+      recoveryFocus.current = null;
       return;
     }
-    if (!recoveryFocus.current || busy || (historyView && recent.loading)) return;
+    const trigger = recoveryFocus.current;
+    if (!trigger || busy || (historyView && recent.loading)) return;
+    recoveryFocus.current = null;
+    if (document.activeElement !== trigger && document.activeElement !== document.body) return;
+    if (trigger.isConnected) {
+      trigger.focus({ preventScroll: true });
+      return;
+    }
     const list = root.current?.querySelector<HTMLElement>('.match-list');
     const target = matches.length
       ? list?.querySelector<HTMLElement>('.match-open')
       : !feedUnavailable && !listError
         ? list?.querySelector<HTMLElement>('.centre-tabs button[aria-pressed="true"]')
         : null;
-    if (target) {
-      recoveryFocus.current = false;
-      target.focus({ preventScroll: true });
-    }
+    target?.focus({ preventScroll: true });
   }, [busy, matches.length, matchView, view, listError, error, historyView, recent.loading, feedUnavailable]);
-  const toggleAlwaysOnTop = async () => {
-    if (!settings) return;
-    const next = !settings.alwaysOnTop;
-    if (native) {
-      try {
-        await getCurrentWindow().setAlwaysOnTop(next);
-      } catch {
-        useApp.setState({ error: 'Could not change always-on-top.' });
-        return;
-      }
-    }
-    void save({ alwaysOnTop: next });
-  };
   const toggleTicker = async () => {
     const next = !ticker;
-    if (native) {
-      const win = getCurrentWindow();
-      try {
-        if (next) {
-          const size = (await win.innerSize()).toLogical(await win.scaleFactor());
-          tickerRestoreSize.current = { width: size.width, height: size.height };
-          await win.setMinSize(new LogicalSize(320, 112));
-          await win.setSize(new LogicalSize(Math.max(320, Math.min(size.width, 420)), 112));
-        } else {
-          const saved = tickerRestoreSize.current ?? { width: 390, height: 700 };
-          await win.setSize(new LogicalSize(saved.width, saved.height));
-          await win.setMinSize(new LogicalSize(320, 460));
-        }
-      } catch {
-        // Best effort: never leave the window stuck at the ticker's minimum height.
-        if (next) void win.setMinSize(new LogicalSize(320, 460)).catch(() => {});
-        useApp.setState({ error: 'Could not resize the widget.' });
-        return false;
-      }
+    if (next && view === 'home') rememberHome();
+    // Armed before the exit begins; the transition effect consumes the plan as
+    // the single focus writer for the whole exit.
+    if (!next) tickerExitFocus.current = { target: view === 'detail' ? 'centre' : 'ticker', attempts: 0 };
+    if (!(await setTickerMode(next))) {
+      tickerExitFocus.current = null;
+      return;
     }
-    setTicker(next);
-    if (!next)
-      requestAnimationFrame(() =>
-        root.current
-          ?.querySelector<HTMLElement>(
-            view === 'detail' ? '.match-centre > .centre-tabs [aria-selected="true"]' : '[aria-label="Ticker mode"]',
-          )
-          ?.focus({ preventScroll: true }),
-      );
-    return true;
   };
   // Clicking the ticker's match expands straight into that match.
   const openFromTicker = async () => {
     const match = tickerMatch;
-    if (!(await toggleTicker()) || !match) return;
+    if (!match) return;
+    tickerExitFocus.current = { target: 'centre', attempts: 0 };
+    if (!(await setTickerMode(false))) {
+      tickerExitFocus.current = null;
+      return;
+    }
     restoreFocus.current = matchButtonId(match.id);
     setSelected(match);
     setView('detail');
@@ -621,7 +726,15 @@ export default function App() {
       return;
     }
     // Single-key shortcuts never fire while typing, choosing, or inside a popover.
-    if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey || ticker) return;
+    if (
+      event.defaultPrevented ||
+      event.ctrlKey ||
+      event.altKey ||
+      event.metaKey ||
+      ticker ||
+      settings?.singleKeyShortcuts === false
+    )
+      return;
     if (
       event.target instanceof Element &&
       event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')
@@ -658,6 +771,9 @@ export default function App() {
     <main
       ref={root}
       onKeyDown={keyDown}
+      onFocusCapture={(event) => {
+        if (recoveryFocus.current && event.target !== recoveryFocus.current) recoveryFocus.current = null;
+      }}
       onContextMenu={contextMenu}
       className={
         'shell theme-' +
@@ -665,7 +781,7 @@ export default function App() {
         ' ' +
         (panelOpacity < 85 ? 'transparent-panel ' : '') +
         (settings?.compact ? 'compact-view ' : '') +
-        (settings?.reducedMotion ? 'reduced ' : '') +
+        ((settings?.reducedMotion ?? motionHint) ? 'reduced ' : '') +
         (ticker ? 'ticker-mode' : '')
       }
       style={{ '--panel-opacity': panelOpacity / 100 } as CSSProperties}
@@ -686,12 +802,15 @@ export default function App() {
             <button
               className="icon-button ticker-lock"
               aria-label="Lock ticker match"
-              aria-pressed={!!tickerPinned}
-              title={tickerPinned ? 'Unlock · automatically choose a match' : 'Lock this match in the ticker'}
+              aria-pressed={!!pinnedMatch}
+              title={pinnedMatch ? 'Unlock · automatically choose a match' : 'Lock this match in the ticker'}
               disabled={!tickerMatch}
-              onClick={() => setTickerPinned(tickerPinned ? null : tickerMatch)}
+              onClick={() => {
+                setTickerBrowseId(null);
+                setTickerPinned(pinnedMatch ? null : tickerMatch);
+              }}
             >
-              {tickerPinned ? <Lock size={15} /> : <Unlock size={15} />}
+              {pinnedMatch ? <Lock size={15} /> : <Unlock size={15} />}
             </button>
           )}
           <button
@@ -702,7 +821,7 @@ export default function App() {
                 : 'Always on top is off · keep widget above other windows'
             }
             disabled={!settings}
-            onClick={() => void toggleAlwaysOnTop()}
+            onClick={() => settings && void save({ alwaysOnTop: !settings.alwaysOnTop })}
             aria-label="Always on top"
             aria-pressed={!!settings?.alwaysOnTop}
           >
@@ -737,6 +856,8 @@ export default function App() {
       {ticker ? (
         <TickerView
           match={tickerMatch}
+          followedOnly={settings?.followedOnly}
+          feedError={tickerMatch ? null : feedUnavailable ? (error ?? 'Could not load matches.') : viewStatus.error}
           onExpand={() => void toggleTicker()}
           onOpen={() => void openFromTicker()}
           navigation={{
@@ -796,6 +917,7 @@ export default function App() {
                   <button
                     key={name}
                     aria-pressed={matchView === name}
+                    aria-description={count === undefined ? undefined : `${count} ${count === 1 ? 'match' : 'matches'}`}
                     className={count === 0 ? 'is-empty' : undefined}
                     title={
                       count === undefined
@@ -846,7 +968,7 @@ export default function App() {
                 Following only
               </button>
             </div>
-            {listError && !!sourceMatches?.length && (
+            {listError && !!matches.length && (
               <div className="offline-banner" role="status" title={listError}>
                 <span>
                   {historyView

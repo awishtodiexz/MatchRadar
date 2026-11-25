@@ -46,6 +46,67 @@ test('showing filtered-out matches returns keyboard focus to the first card', as
   await expect(page.getByRole('button', { name: /Match details:.*Arsenal.*Chelsea/ })).toBeFocused();
 });
 
+test('a failed live update offers one retry even with cached upcoming matches', async ({ page }) => {
+  const snapshot = structuredClone(mockSnapshot);
+  snapshot.matches = snapshot.matches.filter((match) => match.status === 'scheduled');
+  snapshot.leagueStatus = { 'eng.1': { scoreError: 'Score feed unavailable' } };
+  await installBridge(page, { snapshot });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Live', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Live status unavailable' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry', exact: true })).toHaveCount(1);
+});
+
+test('a delayed retry does not take focus back from a control the user moved to', async ({ page }) => {
+  await installBridge(page, { failures: { results: 1 }, resultsDelayMs: 500 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Results', exact: true }).click();
+  await page.getByRole('button', { name: 'Retry', exact: true }).click();
+  const following = page.getByRole('button', { name: 'Following only' });
+  await following.focus();
+  await expect(page.getByRole('button', { name: 'Retry', exact: true })).toHaveCount(0);
+  await expect(following).toBeFocused();
+});
+
+test('single-key shortcuts can be turned off without disabling normal controls or Escape', async ({ page }) => {
+  await open(page);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'App', exact: true }).click();
+  const shortcuts = page.getByRole('checkbox', { name: 'Single-key shortcuts' });
+  await shortcuts.press('Space');
+  await expect(shortcuts).not.toBeChecked();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('2');
+  await expect(page.getByRole('button', { name: 'All', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Live', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Live', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.evaluate(() =>
+    window.dispatchEvent(new CustomEvent('test:emit', { detail: { event: 'snapshot-updated' } })),
+  );
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'App', exact: true }).click();
+  await expect(shortcuts).not.toBeChecked();
+});
+
+test('a penalty result shows both scores and who won', async ({ page }) => {
+  const snapshot = structuredClone(mockSnapshot);
+  const match = snapshot.matches.find((match) => match.status === 'fulltime')!;
+  match.homeScore = 1;
+  match.awayScore = 1;
+  match.detail = 'PEN';
+  match.shootout = { home: 3, away: 4 };
+  await installBridge(page, { snapshot });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Results', exact: true }).click();
+  const result = page.locator(`[data-match-id="${match.id}"] .match-open`);
+  const outcome = `${match.away.name} won 4–3 on penalties`;
+  await expect(result).toContainText('3–4');
+  await expect(result).toHaveAccessibleDescription(new RegExp(outcome));
+  await result.click();
+  await expect(page.locator('.detail-score')).toContainText('1 – 1');
+  await expect(page.getByText(outcome, { exact: true })).toBeVisible();
+});
+
 test('startup says live status is being checked rather than unavailable', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 460 });
   await page.route('https://**/*', (route) => route.abort());

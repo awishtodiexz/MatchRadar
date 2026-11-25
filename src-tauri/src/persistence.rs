@@ -13,13 +13,39 @@ pub struct Loaded {
 }
 
 pub fn load(path: &Path) -> Result<Loaded, String> {
+    sweep_temps(path);
     load_with(&Disk, path)
 }
 
 /// Reset only proven corrupt state, after preserving every damaged copy.
 /// A read or recovery failure must never be treated as an empty installation.
 pub fn start_over(path: &Path) -> Result<Loaded, String> {
+    sweep_temps(path);
     start_over_with(&Disk, path)
+}
+
+// A save killed between temp creation and rename leaves <name>.tmp-<pid>-<n>
+// debris nothing else reclaims. Best-effort removal at launch; the .corrupt-
+// diagnostic copies are intentionally left alone.
+fn sweep_temps(path: &Path) {
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    let Some(prefix) = path.file_name().map(|name| {
+        let mut prefix = name.to_string_lossy().into_owned();
+        prefix.push_str(".tmp-");
+        prefix
+    }) else {
+        return;
+    };
+    let Ok(entries) = fs::read_dir(parent) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if entry.file_name().to_string_lossy().starts_with(&prefix) {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
 }
 fn start_over_with(storage: &impl Storage, path: &Path) -> Result<Loaded, String> {
     let backup_path = sibling(path, ".bak");
@@ -31,8 +57,14 @@ fn start_over_with(storage: &impl Storage, path: &Path) -> Result<Loaded, String
         );
     }
     for (file, existing) in [(path, &primary), (backup_path.as_path(), &backup)] {
-        if let Existing::Invalid(bytes, _) = existing {
-            archive(storage, file, bytes)?;
+        match existing {
+            Existing::Invalid(bytes, _) => {
+                archive(storage, file, bytes)?;
+            }
+            Existing::Oversized => {
+                move_aside(storage, file)?;
+            }
+            _ => {}
         }
     }
     let snapshot = Snapshot::default();
@@ -45,10 +77,27 @@ fn start_over_with(storage: &impl Storage, path: &Path) -> Result<Loaded, String
     })
 }
 
-pub fn save(path: &Path, snapshot: &Snapshot) -> Result<(), String> {
-    let bytes =
+fn snapshot_bytes(snapshot: &Snapshot) -> Result<Vec<u8>, String> {
+    let mut bytes =
         serde_json::to_vec(snapshot).map_err(|e| format!("Serialize MatchRadar state: {e}"))?;
-    save_with(&Disk, path, &bytes)
+    if bytes.len() as u64 > MAX_STATE_BYTES {
+        // The details cache dominates state size; trimming it is better than
+        // writing a state the read cap would refuse at the next launch.
+        let mut trimmed = snapshot.clone();
+        trimmed.detail_cache.truncate(8);
+        bytes = serde_json::to_vec(&trimmed)
+            .map_err(|e| format!("Serialize MatchRadar state: {e}"))?;
+    }
+    if bytes.len() as u64 > MAX_STATE_BYTES {
+        return Err(format!(
+            "MatchRadar state exceeds {MAX_STATE_BYTES} bytes; nothing was written"
+        ));
+    }
+    Ok(bytes)
+}
+
+pub fn save(path: &Path, snapshot: &Snapshot) -> Result<(), String> {
+    save_with(&Disk, path, &snapshot_bytes(snapshot)?)
 }
 
 // A small seam for deterministic read/write/replace failures, without OS permission tricks.
@@ -56,6 +105,7 @@ trait Storage {
     fn read(&self, path: &Path) -> io::Result<Vec<u8>>;
     fn publish(&self, path: &Path, bytes: &[u8]) -> io::Result<()>;
     fn archive(&self, path: &Path, bytes: &[u8]) -> io::Result<PathBuf>;
+    fn rename(&self, from: &Path, to: &Path) -> io::Result<()>;
 }
 
 // The byte buffers are short-lived around a single read; boxing would complicate
@@ -65,6 +115,9 @@ enum Existing {
     Missing,
     Valid(Vec<u8>, Snapshot),
     Invalid(Vec<u8>, String),
+    // Over the read cap: never materialized, so it can only be moved, not parsed
+    // or archived by bytes.
+    Oversized,
 }
 
 fn sibling(path: &Path, suffix: &str) -> PathBuf {
@@ -77,19 +130,42 @@ fn validate(bytes: &[u8]) -> Result<Snapshot, String> {
     serde_json::from_slice(bytes).map_err(|e| e.to_string())
 }
 
+/// Every other external input is size-bounded; the state file is the last one.
+/// Refuse to materialize or parse anything beyond a generous snapshot size.
+const MAX_STATE_BYTES: u64 = 8 * 1024 * 1024;
+
 fn inspect(storage: &impl Storage, path: &Path) -> Result<Existing, String> {
     match storage.read(path) {
+        Ok(bytes) if bytes.len() as u64 > MAX_STATE_BYTES => Ok(Existing::Oversized),
         Ok(bytes) => Ok(match validate(&bytes) {
             Ok(snapshot) => Existing::Valid(bytes, snapshot),
             Err(error) => Existing::Invalid(bytes, error),
         }),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Existing::Missing),
+        // Disk::read reports an oversized file this way without materializing it.
+        Err(error) if error.kind() == io::ErrorKind::InvalidData => Ok(Existing::Oversized),
         // Permission failures are not a new installation or evidence of corruption.
         Err(error) => Err(format!(
             "Read MatchRadar state {}: {error}; no defaults were written",
             path.display()
         )),
     }
+}
+
+// An oversized file was never read, so it is preserved by rename, not by bytes.
+fn move_aside(storage: &impl Storage, path: &Path) -> Result<PathBuf, String> {
+    let target = sibling(
+        path,
+        &format!(
+            ".corrupt-{}-{}",
+            std::process::id(),
+            NEXT_FILE.fetch_add(1, Ordering::Relaxed)
+        ),
+    );
+    storage
+        .rename(path, &target)
+        .map(|_| target.clone())
+        .map_err(|e| format!("Preserve oversized state {}: {e}", path.display()))
 }
 
 fn archive(storage: &impl Storage, path: &Path, bytes: &[u8]) -> Result<PathBuf, String> {
@@ -125,6 +201,10 @@ fn load_with(storage: &impl Storage, path: &Path) -> Result<Loaded, String> {
             preserved.display()
         );
     }
+    if let Existing::Oversized = &primary {
+        let preserved = move_aside(storage, path)?;
+        diagnosis = format!("Oversized primary; moved to {}. ", preserved.display());
+    }
     match backup {
         Existing::Valid(bytes, snapshot) => {
             // Restore without rotating the damaged primary into the valid backup.
@@ -149,6 +229,10 @@ fn load_with(storage: &impl Storage, path: &Path) -> Result<Loaded, String> {
             let preserved = archive(storage, &backup_path, &bytes)?;
             Err(format!("{diagnosis}Invalid backup ({error}); preserved at {}; recovery required; no defaults were written", preserved.display()))
         }
+        Existing::Oversized => {
+            let preserved = move_aside(storage, &backup_path)?;
+            Err(format!("{diagnosis}Oversized backup; moved to {}; recovery required; no defaults were written", preserved.display()))
+        }
     }
 }
 
@@ -168,13 +252,24 @@ fn save_with(storage: &impl Storage, path: &Path, bytes: &[u8]) -> Result<(), St
             if let Existing::Invalid(damaged, _) = &backup {
                 archive(storage, &backup_path, damaged)?;
             }
+            if let Existing::Oversized = &backup {
+                move_aside(storage, &backup_path)?;
+            }
             // Only bytes that deserialize successfully may replace the backup.
             publish(storage, &backup_path, previous)?;
         }
-        Existing::Missing => {
+        Existing::Missing | Existing::Oversized => {
+            if let Existing::Oversized = &primary {
+                move_aside(storage, path)?;
+            }
             match backup {
                 Existing::Missing => publish(storage, &backup_path, bytes)?,
                 Existing::Valid(_, _) => (), // Preserve existing recovery data.
+                Existing::Oversized => {
+                    // A never-loadable backup is worse than a fresh good copy.
+                    move_aside(storage, &backup_path)?;
+                    publish(storage, &backup_path, bytes)?;
+                }
                 Existing::Invalid(_, _) => {
                     return Err(format!(
                     "Primary state missing but backup {} is damaged; restart to attempt recovery",
@@ -236,6 +331,12 @@ fn write_synced(file: &mut File, bytes: &[u8]) -> io::Result<()> {
 
 impl Storage for Disk {
     fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
+        if fs::metadata(path)?.len() > MAX_STATE_BYTES {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "state file exceeds the size limit",
+            ));
+        }
         fs::read(path)
     }
     fn publish(&self, path: &Path, bytes: &[u8]) -> io::Result<()> {
@@ -248,6 +349,9 @@ impl Storage for Disk {
         // Keep even a partial diagnostic copy on failure; the original is still present.
         write_synced(&mut file, bytes)?;
         Ok(name)
+    }
+    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        fs::rename(from, to)
     }
 }
 
@@ -290,6 +394,16 @@ mod tests {
                 .borrow_mut()
                 .insert(archived.clone(), bytes.into());
             Ok(archived)
+        }
+        fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+            let mut files = self.files.borrow_mut();
+            match files.remove(from) {
+                Some(bytes) => {
+                    files.insert(to.into(), bytes);
+                    Ok(())
+                }
+                None => Err(io::ErrorKind::NotFound.into()),
+            }
         }
     }
     fn primary() -> &'static Path {
@@ -557,15 +671,21 @@ mod tests {
     }
 
     #[test]
-    fn abandoned_temporary_files_are_not_promoted_or_overwritten() {
+    fn abandoned_temporary_files_are_swept_at_launch_but_archives_survive() {
         let dir = Directory::new();
         let path = dir.primary();
         fs::write(&path, old()).unwrap();
-        let orphan = sibling(&path, ".tmp-abandoned");
+        let orphan = sibling(&path, ".tmp-4242-0");
         fs::write(&orphan, b"partial temp").unwrap();
+        let other = dir.0.join("unrelated.tmp-1-1");
+        fs::write(&other, b"not state debris").unwrap();
+        let archive = sibling(&path, ".corrupt-4242-0");
+        fs::write(&archive, b"diagnostic").unwrap();
         assert!(load(&path).unwrap().snapshot.settings.compact);
+        assert!(!orphan.exists(), "temp debris is reclaimed at launch");
+        assert_eq!(fs::read(&other).unwrap(), b"not state debris");
+        assert_eq!(fs::read(&archive).unwrap(), b"diagnostic");
         save(&path, &Snapshot::default()).unwrap();
-        assert_eq!(fs::read(&orphan).unwrap(), b"partial temp");
         assert_eq!(fs::read(sibling(&path, ".bak")).unwrap(), old());
     }
 
@@ -636,5 +756,78 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), old());
         assert_eq!(fs::read(sibling(&path, ".bak")).unwrap(), next());
         assert!(load(&path).unwrap().snapshot.settings.compact);
+    }
+
+    #[test]
+    fn oversized_state_is_moved_aside_not_parsed_and_backup_can_recover_it() {
+        let fs = Memory::default();
+        put(&fs, primary(), &vec![b' '; (MAX_STATE_BYTES + 1) as usize]);
+        put(&fs, &sibling(primary(), ".bak"), &old());
+        let loaded = load_with(&fs, primary()).unwrap();
+        assert_eq!(loaded.snapshot.settings.favorites, ["370"]);
+        let notice = loaded.notice.unwrap();
+        assert!(notice.contains("Oversized") && notice.contains("Recovered"));
+        // The oversized bytes were preserved by rename, never materialized.
+        assert!(fs.read(primary()).is_ok());
+        assert!(fs
+            .files
+            .borrow()
+            .iter()
+            .any(|(p, b)| p.to_string_lossy().contains(".corrupt-")
+                && b.len() as u64 > MAX_STATE_BYTES));
+        save_with(&fs, primary(), &next()).unwrap();
+        assert_eq!(fs.read(&sibling(primary(), ".bak")).unwrap(), old());
+    }
+
+    #[test]
+    fn oversized_primary_without_backup_is_a_hard_error_not_silent_defaults() {
+        let fs = Memory::default();
+        put(&fs, primary(), &vec![b' '; (MAX_STATE_BYTES + 1) as usize]);
+        let error = load_with(&fs, primary()).err().unwrap();
+        assert!(error.contains("Oversized") && error.contains("No backup"));
+        // start_over is the documented escape: it can reset what load could not.
+        put(&fs, primary(), &vec![b' '; (MAX_STATE_BYTES + 1) as usize]);
+        assert!(start_over_with(&fs, primary()).is_ok());
+        assert!(load_with(&fs, primary()).is_ok());
+    }
+
+    #[test]
+    fn an_oversized_snapshot_saves_by_trimming_the_detail_cache_first() {
+        // valid_cached bounds every field; the detail cache only scales through
+        // events, each carrying up to 2000 chars of text.
+        let detail = |id: usize, events: usize| {
+            let text = "x".repeat(2000);
+            serde_json::from_value::<crate::details::Details>(serde_json::json!({
+                "matchId": id.to_string(),
+                "updatedAt": "2026-10-28T12:00:00Z",
+                "error": null,
+                "stale": false,
+                "events": (0..events)
+                    .map(|n| serde_json::json!({
+                        "id": format!("e{n}"),
+                        "text": text,
+                        "kind": "comment",
+                        "minute": "1'",
+                        "seconds": 0.0,
+                        "period": 1
+                    }))
+                    .collect::<Vec<_>>(),
+                "statistics": [],
+                "players": []
+            }))
+            .unwrap()
+        };
+        let snapshot = |events: usize| Snapshot {
+            detail_cache: (0..24).map(|i| detail(i, events)).collect(),
+            ..Default::default()
+        };
+        // 24 entries x ~620KB serializes over the cap; the trimmed 8 fit under it.
+        let bytes = snapshot_bytes(&snapshot(300)).unwrap();
+        assert!(bytes.len() as u64 <= MAX_STATE_BYTES);
+        let saved: Snapshot = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(saved.detail_cache.len(), 8);
+        // Still over the cap after trimming: nothing may be written at all.
+        let error = snapshot_bytes(&snapshot(900)).err().unwrap();
+        assert!(error.contains("exceeds"));
     }
 }

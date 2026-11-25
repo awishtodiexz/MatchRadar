@@ -135,8 +135,18 @@ fn apply_league(
         matches.retain(|m| provider::recent_result(m, now.date_naive()));
         for m in &mut matches {
             m.score_updated_at = Some(now.to_rfc3339());
+            // Result batches can omit shootoutScore where the scoreboard had it;
+            // keep a known tally instead of replacing it with None.
+            if m.shootout.is_none() && m.status == "fulltime" {
+                if let Some(previous) = existing.iter().find(|p| p.id == m.id && p.kickoff == m.kickoff)
+                {
+                    m.shootout = previous.shootout;
+                }
+            }
         }
-        let matches = if partial {
+        // A complete-but-empty batch is ambiguous, not a purge: a CDN or region
+        // glitch must not erase accumulated history and stamp a fresh timestamp.
+        let matches = if partial || (matches.is_empty() && !existing.is_empty()) {
             provider::merge(existing, matches)
         } else {
             matches
@@ -529,6 +539,78 @@ mod tests {
                 .unwrap()
                 .score_updated_at,
             Some(now.to_rfc3339())
+        );
+    }
+    #[test]
+    fn complete_empty_batch_does_not_erase_accumulated_history() {
+        let now = DateTime::parse_from_rfc3339("2026-10-29T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut s = Snapshot::default();
+        let mut m = crate::demo::mock().remove(4);
+        m.id = "keep".into();
+        m.kickoff = "2026-10-28T20:00:00Z".into();
+        apply_league(
+            &mut s,
+            Competition::PremierLeague,
+            provider::FetchOutcome {
+                matches: Some(vec![m]),
+                error: None,
+            },
+            now,
+        );
+        assert_eq!(s.recent_results.len(), 1);
+        // A successful-but-empty batch is ambiguous (CDN/region glitch), not a
+        // purge: history must survive and the retry timestamp is still stamped.
+        apply_league(
+            &mut s,
+            Competition::PremierLeague,
+            provider::FetchOutcome {
+                matches: Some(vec![]),
+                error: None,
+            },
+            now + Duration::hours(1),
+        );
+        assert_eq!(s.recent_results.len(), 1);
+        assert_eq!(s.recent_results[0].id, "keep");
+    }
+    #[test]
+    fn results_keep_a_known_shootout_tally_when_the_batch_omits_it() {
+        let now = DateTime::parse_from_rfc3339("2026-10-29T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut s = Snapshot::default();
+        let mut m = crate::demo::mock().remove(4);
+        m.id = "pen".into();
+        m.kickoff = "2026-10-28T20:00:00Z".into();
+        m.status = "fulltime".into();
+        m.detail = "Full time".into();
+        m.home_score = Some(1);
+        m.away_score = Some(1);
+        m.shootout = Some(crate::model::Shootout { home: 4, away: 3 });
+        apply_league(
+            &mut s,
+            Competition::PremierLeague,
+            provider::FetchOutcome {
+                matches: Some(vec![m.clone()]),
+                error: None,
+            },
+            now,
+        );
+        let mut stripped = m;
+        stripped.shootout = None;
+        apply_league(
+            &mut s,
+            Competition::PremierLeague,
+            provider::FetchOutcome {
+                matches: Some(vec![stripped]),
+                error: None,
+            },
+            now + Duration::hours(1),
+        );
+        assert_eq!(
+            s.recent_results.iter().find(|m| m.id == "pen").unwrap().shootout,
+            Some(crate::model::Shootout { home: 4, away: 3 })
         );
     }
 }

@@ -176,13 +176,15 @@ describe('native snapshot and preference ordering', () => {
       error: 'Partial feed failure',
       settings: { alwaysOnTop: true, theme: 'light' },
     });
+    // The queued save waits on the reconcile read the failure dispatched: a
+    // transport error can hide a persisted write, so merging on the stale
+    // confirmed state could overwrite the change that did persist (R4-FE-01).
+    await vi.waitFor(() => expect(reads).toHaveLength(2));
+    reads[1].resolve({ ...fresh(), settings: { ...initial().settings, alwaysOnTop: false } });
     await vi.waitFor(() => expect(writes).toHaveLength(2));
-    expect(writes[1].settings.alwaysOnTop).toBe(true);
+    expect(writes[1].settings.alwaysOnTop).toBe(false);
     writes[1].task.resolve(writes[1].settings);
     expect(await later).toBe(true);
-    // The failure reconciliation was started before the later successful save.
-    // It may update feed data, but cannot undo that save's preferences.
-    reads[1].resolve(fresh());
     await vi.waitFor(() => expect(store.getState().snapshot?.settings.theme).toBe('light'));
     expect(store.getState().error).toMatch(/Could not save/);
   });

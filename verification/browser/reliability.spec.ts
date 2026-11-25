@@ -281,6 +281,45 @@ test('switching competition in Results shows a pending state instead of a false 
   await expect(page.getByText('No recent results')).toBeVisible();
 });
 
+test('a competition change while the list is unmounted resets the scroll bookmark', async ({ page }) => {
+  const snapshot = largeSnapshot(60);
+  await open(page, { snapshot });
+  const list = page.locator('.match-list');
+  await expect(page.locator('.match-card').first()).toBeVisible();
+  await list.evaluate((element) => {
+    element.scrollTop = 300;
+  });
+  await expect(list).toHaveJSProperty('scrollTop', 300);
+
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  // A pushed snapshot can carry a new competitionView while the list is not
+  // mounted; the bookmark for the old list must not strand the new one.
+  const changed = structuredClone(snapshot);
+  changed.settings = { ...changed.settings, competitionView: 'championsLeague' };
+  await pushSnapshot(page, changed);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.match-list')).toHaveJSProperty('scrollTop', 0);
+});
+
+test('collapsing to the ticker and expanding restores the list scroll bookmark', async ({ page }) => {
+  const snapshot = largeSnapshot(60);
+  await open(page, { snapshot });
+  const list = page.locator('.match-list');
+  await expect(page.locator('.match-card').first()).toBeVisible();
+  await list.evaluate((element) => {
+    element.scrollTop = 300;
+  });
+  await expect(list).toHaveJSProperty('scrollTop', 300);
+
+  // home->ticker->home never changes `view`, so the restore pass must key on
+  // the ticker transition itself or the recreated list mounts at the top.
+  const ticker = page.getByRole('button', { name: 'Ticker mode' });
+  await ticker.click();
+  await expect(page.locator('.ticker')).toBeVisible();
+  await ticker.click();
+  await expect(page.locator('.match-list')).toHaveJSProperty('scrollTop', 300);
+});
+
 test('a notification for a match no longer cached explains the gap and keeps the widget usable', async ({ page }) => {
   await open(page, { notificationTarget: { requestId: 7, matchId: 'removed-fixture', match: null } });
   await expect(errorBanner(page)).toHaveText(/no longer in the local fixture cache/);

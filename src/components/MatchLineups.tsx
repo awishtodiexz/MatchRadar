@@ -186,7 +186,9 @@ function LineupPitch({
       role="group"
       aria-label={`${team.name} starting XI at kickoff`}
       onKeyDown={(event) => {
-        if (event.key === 'Escape') {
+        // Only swallow Escape when it dismisses an inspected player; otherwise it
+        // must bubble so "Esc = back" still works from inside the pitch.
+        if (event.key === 'Escape' && inspected) {
           setInspected(null);
           event.stopPropagation();
         }
@@ -245,7 +247,12 @@ function LineupPitch({
         </div>
       ))}
       {inspected && (
-        <div className="pitch-inspection" id={inspectionId}>
+        // The inspection card anchors to the bottom; flip it up when inspecting
+        // the goalkeeper row so it does not cover the player being described.
+        <div
+          className={'pitch-inspection' + (lines[lines.length - 1].includes(inspected) ? ' pitch-inspection-top' : '')}
+          id={inspectionId}
+        >
           <strong>{inspected.name}</strong>
           <span>
             #{inspected.jersey || '–'} · {inspected.position || 'Position unavailable'}

@@ -64,6 +64,7 @@ export function largeSnapshot(count = 240, now = new Date('2026-10-29T12:00:00Z'
       alwaysOnTop: true,
       startHidden: false,
       reducedMotion: false,
+      singleKeyShortcuts: true,
       opacity: 96,
       theme: 'dark',
       competitionView: 'both',

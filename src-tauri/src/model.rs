@@ -163,6 +163,8 @@ pub struct Match {
     pub away: Team,
     pub home_score: Option<u32>,
     pub away_score: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shootout: Option<Shootout>,
     pub kickoff: String,
     pub status: String,
     pub detail: String,
@@ -178,6 +180,12 @@ pub struct Match {
     /// Missing in saved Premier League state, which defaults to that competition.
     #[serde(default)]
     pub league: Competition,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Shootout {
+    pub home: u32,
+    pub away: u32,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
@@ -213,6 +221,7 @@ pub struct Settings {
     pub always_on_top: bool,
     pub start_hidden: bool,
     pub reduced_motion: bool,
+    pub single_key_shortcuts: bool,
     pub theme: Theme,
     #[serde(deserialize_with = "opacity")]
     pub opacity: u8,
@@ -238,6 +247,7 @@ impl Default for Settings {
             always_on_top: true,
             start_hidden: false,
             reduced_motion: false,
+            single_key_shortcuts: true,
             theme: Theme::Dark,
             opacity: 96,
             competition_view: CompetitionView::PremierLeague,
@@ -287,16 +297,16 @@ impl ExpandedSize {
         }
     }
     pub fn from_physical(width: u32, height: u32, scale: f64) -> Option<Self> {
+        Self::from_physical_unbounded(width, height, scale).map(Self::bounded)
+    }
+    pub fn from_physical_unbounded(width: u32, height: u32, scale: f64) -> Option<Self> {
         if width == 0 || height == 0 || !scale.is_finite() || scale <= 0.0 {
             return None;
         }
-        Some(
-            Self {
-                width: width as f64 / scale,
-                height: height as f64 / scale,
-            }
-            .bounded(),
-        )
+        Some(Self {
+            width: width as f64 / scale,
+            height: height as f64 / scale,
+        })
     }
 }
 
@@ -428,8 +438,13 @@ impl Snapshot {
     }
 
     /// Older saves stored freshness globally; copy it to the Premier League entry
-    /// once so per-competition status starts from known values.
+    /// once so per-competition status starts from known values. A snapshot that
+    /// already has per-league status is post-migration: its globals are combined
+    /// aggregates and must not be mistaken for Premier League state.
     pub fn migrate_competition_state(&mut self) {
+        if !self.league_status.is_empty() {
+            return;
+        }
         let has_legacy = self.fixture_updated_at.is_some()
             || self.updated_at.is_some()
             || self.fixture_error.is_some()

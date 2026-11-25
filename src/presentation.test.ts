@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { dateLabel, matchButtonId, resultLabel, timeLabel, timeParts } from './presentation';
+import {
+  dateLabel,
+  matchButtonId,
+  resultLabel,
+  resultWinner,
+  shootoutResult,
+  timeLabel,
+  timeParts,
+} from './presentation';
 import { mockMatches } from './test-fixtures/fixtures';
 
 // Persisted state is validated structurally, not semantically: a valid JSON
@@ -41,4 +49,43 @@ it('labels completed results by their outcome', () => {
   ]) {
     expect(resultLabel({ ...match, detail })).toBe(expected);
   }
+});
+
+describe('shootout presentation', () => {
+  const decided = {
+    ...mockMatches[0],
+    status: 'fulltime' as const,
+    detail: 'FT-Pens',
+    homeScore: 1,
+    awayScore: 1,
+    shootout: { home: 5, away: 4 },
+  };
+  it('labels and resolves a shootout winner from the tally', () => {
+    expect(resultLabel(decided)).toBe('PEN');
+    expect(shootoutResult(decided)).toEqual({
+      side: 'home',
+      tally: '5–4',
+      outcome: `${decided.home.name} won 5–4 on penalties`,
+    });
+    expect(resultWinner(decided)).toBe('home');
+  });
+  it('resolves an away shootout win', () => {
+    const away = { ...decided, shootout: { home: 3, away: 4 } };
+    expect(shootoutResult(away)).toEqual({
+      side: 'away',
+      tally: '3–4',
+      outcome: `${away.away.name} won 4–3 on penalties`,
+    });
+    expect(resultWinner(away)).toBe('away');
+  });
+  it('claims no shootout winner without a decided tally, and still labels the detail', () => {
+    expect(shootoutResult({ ...decided, shootout: undefined })).toBeNull();
+    expect(shootoutResult({ ...decided, shootout: { home: 4, away: 4 } })).toBeNull();
+    expect(shootoutResult({ ...decided, status: 'live' as const })).toBeNull();
+    expect(resultLabel({ ...decided, shootout: undefined })).toBe('PEN');
+    expect(resultWinner({ ...decided, shootout: undefined })).toBeNull();
+    // Regulation results still resolve from the scoreline when no shootout exists.
+    expect(resultWinner({ ...decided, detail: 'FT', shootout: undefined, homeScore: 2 })).toBe('home');
+    expect(resultWinner({ ...decided, status: 'live' as const })).toBeNull();
+  });
 });

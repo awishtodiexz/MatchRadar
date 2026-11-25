@@ -1,5 +1,29 @@
 use super::*;
 #[test]
+fn a_dense_summary_is_capped_at_the_event_limit_not_rejected() {
+    let mut v: Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/summary-shootout.json")).unwrap();
+    let events: Vec<Value> = (0..1000)
+        .map(|i| {
+            serde_json::json!({
+                "id": format!("e{i}"),
+                "type": {"type": "yellow-card"},
+                "clock": {"value": i as f64, "displayValue": format!("{i}'")},
+                "period": {"number": 1},
+                "team": {"id": "359"},
+                "text": "Card"
+            })
+        })
+        .collect();
+    v["keyEvents"] = Value::Array(events);
+    v["commentary"] = serde_json::json!([
+        {"sequence": 1, "time": {"value": 3000.0, "displayValue": "50'"}, "text": "Late commentary."}
+    ]);
+    let d = normalize(&v, "401862897", Competition::ChampionsLeague).unwrap();
+    assert!(d.events.len() <= 1000);
+    assert!(valid_cached(&d));
+}
+#[test]
 fn incidents_keep_card_reasons_names_and_substitution_context() {
     assert_eq!(
         event_participants(

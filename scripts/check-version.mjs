@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Keep package.json, Cargo.toml and tauri.conf.json on one release version.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -26,3 +26,14 @@ if (!cargoVersion || distinct.size !== 1) {
   process.exit(1);
 }
 console.log(`Versions agree: ${pkg.version}`);
+
+// Shell-redirect artifacts keep landing at the repo root ($null, 3.07,
+// font-weight). An extensionless root file that is not LICENSE is always junk.
+const strays = readdirSync(root, { withFileTypes: true })
+  .filter((entry) => entry.isFile() && !entry.name.includes('.'))
+  .map((entry) => entry.name)
+  .filter((name) => name !== 'LICENSE');
+if (strays.length) {
+  console.error(`Stray root files (delete them): ${strays.join(', ')}`);
+  process.exit(1);
+}

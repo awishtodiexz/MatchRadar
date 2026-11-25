@@ -69,6 +69,26 @@ it('keeps the expand affordance available without a match', () => {
   expect(onExpand).toHaveBeenCalledTimes(1);
 });
 
+it('names the card with the visible codes and the shootout outcome', () => {
+  const pens: Match = {
+    ...live,
+    status: 'fulltime',
+    detail: 'Full time',
+    shootout: { home: 4, away: 3 },
+  };
+  render(<TickerView match={pens} onExpand={vi.fn()} />);
+  // Content-derived name: visible text + the descriptive sr-only sentence, so
+  // label-content-name-mismatch cannot fire on an author-provided label.
+  const card = screen.getByRole('button', {
+    name: /^ARS\b.*Arsenal \(ARS\) versus Chelsea \(CHE\), score 2 – 1, Full time, Arsenal won 4–3 on penalties\. Expand MatchRadar$/,
+  });
+  // The leading sentence boundary is pinned separately: it is what keeps the
+  // sr-only sentence a word boundary away from the visible text for axe 2.5.3.
+  expect(card.textContent).toContain('. Arsenal (ARS) versus');
+  expect(card.textContent).toContain('ARS');
+  expect(card.textContent).toContain('CHE');
+});
+
 it('shows that a pinned scheduled game is awaiting a provider update after kickoff', () => {
   render(
     <TickerView

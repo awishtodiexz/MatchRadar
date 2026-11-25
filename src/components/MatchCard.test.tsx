@@ -59,6 +59,31 @@ it('offers the same explicit alert choices from the list and details', () => {
   expect(save).toHaveBeenLastCalledWith({ matchAlerts: {} });
 });
 
+it('lets Tab leave the context menu in the pressed direction', () => {
+  const next = mockMatches.find((match) => match.id !== mockMatches[2].id) ?? mockMatches[0];
+  render(
+    <>
+      <MatchCard match={mockMatches[2]} settings={defaults} onOpen={() => {}} />
+      <MatchCard match={next} settings={defaults} onOpen={() => {}} />
+    </>,
+  );
+  const open = () => {
+    fireEvent.contextMenu(screen.getAllByRole('button', { name: /Match details:/ })[0]);
+    const menu = screen.getByRole('menu');
+    within(menu).getAllByRole('menuitem')[0].focus();
+    return menu;
+  };
+  // Forward Tab dismisses and lands on the first control after the menu: the
+  // next card's open button, not document.body and not the card just passed.
+  fireEvent.keyDown(within(open()).getAllByRole('menuitem')[0], { key: 'Tab' });
+  expect(screen.queryByRole('menu')).toBeNull();
+  expect((document.activeElement as HTMLElement | null)?.id).toBe(`match-open-${next.id}`);
+  // Shift+Tab dismisses back onto the card control just before the menu.
+  fireEvent.keyDown(within(open()).getAllByRole('menuitem')[0], { key: 'Tab', shiftKey: true });
+  expect(screen.queryByRole('menu')).toBeNull();
+  expect((document.activeElement as HTMLElement | null)?.className).toContain('alert-trigger');
+});
+
 it('hides alert controls for completed and cancelled matches', () => {
   const match = mockMatches[2];
   const { rerender } = render(<MatchAlertsButton match={{ ...match, status: 'fulltime' }} settings={defaults} />);

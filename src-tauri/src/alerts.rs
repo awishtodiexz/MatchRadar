@@ -142,8 +142,11 @@ pub fn plan(snapshot: &mut Snapshot, now: DateTime<Utc>) -> Vec<(String, String)
                     && fresh_score
                     // A late goal can first appear in the same confirmed response
                     // that marks full-time. Already-finished baselines stay excluded.
-                    && matches!(m.status.as_str(), "live" | "halftime" | "fulltime")
-                    && matches!(previous.status.as_str(), "live" | "halftime")
+                    && matches!(
+                        m.status.as_str(),
+                        "live" | "halftime" | "fulltime" | "suspended"
+                    )
+                    && matches!(previous.status.as_str(), "live" | "halftime" | "suspended")
                     // An awarded forfeit score is not a goal.
                     && m.detail != crate::provider::FORFEIT_DETAIL
                 {

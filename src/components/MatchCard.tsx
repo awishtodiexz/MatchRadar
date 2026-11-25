@@ -1,11 +1,11 @@
-import { Bell, BellOff, BellRing, ChevronRight, ClipboardCopy, PanelRightOpen, Star } from 'lucide-react';
+import { Bell, BellOff, BellRing, ClipboardCopy, PanelRightOpen, Star } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useApp } from '../store';
 import { isLive } from '../fixtures';
 import type { Match, Settings } from '../types';
 import { Badge } from './WidgetUi';
-import { closedNote, resultLabel, matchButtonId, timeLabel } from '../presentation';
+import { closedNote, resultLabel, resultWinner, shootoutResult, matchButtonId, timeLabel } from '../presentation';
 import { awaitingKickoffUpdate, countdownLabel, shortCountdown } from '../countdown';
 
 const clockText = (detail: string) => {
@@ -85,21 +85,16 @@ export function MatchCard({
   const openButton = useRef<HTMLButtonElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const awaitingUpdate = match.status === 'scheduled' && awaitingKickoffUpdate(match.kickoff, now);
+  const shootout = shootoutResult(match);
   const cardDetail =
     (match.status === 'scheduled'
       ? `Kick-off ${timeLabel(match.kickoff)}${awaitingUpdate ? ', awaiting match update' : ''}`
       : `${match.homeScore ?? '–'} to ${match.awayScore ?? '–'}, ${isLive(match) ? (match.status === 'halftime' ? 'half-time' : clockText(match.detail || 'live')) : match.detail || match.status}${match.scoreStale ? ' (saved)' : ''}`) +
     (showCompetition ? `, ${match.league === 'championsLeague' ? 'Champions League' : 'Premier League'}` : '') +
+    (shootout ? `, ${shootout.outcome}` : '') +
     (scoreChange ? ', score just changed' : '');
-  const loser =
-    match.status === 'fulltime' &&
-    match.homeScore != null &&
-    match.awayScore != null &&
-    match.homeScore !== match.awayScore
-      ? match.homeScore < match.awayScore
-        ? match.home.id
-        : match.away.id
-      : null;
+  const winner = resultWinner(match);
+  const loser = winner ? match[winner === 'home' ? 'away' : 'home'].id : null;
   const openMenu = (event: ReactMouseEvent) => {
     event.preventDefault();
     // The keyboard context-menu key reports 0,0; anchor to the card instead.
@@ -138,6 +133,11 @@ export function MatchCard({
                   ? resultLabel(match)
                   : match.detail || match.status}
           </span>
+          {shootout && (
+            <small title={shootout.outcome} aria-hidden="true">
+              {shootout.tally}
+            </small>
+          )}
           {match.scoreStale && <small>Saved</small>}
           {awaitingUpdate && <small>Awaiting update</small>}
           {showCompetition && (
@@ -187,7 +187,6 @@ export function MatchCard({
             )}
           </div>
         </div>
-        <ChevronRight size={13} className="row-arrow" aria-hidden="true" />
       </button>
       <span id={detailId} className="sr-only">
         {cardDetail}
@@ -212,7 +211,7 @@ export function MatchCard({
 const scoreLine = (match: Match) =>
   match.status === 'scheduled'
     ? `${match.home.name} v ${match.away.name}, ${match.competition}, kick-off ${timeLabel(match.kickoff)}`
-    : `${match.home.name} ${match.homeScore ?? '–'}–${match.awayScore ?? '–'} ${match.away.name} (${match.status === 'fulltime' ? resultLabel(match) : isLive(match) ? (match.status === 'halftime' ? 'HT' : clockText(match.detail || 'live')) : match.detail || match.status}), ${match.competition}`;
+    : `${match.home.name} ${match.homeScore ?? '–'}–${match.awayScore ?? '–'} ${match.away.name} (${shootoutResult(match)?.outcome ?? (match.status === 'fulltime' ? resultLabel(match) : isLive(match) ? (match.status === 'halftime' ? 'HT' : clockText(match.detail || 'live')) : match.detail || match.status)}), ${match.competition}`;
 
 /** Right-click (or context-menu key) shortcuts for one card: open, follow either club, copy the score. */
 function CardMenu({
@@ -295,10 +294,28 @@ function CardMenu({
       onKeyDown={(event) => {
         const entries = [...(menu.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
         const index = entries.indexOf(document.activeElement as HTMLElement);
-        if (event.key === 'Escape' || event.key === 'Tab') {
+        if (event.key === 'Escape') {
           event.preventDefault();
           event.stopPropagation();
           close(true);
+        } else if (event.key === 'Tab') {
+          // Menus are not focus traps: Tab dismisses and carries focus in the
+          // pressed direction — forward past the card, backward onto the
+          // control before the menu.
+          event.preventDefault();
+          event.stopPropagation();
+          close(false);
+          const order = [
+            ...document.querySelectorAll<HTMLElement>('button:not([disabled]), select, input, [tabindex="0"]'),
+          ];
+          const index = entries[0] ? order.indexOf(entries[0]) : -1;
+          const target =
+            index === -1
+              ? menu.current?.closest('.match-card')?.querySelector<HTMLElement>('.alert-trigger, .match-open')
+              : event.shiftKey
+                ? order[Math.max(0, index - 1)]
+                : order[index + entries.length];
+          target?.focus({ preventScroll: true });
         } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
           event.preventDefault();
           entries[(index + (event.key === 'ArrowDown' ? 1 : entries.length - 1)) % entries.length]?.focus();

@@ -33,7 +33,9 @@ use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_window_state::{StateFlags, WindowExt};
-use window::{ensure_visible, logical_size, resize, rollback_window};
+use window::{
+    ensure_visible, logical_size, logical_size_unbounded, resize, restore_target, rollback_window,
+};
 
 struct State {
     snapshot: Mutex<Snapshot>,
@@ -44,6 +46,7 @@ struct State {
     settings_lock: Mutex<()>,
     refresh_lock: tokio::sync::Mutex<()>,
     last_persist: Mutex<Option<std::time::Instant>>,
+    manual_refresh_at: Mutex<Option<std::time::Instant>>,
 }
 fn snapshot_lock(state: &State) -> std::sync::MutexGuard<'_, Snapshot> {
     state
@@ -255,8 +258,21 @@ fn save_settings(
 }
 #[tauri::command]
 fn refresh(app: tauri::AppHandle, state: tauri::State<'_, State>) {
-    // Always record the request: a poll may be in flight, and its next iteration
-    // must still force a fixture refresh instead of silently dropping the click.
+    // Coalesce manual refresh clicks: each forced cycle burns fixture + scoreboard
+    // requests outside the cadence, so clicks closer than 15s merge into one.
+    {
+        let mut last = state
+            .manual_refresh_at
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let now = std::time::Instant::now();
+        if last.is_some_and(|t| now.duration_since(t) < Duration::from_secs(15)) {
+            return;
+        }
+        *last = Some(now);
+    }
+    // Clicks that survive coalescing are always recorded: a poll may be in
+    // flight, and its next iteration must still force a fixture refresh.
     if let Ok(mut s) = state.snapshot.lock() {
         s.refreshing = true;
     }
@@ -296,6 +312,16 @@ fn notification_log(state: &State, message: &str) {
         &state.path.with_file_name("provider.log"),
         &format!("{} notifications: {message}", Utc::now().to_rfc3339()),
     );
+}
+
+// The durable log lives beside state.json; set once at startup so deep modules
+// (summaries, statistics) can log without threading a path through every call.
+static PROVIDER_LOG: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+pub(crate) fn log_provider(message: &str) {
+    eprintln!("MatchRadar {message}");
+    if let Some(path) = PROVIDER_LOG.get() {
+        append_log(path, &format!("{} {message}", Utc::now().to_rfc3339()));
+    }
 }
 
 fn submit_notification(
@@ -372,27 +398,7 @@ async fn deliver_notifications(app: tauri::AppHandle) {
     }
 }
 fn fixtures_due(state: &tauri::State<'_, State>, league: Competition, now: DateTime<Utc>) -> bool {
-    let snapshot = snapshot_lock(state);
-    let per_league = snapshot
-        .league_status
-        .get(league.slug())
-        .and_then(|status| status.fixture_updated_at.clone());
-    let legacy = if league == Competition::PremierLeague {
-        snapshot.fixture_updated_at.clone()
-    } else {
-        None
-    };
-    per_league
-        .or(legacy)
-        .and_then(|value| DateTime::parse_from_rfc3339(&value).ok())
-        .is_none_or(|updated| {
-            let minutes = now
-                .signed_duration_since(updated.with_timezone(&Utc))
-                .num_minutes();
-            // A clock rollback can put the stored timestamp in the future; treat it
-            // as due instead of suppressing fixtures until the window catches up.
-            !(0..360).contains(&minutes)
-        })
+    scheduling::fixtures_due(&snapshot_lock(state), league, now)
 }
 
 async fn poll(app: tauri::AppHandle) {
@@ -406,6 +412,7 @@ async fn poll(app: tauri::AppHandle) {
         [None; Competition::ALL.len()];
     let mut score_retry: [Option<std::time::Instant>; Competition::ALL.len()] =
         [None; Competition::ALL.len()];
+    let mut last_poll_error = None::<String>;
     loop {
         let state = app.state::<State>();
         if let Some(delay) = gate.remaining(tokio::time::Instant::now().into_std()) {
@@ -413,12 +420,19 @@ async fn poll(app: tauri::AppHandle) {
                 let mut snapshot = snapshot_lock(&state);
                 let changed = snapshot.refreshing;
                 snapshot.refreshing = false;
+                // A deferred poll must not defer durable reminders: kickoff times
+                // are already cached, so keep planning while the provider is
+                // unreachable. The delivery loop persists before it submits.
+                // revalidate also keeps baselines warm so a goal scored during
+                // the deferral stays inside alerts::plan's freshness window.
+                delivery::revalidate(&mut snapshot, &[], Utc::now());
                 changed
             };
             if changed {
                 let _ = app.emit("snapshot-updated", ());
             }
-            tokio::select! {_=tokio::time::sleep(scheduling::sleep_chunk(delay))=>{},_=state.wake.notified()=>{}}
+            state.notification_wake.notify_one();
+            tokio::select! {_=tokio::time::sleep(scheduling::deferred_sleep(delay))=>{},_=state.wake.notified()=>{}}
             continue;
         }
         let _guard = state.refresh_lock.lock().await;
@@ -540,9 +554,11 @@ async fn poll(app: tauri::AppHandle) {
                 if applied.score_attempted {
                     if applied.score_failed {
                         score_failures[index] = score_failures[index].saturating_add(1);
-                        let cooldown = scheduling::failure_delay(
+                        let cooldown = scheduling::score_delay(
                             score_failures[index],
                             applied.score_retry_after,
+                            scheduling::base_poll_seconds(&s.matches, confirmed_at)
+                                == scheduling::LIVE_CADENCE_SECONDS,
                         );
                         score_retry[index] =
                             Some(std::time::Instant::now() + Duration::from_secs(cooldown));
@@ -564,12 +580,18 @@ async fn poll(app: tauri::AppHandle) {
                     );
                 }
             }
-            if let Some(error) = &s.error {
-                eprintln!("MatchRadar: {error}");
-                append_log(
-                    &state.path.with_file_name("provider.log"),
-                    &format!("{} {}", Utc::now().to_rfc3339(), error),
-                );
+            match &s.error {
+                // The same transport failure repeats every cycle; log it once.
+                Some(error) if last_poll_error.as_deref() == Some(error.as_str()) => {}
+                Some(error) => {
+                    eprintln!("MatchRadar: {error}");
+                    append_log(
+                        &state.path.with_file_name("provider.log"),
+                        &format!("{} {}", Utc::now().to_rfc3339(), error),
+                    );
+                    last_poll_error = Some(error.clone());
+                }
+                None => last_poll_error = None,
             }
         }
         if force && requests > 0 {
@@ -748,7 +770,10 @@ fn toggle_main_window(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
-    if window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false) {
+    if window.is_focused().unwrap_or(false)
+        && window.is_visible().unwrap_or(false)
+        && !window.is_minimized().unwrap_or(false)
+    {
         let _ = window.hide();
     } else {
         show_main_window(&window);
@@ -787,13 +812,21 @@ fn main() {
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             fs::create_dir_all(&dir)?;
+            let _ = PROVIDER_LOG.set(dir.join("provider.log"));
             let path = dir.join("state.json");
             let loaded = persistence::load(&path)
                 .or_else(|error| {
                     eprintln!("MatchRadar persistence: {error}");
                     persistence::start_over(&path)
                 })
-                .map_err(std::io::Error::other)?;
+                // A subsystem build has no console; leave a trail in provider.log.
+                .map_err(|error| {
+                    append_log(
+                        &dir.join("provider.log"),
+                        &format!("{} persistence: {error}", Utc::now().to_rfc3339()),
+                    );
+                    std::io::Error::other(error)
+                })?;
             if let Some(notice) = loaded.notice {
                 eprintln!("MatchRadar persistence: {notice}");
                 append_log(
@@ -822,6 +855,16 @@ fn main() {
                 }
                 if let Err(error) = window.set_always_on_top(snapshot.settings.always_on_top) {
                     eprintln!("MatchRadar always-on-top: {error}");
+                }
+                if !snapshot.settings.compact {
+                    // The plugin caches whatever size it last saw, including ticker
+                    // mode's 112px strip; logical_size() reports it clamped to the
+                    // floor, so the raw size decides whether a resize is needed.
+                    if let Ok(current) = logical_size_unbounded(&window) {
+                        if let Some(target) = restore_target(current, snapshot.expanded_size) {
+                            let _ = resize(&window, target);
+                        }
+                    }
                 }
                 if snapshot.settings.compact {
                     // A legacy compact cache has no known expanded size. Use the normal
@@ -868,6 +911,7 @@ fn main() {
                 settings_lock: Mutex::new(()),
                 refresh_lock: tokio::sync::Mutex::new(()),
                 last_persist: Mutex::new(None),
+                manual_refresh_at: Mutex::new(None),
             });
             if let Err(error) = persist(&app.state::<State>()) {
                 eprintln!("MatchRadar persistence: {error}");
@@ -906,10 +950,11 @@ fn main() {
                 eprintln!("MatchRadar global shortcut: {error}; retrying");
                 tauri::async_runtime::spawn(retry_global_shortcut(app.handle().clone(), shortcut));
             }
-            let show = MenuItem::with_id(app, "show", "Show / Hide", true, None::<&str>)?;
+            let show = MenuItem::with_id(app, "show", "Show MatchRadar", true, None::<&str>)?;
+            let hide = MenuItem::with_id(app, "hide", "Hide MatchRadar", true, None::<&str>)?;
             let settings = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &settings, &quit])?;
+            let menu = Menu::with_items(app, &[&show, &hide, &settings, &quit])?;
             let mut tray = TrayIconBuilder::new()
                 .menu(&menu)
                 .show_menu_on_left_click(false)
@@ -923,7 +968,16 @@ fn main() {
                         }
                         app.exit(0)
                     }
-                    "show" => toggle_main_window(app),
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            show_main_window(&window);
+                        }
+                    }
+                    "hide" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.hide();
+                        }
+                    }
                     "settings" => {
                         if let Some(w) = app.get_webview_window("main") {
                             show_main_window(&w);
@@ -932,32 +986,15 @@ fn main() {
                     }
                     _ => {}
                 })
-                .on_tray_icon_event({
-                    // Windows delivers a double-click as two single clicks.
-                    let last_click = std::sync::Mutex::new(None::<std::time::Instant>);
-                    move |tray, event| {
-                        // The widget has no taskbar button, so a left click on the tray
-                        // icon is the quickest way to bring it back or put it away.
-                        if let TrayIconEvent::Click {
-                            button: MouseButton::Left,
-                            button_state: MouseButtonState::Up,
-                            ..
-                        } = event
-                        {
-                            let now = std::time::Instant::now();
-                            let duplicate = {
-                                let mut last = last_click
-                                    .lock()
-                                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                                let duplicate = last.is_some_and(|previous| {
-                                    now.duration_since(previous) < Duration::from_millis(400)
-                                });
-                                *last = Some(now);
-                                duplicate
-                            };
-                            if !duplicate {
-                                toggle_main_window(tray.app_handle());
-                            }
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            show_main_window(&window);
                         }
                     }
                 });
@@ -1029,6 +1066,7 @@ mod persistence_tests {
             settings_lock: Mutex::new(()),
             refresh_lock: tokio::sync::Mutex::new(()),
             last_persist: Mutex::new(None),
+            manual_refresh_at: Mutex::new(None),
         };
         let error = persist(&state).unwrap_err();
         assert!(error.contains("Save MatchRadar state"));
@@ -1045,6 +1083,7 @@ mod persistence_tests {
             settings_lock: Mutex::new(()),
             refresh_lock: tokio::sync::Mutex::new(()),
             last_persist: Mutex::new(None),
+            manual_refresh_at: Mutex::new(None),
         });
         let disk = std::sync::Arc::new(Mutex::new(0));
         let (started, wait_started) = std::sync::mpsc::channel();

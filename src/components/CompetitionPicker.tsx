@@ -4,10 +4,10 @@ import { ChevronDown } from 'lucide-react';
 import { CompetitionMark } from './WidgetUi';
 import type { CompetitionView } from '../types';
 
-const options: Array<{ value: CompetitionView; label: string; short: string }> = [
-  { value: 'premierLeague', label: 'Premier League', short: 'England' },
-  { value: 'championsLeague', label: 'Champions League', short: 'Europe' },
-  { value: 'both', label: 'Both competitions', short: 'Premier League + Champions League' },
+const options: Array<{ value: CompetitionView; label: string; short: string; tiny: string }> = [
+  { value: 'premierLeague', label: 'Premier League', short: 'England', tiny: 'PL' },
+  { value: 'championsLeague', label: 'Champions League', short: 'Europe', tiny: 'UCL' },
+  { value: 'both', label: 'Both competitions', short: 'Premier League + Champions League', tiny: 'Both' },
 ];
 
 export function CompetitionPicker({
@@ -103,18 +103,19 @@ export function CompetitionPicker({
           }
         }}
       >
-        <span className="sr-only">Competition: </span>
         <span aria-hidden="true">
           <CompetitionMark league={value} />
         </span>
-        <span className="competition-copy">
+        <span className="competition-copy" aria-hidden="true">
           <b>
             <span className="competition-long">{current.label}</span>
-            <span className="competition-short">{current.value === 'both' ? 'Both' : current.label}</span>
+            <span className="competition-short">{current.tiny}</span>
           </b>
           <small>{current.short}</small>
         </span>
-        <span className="sr-only">Change competition</span>
+        {/* Content-derived name: a JS-computed sr-only phrase keeps the name
+            stable across widths without tripping label-content-name-mismatch. */}
+        <span className="sr-only">{`Competition: ${current.label} (${current.tiny}), ${current.short}. Change competition`}</span>
         <ChevronDown size={14} aria-hidden="true" />
       </button>
       {open && (

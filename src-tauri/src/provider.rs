@@ -1,4 +1,4 @@
-use crate::model::{Competition, Match, Team};
+use crate::model::{Competition, Match, Shootout, Team};
 use chrono::{DateTime, Datelike, Duration, Local, Months, NaiveDate, Utc};
 use serde_json::Value;
 use std::sync::{
@@ -208,12 +208,12 @@ fn aggregate_score(competition: &Value, home_id: &str, away_id: &str) -> Option<
     };
     Some(format!("{}-{}", score(home_id)?, score(away_id)?))
 }
-fn score(side: &Value) -> Option<u32> {
-    side.get("score").and_then(|s| {
-        s.as_str()
-            .and_then(|s| s.parse().ok())
-            .or_else(|| s.as_u64().and_then(|n| u32::try_from(n).ok()))
-    })
+fn score(side: &Value, key: &str) -> Option<u32> {
+    let value = side.get(key)?;
+    value
+        .as_str()
+        .and_then(|s| s.parse().ok())
+        .or_else(|| value.as_u64().and_then(|n| u32::try_from(n).ok()))
 }
 fn parse_kickoff(value: &str) -> Option<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(value)
@@ -269,29 +269,40 @@ fn normalize(event: &Value, league: Competition) -> Option<Match> {
             _ => "unknown",
         }
     };
+    let shootout = match (
+        mapped,
+        score(home, "shootoutScore"),
+        score(away, "shootoutScore"),
+    ) {
+        ("fulltime", Some(home), Some(away)) if !forfeit && home != away => {
+            Some(Shootout { home, away })
+        }
+        _ => None,
+    };
     // Canonical labels: the widget and alerts recognise these outcomes by detail,
     // independent of ESPN's shortDetail wording.
     let detail = if abandoned {
         "Abandoned"
     } else if forfeit {
         FORFEIT_DETAIL
-    } else if mapped == "fulltime"
-        && [
-            field(kind, "shortDetail"),
-            field(kind, "detail"),
-            field(kind, "name"),
-        ]
-        .iter()
-        .any(|value| {
-            value
-                .split(|character: char| !character.is_ascii_alphanumeric())
-                .any(|word| {
-                    matches!(
-                        word.to_ascii_lowercase().as_str(),
-                        "pen" | "pens" | "penalty" | "penalties"
-                    )
-                })
-        })
+    } else if shootout.is_some()
+        || (mapped == "fulltime"
+            && [
+                field(kind, "shortDetail"),
+                field(kind, "detail"),
+                field(kind, "name"),
+            ]
+            .iter()
+            .any(|value| {
+                value
+                    .split(|character: char| !character.is_ascii_alphanumeric())
+                    .any(|word| {
+                        matches!(
+                            word.to_ascii_lowercase().as_str(),
+                            "pen" | "pens" | "penalty" | "penalties"
+                        )
+                    })
+            }))
     {
         "PEN"
     } else if mapped == "fulltime"
@@ -320,8 +331,8 @@ fn normalize(event: &Value, league: Competition) -> Option<Match> {
     // ESPN puts "0" in both competitors for fixtures it has not played yet.
     // Those are placeholders, not a 0-0 result: keep missing scores missing.
     let played = matches!(mapped, "live" | "halftime" | "fulltime" | "suspended");
-    let home_score = played.then(|| score(home)).flatten();
-    let away_score = played.then(|| score(away)).flatten();
+    let home_score = played.then(|| score(home, "score")).flatten();
+    let away_score = played.then(|| score(away, "score")).flatten();
     let home = team(home)?;
     let away = team(away)?;
     let leg = leg_label(competition);
@@ -332,6 +343,7 @@ fn normalize(event: &Value, league: Competition) -> Option<Match> {
         id,
         home_score,
         away_score,
+        shootout,
         home,
         away,
         kickoff: kickoff.to_rfc3339(),
@@ -609,6 +621,23 @@ mod tests {
             let result = normalize(&event, Competition::ChampionsLeague).unwrap();
             assert_eq!(result.detail, expected);
         }
+    }
+
+    #[test]
+    fn final_shootout_keeps_penalties_separate_from_match_goals() {
+        let fixture: Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/summary-shootout.json"))
+                .unwrap();
+        let mut event = fixture["header"].clone();
+        event["date"] = serde_json::json!("2026-05-30T16:00:00Z");
+        let result = normalize(&event, Competition::ChampionsLeague).unwrap();
+        let snapshot = serde_json::to_value(result).unwrap();
+        assert_eq!(snapshot["homeScore"], 1);
+        assert_eq!(snapshot["awayScore"], 1);
+        assert_eq!(
+            snapshot["shootout"],
+            serde_json::json!({"home": 4, "away": 3})
+        );
     }
 }
 #[cfg(test)]

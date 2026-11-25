@@ -62,6 +62,21 @@ test('theme selector offers the system preference', async ({ page }) => {
   await expect(theme).toHaveValue('system');
 });
 
+test('keyboard opacity changes batch into a single debounced save', async ({ page }) => {
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Appearance' }).click();
+  const slider = page.getByRole('slider', { name: 'Panel opacity' });
+  const before = await page.evaluate(() => Reflect.get(window, '__MATCHRADAR_BRIDGE_STATS__').save);
+  await slider.focus();
+  for (let i = 0; i < 10; i++) await slider.press('ArrowLeft');
+  // The 300ms debounce must collapse the burst into one write; the removed
+  // onKeyUp commit wrote once per key repeat.
+  await page.clock.fastForward(500);
+  await expect
+    .poll(() => page.evaluate(() => Reflect.get(window, '__MATCHRADAR_BRIDGE_STATS__').save))
+    .toBe(before + 1);
+});
+
 test('Escape closes an open alert menu even when focus leaves it', async ({ page }) => {
   const bell = page.getByRole('button', { name: 'Match alerts: Arsenal versus Chelsea, Team default' });
   await bell.click();
