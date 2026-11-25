@@ -49,6 +49,13 @@ it('supports chronological commentary without shortening its provider descriptio
   render(<MatchEvents match={match} events={[{ ...events[2], text }, events[0]]} commentary newestFirst={false} />);
   expect(screen.getAllByRole('listitem')[0].querySelector('p')?.textContent).toBe(text);
 });
+it('does not duplicate the team code when commentary crest fallback text is needed', () => {
+  const home = { ...match.home, id: 'unresolved-club' };
+  const { container } = render(
+    <MatchEvents match={{ ...match, home }} events={[{ ...events[2], teamId: home.id }]} commentary />,
+  );
+  expect(container.querySelector('.event-team')?.textContent).toBe(home.short || home.name);
+});
 it('orders full commentary newest first across halves without dropping provider text', () => {
   render(<MatchEvents match={match} events={events} commentary />);
   expect(screen.getAllByRole('listitem').map((row) => row.querySelector('.incident-player, p')?.textContent)).toEqual([

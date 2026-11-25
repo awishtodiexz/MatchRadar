@@ -213,7 +213,7 @@ export function MatchEvents({
                           {scores.has(event.id) && <strong className="incident-score">{scores.get(event.id)}</strong>}
                           {team && (
                             <span className="event-team" role="img" aria-label={team.name} title={team.name}>
-                              <Badge team={team} />
+                              <Badge team={team} fallback={false} />
                               <span aria-hidden="true">{teamCode(team) || team.name}</span>
                             </span>
                           )}

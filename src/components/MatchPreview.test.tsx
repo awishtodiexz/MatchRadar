@@ -149,6 +149,29 @@ it('flips the form tooltip perspective for away games and omits an unparseable d
   expect(container.querySelector('.form-tip')?.textContent).toBe('@ Arsenal · 1–2Away');
 });
 
+it('does not duplicate team codes in leader labels when crest fallback text is needed', () => {
+  const { container } = show(summary({ leaders: fullLeaders }));
+  expect(container.querySelector('.leader-teams')?.textContent).toBe('LIVCHE');
+});
+
+it('does not duplicate team codes in predictor labels when crest fallback text is needed', () => {
+  const { container } = show(summary({ predictor: { home: 66, draw: 22, away: 12, source: 'espn' } }));
+  expect(container.querySelector('.predictor-home')?.textContent).toBe('LIV66%');
+  expect(container.querySelector('.predictor-away')?.textContent).toBe('12%CHE');
+});
+
+it('does not duplicate the team code in form rows when crest fallback text is needed', () => {
+  const { container } = show(
+    summary({
+      form: {
+        h: [{ opponent: 'Arsenal', opponentId: 'ars', result: 'W', score: '2-1', atHome: true, date: null }],
+      },
+    }),
+  );
+  expect(container.querySelector('.form-row')?.textContent?.startsWith('LIVLIV')).toBe(false);
+  expect(container.querySelector('.form-row')?.textContent?.startsWith('LIV')).toBe(true);
+});
+
 it('shows the matchup predictor with three segments from an ESPN projection', () => {
   const { container } = show(summary({ predictor: { home: 66, draw: 22, away: 12, source: 'espn' } }));
   const card = container.querySelector('[aria-label="Matchup predictor"]');

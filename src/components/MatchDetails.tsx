@@ -156,14 +156,14 @@ export function MatchDetails({
             className="mini-score"
             aria-label={`${match.home.name} ${score} ${match.away.name}, ${shootout?.outcome ?? statusText}`}
           >
-            <Badge team={match.home} />
+            <Badge team={match.home} fallback={false} />
             <span>{teamCode(match.home)}</span>
             <div>
               <strong>{score}</strong>
               <small>{shootout ? `PEN ${shootout.tally}` : statusText}</small>
             </div>
             <span>{teamCode(match.away)}</span>
-            <Badge team={match.away} />
+            <Badge team={match.away} fallback={false} />
           </div>
         ) : (
           <div className="detail-league">

@@ -24,6 +24,18 @@ it('uses a compact scoreboard for lineups and restores the full header on Overvi
   expect(document.querySelector('.detail-hero')?.hasAttribute('hidden')).toBe(false);
 });
 
+it('does not duplicate team codes in the compact scoreboard when crest fallback text is needed', () => {
+  const base = mockMatches[4];
+  const match = {
+    ...base,
+    home: { ...base.home, id: 'home-unresolved' },
+    away: { ...base.away, id: 'away-unresolved' },
+  };
+  render(<MatchDetails match={match} settings={defaults} back={() => {}} />);
+  fireEvent.click(screen.getByRole('tab', { name: 'Lineups' }));
+  expect(document.querySelector('.mini-score')?.textContent).toBe('BHA1 – 1FULL-TIMEEVE');
+});
+
 it.each([
   ['FT', 'FULL-TIME'],
   ['AET', 'AFTER EXTRA TIME'],

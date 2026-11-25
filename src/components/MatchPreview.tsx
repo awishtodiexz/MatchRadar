@@ -111,7 +111,7 @@ function FormRow({ team, games }: { team: Team; games: FormGame[] }) {
   const { w, d, l } = tally(games);
   return (
     <div className="form-row">
-      <Badge team={team} />
+      <Badge team={team} fallback={false} />
       <div className="form-name">
         <strong title={team.name}>{teamCode(team)}</strong>
         {latest && (
@@ -199,7 +199,7 @@ export function MatchPreview({ match, data }: { match: Match; data: MatchSummary
         <OverviewCard title="Matchup predictor" label="Matchup predictor" note="ESPN projection">
           <div className="predictor-labels">
             <span className="predictor-home">
-              <Badge team={match.home} />
+              <Badge team={match.home} fallback={false} />
               <b>{teamCode(match.home)}</b>
               <strong>{shares[0]}%</strong>
             </span>
@@ -209,7 +209,7 @@ export function MatchPreview({ match, data }: { match: Match; data: MatchSummary
             <span className="predictor-away">
               <strong>{shares[2]}%</strong>
               <b>{teamCode(match.away)}</b>
-              <Badge team={match.away} />
+              <Badge team={match.away} fallback={false} />
             </span>
           </div>
           <div
@@ -240,12 +240,12 @@ export function MatchPreview({ match, data }: { match: Match; data: MatchSummary
         >
           <div className="leader-teams" aria-hidden="true">
             <span>
-              <Badge team={match.home} />
+              <Badge team={match.home} fallback={false} />
               {teamCode(match.home)}
             </span>
             <span>
               {teamCode(match.away)}
-              <Badge team={match.away} />
+              <Badge team={match.away} fallback={false} />
             </span>
           </div>
           <ul className="leader-rows">
