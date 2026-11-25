@@ -210,6 +210,24 @@ describe('native snapshot and preference ordering', () => {
     await next;
   });
 
+  it('retries reconciliation when the first post-failure read fails', async () => {
+    const failed = store.getState().save({ opacity: 80 });
+    await vi.waitFor(() => expect(writes).toHaveLength(1));
+    writes[0].task.reject(new Error('IPC unavailable'));
+    expect(await failed).toBe(false);
+    await vi.waitFor(() => expect(reads).toHaveLength(1));
+    reads[0].reject(new Error('IPC still unavailable'));
+    await vi.waitFor(() => expect(store.getState().error).toMatch(/Could not save/));
+
+    const retry = store.getState().save({ theme: 'light' });
+    await vi.waitFor(() => expect(reads).toHaveLength(2));
+    reads[1].resolve({ ...fresh(), settings: initial().settings });
+    await vi.waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes[1].settings).toMatchObject({ opacity: 96, theme: 'light' });
+    writes[1].task.resolve(writes[1].settings);
+    expect(await retry).toBe(true);
+  });
+
   it('keeps a queued edit based on the first acknowledged write when a stale read lands between them', async () => {
     const first = store.getState().save({ opacity: 80 });
     const second = store.getState().save({ theme: 'light' });

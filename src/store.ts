@@ -25,6 +25,15 @@ let confirmed: Settings | null = null;
 let settingsUnverified = false;
 let reconcileAfter = 0;
 let reconcile: Promise<void> | null = null;
+const startReconcile = (load: () => Promise<void>) => {
+  reconcileAfter = readSequence;
+  const attempt = load().catch(() => {});
+  reconcile = attempt;
+  void attempt.finally(() => {
+    if (reconcile === attempt) reconcile = null;
+  });
+  return attempt;
+};
 let feed: Snapshot | null = null;
 const loadError = 'Could not load the widget state.';
 const refreshError = 'Could not refresh matches.';
@@ -103,10 +112,8 @@ export const useApp = create<Store>((set, get) => ({
         if (isTauri() && settingsUnverified) {
           // The previous write may have landed on disk anyway; reconcile before
           // merging or this save can overwrite the change that did persist.
-          await (reconcile ??
-            get()
-              .load()
-              .catch(() => {}));
+          await (reconcile ?? startReconcile(() => get().load()));
+          if (settingsUnverified) await startReconcile(() => get().load());
           if (settingsUnverified) throw new Error('Could not reconcile settings');
         }
         const next: Settings = { ...confirmed, ...pending[0] };
@@ -126,10 +133,7 @@ export const useApp = create<Store>((set, get) => ({
         // Reconcile locally; a read dispatched now postdates the write handler.
         if (isTauri()) {
           settingsUnverified = true;
-          reconcileAfter = readSequence;
-          reconcile = get()
-            .load()
-            .catch(() => {});
+          void startReconcile(() => get().load());
         }
         return false;
       }

@@ -159,6 +159,24 @@ test('a rejected save rolls the optimistic bell back and a later retry succeeds'
   expect((await stats(page)).save).toBe(2);
 });
 
+test('a save retry survives failure of the first reconciliation read', async ({ page }) => {
+  await open(page);
+  const bell = page.locator('[data-match-id="demo-1"] .match-bell');
+  await bell.click();
+  await setFailures(page, { save: 1, load: 1 });
+  await page.getByRole('button', { name: 'On', exact: true }).click();
+  await expect(errorBanner(page)).toHaveText(/Could not save settings/);
+  await expect(bell).toHaveAttribute('data-alert-state', 'team');
+
+  await page.getByRole('button', { name: 'On', exact: true }).click();
+  await expect(errorBanner(page)).toHaveCount(0);
+  await expect(bell).toHaveAttribute('data-alert-state', 'on');
+  const after = await stats(page);
+  expect(after.save).toBe(2);
+  expect(after.load).toBe(3);
+  expect(after.lastSavedSettings?.matchAlerts['demo-1']?.enabled).toBe(true);
+});
+
 test('rapid bell toggles stay serialized and the last persisted preference wins', async ({ page }) => {
   await open(page, { saveDelayMs: 150 });
   const bell = page.locator('[data-match-id="demo-1"] .match-bell');
