@@ -328,12 +328,15 @@ pub(crate) fn log_provider(message: &str) {
 
 fn spawn_monitored(
     name: &'static str,
+    expect_running: bool,
     task: impl std::future::Future<Output = ()> + Send + 'static,
 ) {
     let handle = tauri::async_runtime::spawn(task);
     tauri::async_runtime::spawn(async move {
-        if let Err(error) = handle.await {
-            log_provider(&format!("{name} task failed: {error}"));
+        match handle.await {
+            Ok(()) if expect_running => log_provider(&format!("{name} task stopped unexpectedly")),
+            Err(error) => log_provider(&format!("{name} task failed: {error}")),
+            Ok(()) => {}
         }
     });
 }
@@ -955,6 +958,7 @@ fn main() {
                 eprintln!("MatchRadar global shortcut: {error}; retrying");
                 spawn_monitored(
                     "shortcut retry",
+                    false,
                     retry_global_shortcut(app.handle().clone(), shortcut),
                 );
             }
@@ -1010,13 +1014,14 @@ fn main() {
                 tray = tray.icon(icon.clone());
             }
             tray.build(app)?;
-            spawn_monitored("poll", poll(app.handle().clone()));
+            spawn_monitored("poll", true, poll(app.handle().clone()));
             spawn_monitored(
                 "notification delivery",
+                true,
                 deliver_notifications(app.handle().clone()),
             );
-            spawn_monitored("window watchdog", watch_window(app.handle().clone()));
-            spawn_monitored("resume watchdog", watch_resume(app.handle().clone()));
+            spawn_monitored("window watchdog", true, watch_window(app.handle().clone()));
+            spawn_monitored("resume watchdog", true, watch_resume(app.handle().clone()));
             Ok(())
         })
         .on_window_event(|window, event| match event {
