@@ -277,9 +277,7 @@ fn refresh(app: tauri::AppHandle, state: tauri::State<'_, State>) {
     }
     // Clicks that survive coalescing are always recorded: a poll may be in
     // flight, and its next iteration must still force a fixture refresh.
-    if let Ok(mut s) = state.snapshot.lock() {
-        s.refreshing = true;
-    }
+    snapshot_lock(&state).refreshing = true;
     state.force_fixtures.store(true, Ordering::Relaxed);
     let _ = app.emit("snapshot-updated", ());
     state.wake.notify_one();
@@ -606,9 +604,7 @@ async fn poll(app: tauri::AppHandle) {
                 &format!("{} {message}", Utc::now().to_rfc3339()),
             );
         }
-        if let Ok(mut s) = state.snapshot.lock() {
-            s.refreshing = false;
-        }
+        snapshot_lock(&state).refreshing = false;
         if let Err(e) = persist_periodic(&state) {
             eprintln!("MatchRadar: {e}");
         }
@@ -724,11 +720,7 @@ async fn watch_resume(app: tauri::AppHandle) {
             }
         }
         let state = app.state::<State>();
-        let idle = state
-            .snapshot
-            .lock()
-            .map(|s| !s.refreshing)
-            .unwrap_or(false);
+        let idle = !snapshot_lock(&state).refreshing;
         if idle {
             state.wake.notify_one();
         }
