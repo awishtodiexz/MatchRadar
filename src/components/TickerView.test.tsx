@@ -50,6 +50,25 @@ it('keeps the score visible while a match is suspended', () => {
   expect(container.querySelector('.dot')).toBeNull();
 });
 
+it('shows the final score rather than the original kick-off time for a finished match', () => {
+  const ended = { ...live, status: 'fulltime' as const, detail: 'Full-time', homeScore: 3, awayScore: 1 };
+  render(<TickerView match={ended} onExpand={vi.fn()} />);
+  expect(screen.getByText('3 – 1')).toBeTruthy();
+  expect(screen.queryByText(timeLabel(ended.kickoff))).toBeNull();
+});
+
+it('does not present the original kick-off time as current for postponed or cancelled matches', () => {
+  for (const status of ['postponed', 'cancelled'] as const) {
+    const detail = status === 'postponed' ? 'Postponed' : 'Cancelled';
+    const match = { ...scheduled, status, detail };
+    const { unmount } = render(<TickerView match={match} onExpand={vi.fn()} />);
+    expect(screen.queryByText(timeLabel(match.kickoff))).toBeNull();
+    expect(screen.getByText(detail.toUpperCase())).toBeTruthy();
+    expect(screen.getByText('–')).toBeTruthy();
+    unmount();
+  }
+});
+
 it('shows the empty message when there is no match', () => {
   render(<TickerView match={null} onExpand={vi.fn()} />);
   expect(screen.getByText('No live or upcoming matches')).toBeTruthy();

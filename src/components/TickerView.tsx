@@ -70,7 +70,7 @@ export function TickerView({
       </>
     ) : (
       <>
-        <strong className="ticker-score">{timeLabel(match.kickoff)}</strong>
+        <strong className="ticker-score">{match.homeScore != null || match.awayScore != null ? score : '–'}</strong>
         <span className="ticker-meta">{(match.detail || match.status).toUpperCase()}</span>
       </>
     );
@@ -106,7 +106,9 @@ export function TickerView({
               `${labelled(match.home.name, home)} versus ${labelled(match.away.name, away)}, ` +
               (match.status === 'scheduled'
                 ? `kickoff ${timeLabel(match.kickoff)}`
-                : `score ${score}, ${match.detail || match.status}`) +
+                : match.homeScore != null || match.awayScore != null
+                  ? `score ${score}, ${match.detail || match.status}`
+                  : `status ${match.detail || match.status}`) +
               (shootout ? `, ${shootout.outcome}` : '') +
               (match.scoreStale ? ', saved score' : '') +
               (onOpen ? '. Open this match' : '. Expand MatchRadar')

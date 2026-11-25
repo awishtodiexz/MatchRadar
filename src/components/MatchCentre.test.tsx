@@ -496,6 +496,23 @@ it('explains why a complete starting XI has no formation pitch', () => {
   expect(screen.getByText('Formation unavailable for this lineup.')).toBeTruthy();
   state.data = old;
 });
+it('does not describe announced pre-match lineups as unavailable until kick-off', () => {
+  render(<MatchCentre match={{ ...mockSnapshot.matches[0], status: 'scheduled' }} />);
+  const lineups = screen.getByRole('tab', { name: 'Lineups' });
+  expect(lineups.getAttribute('aria-description')).toBeNull();
+  expect(lineups.getAttribute('title')).toBeNull();
+});
+
+it('says unannounced pre-match lineups appear when announced, not only after kick-off', () => {
+  const old = state.data;
+  state.data = { ...old, players: [] };
+  render(<MatchCentre match={{ ...mockSnapshot.matches[0], status: 'scheduled' }} />);
+  const lineups = screen.getByRole('tab', { name: 'Lineups' });
+  expect(lineups.getAttribute('aria-description')).toBe('Available when the lineups are announced');
+  expect(lineups.getAttribute('title')).toBe('Available when the lineups are announced');
+  state.data = old;
+});
+
 it('shows available empty states before kick-off', () => {
   const old = state.data;
   state.data = { ...old, events: [], statistics: [], players: [] };

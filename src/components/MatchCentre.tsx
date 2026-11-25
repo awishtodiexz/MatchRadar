@@ -83,7 +83,16 @@ export function MatchCentreView({
     <section className="match-centre" aria-label="Match centre" aria-busy={loading}>
       <div className="centre-tabs scoped-tabs" role="tablist" aria-label="Match centre sections">
         {tabs.map((name, index) => {
-          const upcoming = match.status === 'scheduled' && name !== 'Overview';
+          const available =
+            name === 'Overview' ||
+            (name === 'Stats'
+              ? (data?.statistics.length ?? 0) > 0
+              : name === 'Lineups'
+                ? (data?.players.length ?? 0) > 0
+                : events.length > 0);
+          const upcoming = match.status === 'scheduled' && !available;
+          const hint =
+            name === 'Lineups' ? 'Available when the lineups are announced' : 'Available once the match starts';
           return (
             <button
               key={name}
@@ -92,8 +101,8 @@ export function MatchCentreView({
               className={upcoming ? 'tab-upcoming' : undefined}
               aria-controls={sectionId + '-panel'}
               aria-selected={tab === name}
-              aria-description={upcoming ? 'Available once the match starts' : undefined}
-              title={upcoming ? 'Available once the match starts' : undefined}
+              aria-description={upcoming ? hint : undefined}
+              title={upcoming ? hint : undefined}
               tabIndex={tab === name ? 0 : -1}
               onClick={() => select(name)}
               onKeyDown={(event) => {
