@@ -3,7 +3,7 @@ import base from '../playwright.config';
 
 // Benchmarks are deliberately outside verify:ui: wall-clock budgets are unstable
 // on shared CI hosts. Run explicitly with:
-//   npx playwright test --config verification/bench/playwright.bench.config.ts
+//   npm run verify:bench
 // Results are written under the gitignored verification/artifacts/perf/.
 export default defineConfig({
   ...base,

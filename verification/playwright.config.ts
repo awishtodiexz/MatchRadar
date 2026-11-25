@@ -1,4 +1,8 @@
 import { defineConfig } from '@playwright/test';
+
+const port = Number(process.env.MATCHRADAR_VERIFY_PORT ?? 1420);
+const baseURL = `http://127.0.0.1:${port}`;
+
 export default defineConfig({
   testDir: './browser',
   workers: 1,
@@ -10,7 +14,7 @@ export default defineConfig({
   updateSnapshots: 'none',
   reporter: 'list',
   use: {
-    baseURL: 'http://127.0.0.1:1420',
+    baseURL,
     channel: 'msedge',
     locale: 'en-GB',
     timezoneId: 'Europe/London',
@@ -23,8 +27,8 @@ export default defineConfig({
   },
   webServer: {
     cwd: process.cwd(),
-    command: 'npm exec vite preview -- --configLoader runner --host 127.0.0.1 --port 1420 --strictPort',
-    url: 'http://127.0.0.1:1420',
+    command: `npm exec vite preview -- --configLoader runner --host 127.0.0.1 --port ${port} --strictPort`,
+    url: baseURL,
     reuseExistingServer: false,
     timeout: 20000,
   },
