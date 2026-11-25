@@ -310,10 +310,13 @@ impl ExpandedSize {
     }
 }
 
+pub const SNAPSHOT_FORMAT_VERSION: u64 = 1;
 pub const TEAM_CATALOG_VERSION: u32 = 1;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Snapshot {
+    #[serde(default)]
+    pub format_version: u64,
     pub revalidate_pending: bool,
     pub recent_results: Vec<Match>,
     pub recent_updated_at: Option<String>,
@@ -349,6 +352,7 @@ pub struct Snapshot {
 impl Default for Snapshot {
     fn default() -> Self {
         Self {
+            format_version: SNAPSHOT_FORMAT_VERSION,
             revalidate_pending: false,
             recent_results: Vec::new(),
             recent_updated_at: None,
@@ -412,6 +416,16 @@ impl From<&Snapshot> for WidgetSnapshot {
 }
 
 impl Snapshot {
+    pub(crate) fn migrate_format(&mut self) {
+        // Version 0 is the unversioned format. Run its migrations in order.
+        if self.format_version == 0 {
+            self.migrate_catalog();
+            self.migrate_demo_state();
+            self.migrate_competition_state();
+            self.format_version = 1;
+        }
+    }
+
     // Older demo builds stored synthetic subscriptions and fixtures in the real fields.
     pub fn migrate_demo_state(&mut self) {
         // A legacy demo session must return to the live feed on upgrade. Keep

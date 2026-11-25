@@ -836,9 +836,6 @@ fn main() {
             }
             let mut snapshot = loaded.snapshot;
             snapshot.refreshing = false;
-            snapshot.migrate_catalog();
-            snapshot.migrate_demo_state();
-            snapshot.migrate_competition_state();
             refresh::mark_cached(&mut snapshot);
             alerts::cleanup(&mut snapshot, Utc::now());
             delivery::cleanup(&mut snapshot, Utc::now());

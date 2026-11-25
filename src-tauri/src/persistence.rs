@@ -1,5 +1,6 @@
 //! Snapshot replacement and recovery. Callers serialize saves with the snapshot lock.
-use crate::model::Snapshot;
+use crate::model::{Snapshot, SNAPSHOT_FORMAT_VERSION};
+use serde::Deserialize;
 use std::{
     fs::{self, File, OpenOptions},
     io::{self, Write},
@@ -78,6 +79,12 @@ fn start_over_with(storage: &impl Storage, path: &Path) -> Result<Loaded, String
 }
 
 fn snapshot_bytes(snapshot: &Snapshot) -> Result<Vec<u8>, String> {
+    if snapshot.format_version != SNAPSHOT_FORMAT_VERSION {
+        return Err(format!(
+            "Refuse to save MatchRadar state with format version {}",
+            snapshot.format_version
+        ));
+    }
     let mut bytes =
         serde_json::to_vec(snapshot).map_err(|e| format!("Serialize MatchRadar state: {e}"))?;
     if bytes.len() as u64 > MAX_STATE_BYTES {
@@ -85,8 +92,8 @@ fn snapshot_bytes(snapshot: &Snapshot) -> Result<Vec<u8>, String> {
         // writing a state the read cap would refuse at the next launch.
         let mut trimmed = snapshot.clone();
         trimmed.detail_cache.truncate(8);
-        bytes = serde_json::to_vec(&trimmed)
-            .map_err(|e| format!("Serialize MatchRadar state: {e}"))?;
+        bytes =
+            serde_json::to_vec(&trimmed).map_err(|e| format!("Serialize MatchRadar state: {e}"))?;
     }
     if bytes.len() as u64 > MAX_STATE_BYTES {
         return Err(format!(
@@ -134,13 +141,35 @@ fn validate(bytes: &[u8]) -> Result<Snapshot, String> {
 /// Refuse to materialize or parse anything beyond a generous snapshot size.
 const MAX_STATE_BYTES: u64 = 8 * 1024 * 1024;
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FormatHeader {
+    #[serde(default)]
+    format_version: u64,
+}
+
 fn inspect(storage: &impl Storage, path: &Path) -> Result<Existing, String> {
     match storage.read(path) {
         Ok(bytes) if bytes.len() as u64 > MAX_STATE_BYTES => Ok(Existing::Oversized),
-        Ok(bytes) => Ok(match validate(&bytes) {
-            Ok(snapshot) => Existing::Valid(bytes, snapshot),
-            Err(error) => Existing::Invalid(bytes, error),
-        }),
+        Ok(bytes) => {
+            // Check the version before decoding fields whose types may have changed.
+            let decoded = match serde_json::from_slice::<FormatHeader>(&bytes) {
+                Ok(header) if header.format_version > SNAPSHOT_FORMAT_VERSION => {
+                    return Err(format!(
+                        "MatchRadar state {} uses newer snapshot format version {} (supported: {}); open it with a newer version of MatchRadar. Original left untouched",
+                        path.display(),
+                        header.format_version,
+                        SNAPSHOT_FORMAT_VERSION
+                    ));
+                }
+                Ok(_) => validate(&bytes),
+                Err(error) => Err(error.to_string()),
+            };
+            Ok(match decoded {
+                Ok(snapshot) => Existing::Valid(bytes, snapshot),
+                Err(error) => Existing::Invalid(bytes, error),
+            })
+        }
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Existing::Missing),
         // Disk::read reports an oversized file this way without materializing it.
         Err(error) if error.kind() == io::ErrorKind::InvalidData => Ok(Existing::Oversized),
@@ -185,7 +214,8 @@ fn publish(storage: &impl Storage, path: &Path, bytes: &[u8]) -> Result<(), Stri
 
 fn load_with(storage: &impl Storage, path: &Path) -> Result<Loaded, String> {
     let primary = inspect(storage, path)?;
-    if let Existing::Valid(_, snapshot) = primary {
+    if let Existing::Valid(_, mut snapshot) = primary {
+        snapshot.migrate_format();
         return Ok(Loaded {
             snapshot,
             notice: None,
@@ -206,9 +236,10 @@ fn load_with(storage: &impl Storage, path: &Path) -> Result<Loaded, String> {
         diagnosis = format!("Oversized primary; moved to {}. ", preserved.display());
     }
     match backup {
-        Existing::Valid(bytes, snapshot) => {
+        Existing::Valid(bytes, mut snapshot) => {
             // Restore without rotating the damaged primary into the valid backup.
             publish(storage, path, &bytes)?;
+            snapshot.migrate_format();
             Ok(Loaded {
                 snapshot,
                 notice: Some(format!(
@@ -554,6 +585,101 @@ mod tests {
     impl Drop for Directory {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn legacy_snapshot_migrates_once_and_first_save_keeps_original_backup() {
+        let dir = Directory::new();
+        let path = dir.primary();
+        let legacy = br#"{"settings":{"favorites":["376","370"],"compact":true,"mock":true},"updatedAt":"2026-10-28T12:00:00Z","sentNotifications":["real-match:start","demo-match:start"]}"#;
+        fs::write(&path, legacy).unwrap();
+
+        let loaded = load(&path).unwrap().snapshot;
+        assert_eq!(loaded.format_version, SNAPSHOT_FORMAT_VERSION);
+        assert_eq!(loaded.settings.favorites, ["370"]);
+        assert!(loaded.settings.compact);
+        assert!(!loaded.settings.mock);
+        assert_eq!(loaded.sent_notifications, ["real-match:start"]);
+        assert_eq!(
+            loaded.league_status[crate::model::Competition::PremierLeague.slug()].updated_at,
+            loaded.updated_at
+        );
+        assert_eq!(fs::read(&path).unwrap(), legacy);
+
+        save(&path, &loaded).unwrap();
+        let saved = fs::read(&path).unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&saved).unwrap();
+        assert_eq!(json["formatVersion"], SNAPSHOT_FORMAT_VERSION);
+        assert_eq!(fs::read(sibling(&path, ".bak")).unwrap(), legacy);
+        assert_eq!(
+            serde_json::to_value(load(&path).unwrap().snapshot).unwrap(),
+            json
+        );
+        assert_eq!(fs::read(&path).unwrap(), saved);
+    }
+
+    #[test]
+    fn current_snapshot_loads_without_legacy_migrations_or_disk_writes() {
+        let dir = Directory::new();
+        let path = dir.primary();
+        let current = format!(
+            r#"{{"formatVersion":{SNAPSHOT_FORMAT_VERSION},"settings":{{"favorites":["376"],"compact":true}},"updatedAt":"2026-10-28T12:00:00Z"}}"#
+        );
+        fs::write(&path, &current).unwrap();
+
+        let loaded = load(&path).unwrap();
+        assert!(loaded.notice.is_none());
+        assert_eq!(loaded.snapshot.format_version, SNAPSHOT_FORMAT_VERSION);
+        assert_eq!(loaded.snapshot.settings.favorites, ["376"]);
+        assert!(loaded.snapshot.settings.compact);
+        assert!(loaded.snapshot.league_status.is_empty());
+        assert_eq!(fs::read(&path).unwrap(), current.as_bytes());
+        assert!(!sibling(&path, ".bak").exists());
+    }
+
+    #[test]
+    fn future_snapshot_survives_load_reset_and_save_in_either_slot() {
+        let future_version = SNAPSHOT_FORMAT_VERSION + 1;
+        // A newer version need not have the same field types as this version.
+        let future = format!(r#"{{"formatVersion":{future_version},"settings":"new schema"}}"#);
+        let legacy = old();
+        let current = next();
+        let damaged = b"damaged primary".as_slice();
+        for (primary, backup, can_load) in [
+            (Some(future.as_bytes()), legacy.as_slice(), false),
+            (None, future.as_bytes(), false),
+            (Some(damaged), future.as_bytes(), false),
+            (Some(current.as_slice()), future.as_bytes(), true),
+        ] {
+            let dir = Directory::new();
+            let path = dir.primary();
+            let backup_path = sibling(&path, ".bak");
+            if let Some(bytes) = primary {
+                fs::write(&path, bytes).unwrap();
+            }
+            fs::write(&backup_path, backup).unwrap();
+
+            let expect_unsupported = |error: String| {
+                assert!(error.contains(&format!("newer snapshot format version {future_version}")));
+            };
+            if can_load {
+                assert!(load(&path).is_ok());
+            } else {
+                expect_unsupported(load(&path).err().unwrap());
+            }
+            expect_unsupported(start_over(&path).err().unwrap());
+            if primary == Some(damaged) {
+                assert!(save(&path, &Snapshot::default()).is_err());
+            } else {
+                expect_unsupported(save(&path, &Snapshot::default()).unwrap_err());
+            }
+            assert_eq!(fs::read(&path).ok().as_deref(), primary);
+            assert_eq!(fs::read(&backup_path).unwrap(), backup);
+            assert_eq!(
+                fs::read_dir(&dir.0).unwrap().count(),
+                1 + usize::from(primary.is_some())
+            );
         }
     }
 

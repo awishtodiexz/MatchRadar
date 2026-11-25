@@ -95,6 +95,7 @@ npm run format           # format the frontend code with Prettier
 npm run verify:fast      # version check, format check, lint, frontend tests and production build
 npm run verify:ui        # Playwright journeys and accessibility checks
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+cargo clippy --locked --all-targets --manifest-path src-tauri/Cargo.toml -- -D warnings
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 ```
 

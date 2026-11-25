@@ -643,6 +643,147 @@ mod tests {
 #[cfg(test)]
 mod response_tests {
     use super::*;
+    const SCOREBOARD: &str = r#"{
+        "events": [{
+            "id": "401900001", "date": "2026-10-31T12:30Z",
+            "status": {"displayClock": "67'", "type": {
+                "name": "STATUS_IN_PROGRESS", "state": "in"
+            }},
+            "competitions": [{"competitors": [
+                {"homeAway": "away", "score": "1", "team": {
+                    "id": "370", "displayName": "Fulham", "abbreviation": "FUL"
+                }},
+                {"homeAway": "home", "score": "2", "team": {
+                    "id": "382", "displayName": "Manchester City", "abbreviation": "MNC",
+                    "logo": "https://a.espncdn.com/i/teamlogos/soccer/500/382.png"
+                }}
+            ]}]
+        }]
+    }"#;
+    const EMPTY_SCOREBOARD: &str = r#"{"events":[]}"#;
+    const MALFORMED_SCOREBOARD: &str = r#"{"events":["#;
+
+    #[test]
+    fn replay_scoreboard_contract_for_each_league() {
+        for league in Competition::ALL {
+            let matches = parse_response(200, None, SCOREBOARD, "20261031", league).unwrap();
+            assert_eq!(matches.len(), 1);
+            let m = &matches[0];
+            assert_eq!(m.id, "401900001");
+            assert_eq!(m.kickoff, "2026-10-31T12:30:00+00:00");
+            assert_eq!(m.league, league);
+            assert_eq!(m.competition, league.name());
+            assert_eq!(
+                (&*m.home.id, &*m.home.name, &*m.home.short),
+                ("382", "Manchester City", "MNC")
+            );
+            assert_eq!(
+                (&*m.away.id, &*m.away.name, &*m.away.short),
+                ("370", "Fulham", "FUL")
+            );
+            assert_eq!(
+                m.home.logo.as_deref(),
+                Some("https://a.espncdn.com/i/teamlogos/soccer/500/382.png")
+            );
+            assert_eq!((m.home_score, m.away_score), (Some(2), Some(1)));
+            assert_eq!((&*m.status, &*m.detail), ("live", "67'"));
+            assert!(!m.score_stale);
+            assert!(m.score_updated_at.is_none());
+        }
+    }
+
+    #[test]
+    fn replay_empty_and_malformed_scoreboards_have_distinct_outcomes() {
+        for league in Competition::ALL {
+            let mut empty = FetchOutcome::default();
+            empty.record(parse_response(
+                200,
+                None,
+                EMPTY_SCOREBOARD,
+                "20261031",
+                league,
+            ));
+            assert!(empty.matches.unwrap().is_empty());
+            assert!(empty.error.is_none());
+
+            let mut malformed = FetchOutcome::default();
+            malformed.record(parse_response(
+                200,
+                None,
+                MALFORMED_SCOREBOARD,
+                "20261031",
+                league,
+            ));
+            assert!(malformed.matches.is_none());
+            let error = malformed.error.unwrap();
+            assert!(error.message.contains("invalid JSON"));
+            assert!(error.message.contains(league.name()));
+            assert!(error.message.contains("20261031"));
+            assert!(!error.rate_limited());
+            assert_eq!(error.retry_after, None);
+        }
+    }
+
+    #[test]
+    fn replay_rate_limit_precedes_body_parsing_with_or_without_retry_after() {
+        for league in Competition::ALL {
+            for body in [SCOREBOARD, EMPTY_SCOREBOARD, MALFORMED_SCOREBOARD] {
+                for retry in [None, Some(120)] {
+                    let mut outcome = FetchOutcome::default();
+                    outcome.record(parse_response(429, retry, body, "20261031", league));
+                    assert!(outcome.matches.is_none());
+                    let error = outcome.error.unwrap();
+                    assert!(error.rate_limited());
+                    assert_eq!(error.retry_after, retry);
+                    assert_eq!(
+                        error.message,
+                        format!("ESPN {} scoreboard dates=20261031: HTTP 429", league.name())
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn replay_partial_league_refresh_preserves_the_successful_competition() {
+        let now = parse_kickoff("2026-10-31T13:30:00Z").unwrap();
+        for good_league in Competition::ALL {
+            for other_body in [EMPTY_SCOREBOARD, MALFORMED_SCOREBOARD] {
+                let mut snapshot = crate::model::Snapshot::default();
+                for league in Competition::ALL {
+                    let body = if league == good_league {
+                        SCOREBOARD
+                    } else {
+                        other_body
+                    };
+                    let mut fixtures = FetchOutcome::default();
+                    fixtures.record(parse_response(200, None, body, "20261031", league));
+                    crate::refresh::apply_league(
+                        &mut snapshot,
+                        league,
+                        fixtures,
+                        FetchOutcome::default(),
+                        now,
+                    );
+                }
+                assert_eq!(snapshot.matches.len(), 1);
+                assert_eq!(snapshot.matches[0].id, "401900001");
+                assert_eq!(snapshot.matches[0].league, good_league);
+                assert!(snapshot.league_status[good_league.slug()]
+                    .fixture_error
+                    .is_none());
+                let other = Competition::ALL
+                    .into_iter()
+                    .find(|league| *league != good_league)
+                    .unwrap();
+                assert_eq!(
+                    snapshot.league_status[other.slug()].fixture_error.is_some(),
+                    other_body == MALFORMED_SCOREBOARD
+                );
+            }
+        }
+    }
+
     fn event() -> Value {
         serde_json::json!({"id":"1","date":"2026-10-31T12:30Z","status":{"type":{"state":"pre","name":"STATUS_SCHEDULED"}},"competitions":[{"competitors":[{"homeAway":"home","team":{"id":"1","displayName":"Home"}},{"homeAway":"away","team":{"id":"2","displayName":"Away"}}]}]})
     }

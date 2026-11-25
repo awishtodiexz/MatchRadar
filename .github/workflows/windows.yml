@@ -29,17 +29,19 @@ jobs:
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
       - run: npm ci
       - run: npm run check:version
+      - run: npm run format:check
       - run: npm run lint
       - run: npm test
       - run: npm run build
       - run: npm run verify:ui
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - run: cargo clippy --locked --all-targets --manifest-path src-tauri/Cargo.toml -- -D warnings
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
       # Playwright traces and failure screenshots are the only diagnosis for a
       # failed UI journey; keep them from the failing run instead of discarding

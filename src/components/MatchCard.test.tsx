@@ -92,6 +92,23 @@ it('hides alert controls for completed and cancelled matches', () => {
   expect(screen.queryByRole('button', { name: /Match alerts:/ })).toBeNull();
 });
 
+it('returns keyboard focus to the match details button after using the card menu', () => {
+  const match = mockMatches[2];
+  render(<MatchCard match={match} settings={defaults} onOpen={vi.fn()} />);
+  const details = screen.getByRole('button', { name: /^Match details:/ });
+  details.focus();
+  fireEvent.contextMenu(details, { clientX: 0, clientY: 0 });
+  const menu = screen.getByRole('menu');
+  const open = within(menu).getByRole('menuitem', { name: 'Open match details' });
+  expect(document.activeElement).toBe(open);
+  fireEvent.keyDown(open, { key: 'End' });
+  const copy = within(menu).getByRole('menuitem', { name: 'Copy fixture' });
+  expect(document.activeElement).toBe(copy);
+  fireEvent.keyDown(copy, { key: 'Escape' });
+  expect(screen.queryByRole('menu')).toBeNull();
+  expect(document.activeElement).toBe(details);
+});
+
 it('changes the followed team list from match details', () => {
   const save = vi.fn().mockResolvedValue(undefined);
   useApp.setState({ save });

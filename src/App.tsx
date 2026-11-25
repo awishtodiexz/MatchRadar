@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { LogicalSize } from '@tauri-apps/api/dpi';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Lock, Maximize2, Minimize2, Pin, Radio, RefreshCw, Settings2, Star, Unlock, X } from 'lucide-react';
 import logo from './assets/logo.png';
@@ -18,6 +17,7 @@ import {
 } from './freshness';
 import { useApp } from './store';
 import { useLocalDay } from './useLocalDay';
+import { useTickerMode } from './useTickerMode';
 import { useNotificationNavigation } from './useNotificationNavigation';
 import { useRecentResults } from './useRecentResults';
 import { mergeResults, matchesView } from './matchViews';
@@ -43,6 +43,36 @@ const SHORTCUT_MESSAGE =
   'Ctrl+Shift+M is used by another app, so the MatchRadar shortcut is off. Open the widget from the tray icon instead.';
 const SCORE_CHANGE_MS = 3 * 60_000;
 type ScoreChange = { at: number; home: boolean; away: boolean };
+type ScoreTracking = {
+  previousScores: Map<string, [Match['homeScore'], Match['awayScore']]>;
+  scoreChanges: Record<string, ScoreChange>;
+};
+
+export function trackScores(matches: Match[], current: ScoreTracking, now: number): ScoreTracking {
+  const previousScores: ScoreTracking['previousScores'] = new Map();
+  const scoreChanges: ScoreTracking['scoreChanges'] = {};
+  for (const match of matches) {
+    const previous = current.previousScores.get(match.id);
+    const change = current.scoreChanges[match.id];
+    if (change && now - change.at < SCORE_CHANGE_MS) scoreChanges[match.id] = change;
+    if (
+      previous &&
+      previous[0] != null &&
+      previous[1] != null &&
+      match.homeScore != null &&
+      match.awayScore != null &&
+      (previous[0] !== match.homeScore || previous[1] !== match.awayScore)
+    )
+      scoreChanges[match.id] = {
+        at: now,
+        home: previous[0] !== match.homeScore,
+        away: previous[1] !== match.awayScore,
+      };
+    previousScores.set(match.id, [match.homeScore, match.awayScore]);
+  }
+  return { previousScores, scoreChanges };
+}
+
 const followsTeam = (match: Match, favorites: string[]) =>
   favorites.includes(match.home.id) || favorites.includes(match.away.id);
 
@@ -72,20 +102,17 @@ export default function App() {
   const [selected, setSelected] = useState<Match | null>(null);
   const [notificationRequest, setNotificationRequest] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshCooling, setRefreshCooling] = useState(false);
   const [systemTheme, setSystemTheme] = useState<'dark' | 'light'>(() =>
     window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark',
   );
-  // Session-only slim mode; the widget's full size is remembered so it can be restored.
-  const [ticker, setTicker] = useState(false);
+  const { ticker, setTickerMode } = useTickerMode();
   const [tickerBrowseId, setTickerBrowseId] = useState<string | null>(null);
   const [tickerPinned, setTickerPinned] = useState<Match | null>(null);
   const detailRefresh = useRef<MatchDetailsHandle>(null);
   const matchSessions = useRef(new Map<string, MatchMemory>());
   const settingsReturn = useRef<'home' | 'detail'>('home');
   const [detailBusy, setDetailBusy] = useState(false);
-  const tickerRestoreSize = useRef<{ width: number; height: number } | null>(null);
-  const tickerMode = useRef(false);
-  const tickerResize = useRef(Promise.resolve(true));
   const root = useRef<HTMLElement>(null);
   const restoreFocus = useRef('settings-control');
   const homeScroll = useRef(0);
@@ -99,49 +126,17 @@ export default function App() {
   const recoveryFocus = useRef<HTMLButtonElement | null>(null);
   const focusClubSearch = useRef(false);
   // Scores seen on the previous snapshot, to flag a change for a few minutes.
-  const previousScores = useRef(new Map<string, [number | null | undefined, number | null | undefined]>());
-  const [scoreChanges, setScoreChanges] = useState<Record<string, ScoreChange>>({});
+  const [scoreTracking, setScoreTracking] = useState<ScoreTracking>(() => ({
+    previousScores: new Map(),
+    scoreChanges: {},
+  }));
+  const { scoreChanges } = scoreTracking;
   const day = useLocalDay();
   const now = useNow(30_000);
   const native = isTauri();
   const settings = snapshot?.settings;
   const allMatches = snapshot?.matches;
   const opacityValue = opacityPreview ?? settings?.opacity ?? 96;
-  const setTickerMode = useCallback(
-    (next: boolean) => {
-      const resize = tickerResize.current.then(async () => {
-        if (tickerMode.current === next) return true;
-        if (native) {
-          const win = getCurrentWindow();
-          try {
-            if (next) {
-              const size = (await win.innerSize()).toLogical(await win.scaleFactor());
-              tickerRestoreSize.current = { width: size.width, height: size.height };
-              await win.setMinSize(new LogicalSize(320, 112));
-              await win.setSize(new LogicalSize(Math.max(320, Math.min(size.width, 420)), 112));
-            } else {
-              const saved = tickerRestoreSize.current ?? { width: 390, height: 700 };
-              await win.setSize(new LogicalSize(saved.width, saved.height));
-              await win.setMinSize(new LogicalSize(320, 460));
-            }
-          } catch {
-            // The mode never flipped, so restore the min size matching the mode
-            // we are still in; a failed entry must not leave the 112px floor behind.
-            void win.setMinSize(new LogicalSize(320, tickerMode.current ? 112 : 460)).catch(() => {});
-            useApp.setState({ error: 'Could not resize the widget.' });
-            return false;
-          }
-        }
-        tickerMode.current = next;
-        setTicker(next);
-        if (!next) setTickerBrowseId(null);
-        return true;
-      });
-      tickerResize.current = resize;
-      return resize;
-    },
-    [native],
-  );
   const panelOpacity = Math.min(100, Math.max(70, opacityValue));
   const competitionView = settings?.competitionView ?? 'premierLeague';
   const competitionTitle = competitionView === 'both' ? 'Both competitions' : competitionName(competitionView);
@@ -254,43 +249,9 @@ export default function App() {
   }, [allMatches]);
   useEffect(() => {
     if (!allMatches) return;
-    const changed: Record<string, ScoreChange> = {};
-    for (const match of allMatches) {
-      const previous = previousScores.current.get(match.id);
-      if (
-        previous &&
-        previous[0] != null &&
-        previous[1] != null &&
-        match.homeScore != null &&
-        match.awayScore != null &&
-        (previous[0] !== match.homeScore || previous[1] !== match.awayScore)
-      )
-        changed[match.id] = {
-          at: Date.now(),
-          home: previous[0] !== match.homeScore,
-          away: previous[1] !== match.awayScore,
-        };
-      previousScores.current.set(match.id, [match.homeScore, match.awayScore]);
-    }
-    // Both maps are keyed by match id; drop entries for matches that left the
-    // fixture window and change flags past their display window.
-    const liveIds = new Set(allMatches.map((match) => match.id));
-    for (const id of previousScores.current.keys()) {
-      if (!liveIds.has(id)) previousScores.current.delete(id);
-    }
-    const cutoff = Date.now() - SCORE_CHANGE_MS;
-    setScoreChanges((current) => {
-      const next = { ...current, ...changed };
-      let touched = Object.keys(changed).length > 0;
-      for (const [id, change] of Object.entries(next)) {
-        if (!liveIds.has(id) || change.at < cutoff) {
-          delete next[id];
-          touched = true;
-        }
-      }
-      return touched ? next : current;
-    });
-  }, [allMatches]);
+    const at = Date.now();
+    setScoreTracking((current) => trackScores(allMatches, current, at));
+  }, [allMatches, now]);
   useEffect(() => {
     setTickerPinned((current) => {
       if (!current) return current;
@@ -364,7 +325,7 @@ export default function App() {
       // Only a real re-entry cancels a pending exit-focus plan: an unrelated
       // commit (say, a window-resize listener's setState) that lands while the
       // exit is still in flight must not disarm it.
-      tickerExitFocus.current = null; // MUTANT e
+      if (enteredTicker) tickerExitFocus.current = null;
       return;
     }
     if (previousView.current === view && !leftTicker) return;
@@ -584,7 +545,8 @@ export default function App() {
     matchView !== 'Live' &&
     !listError &&
     (historyView ? !recent.loading : !viewStatus.partial);
-  const refreshBusy = view === 'detail' ? busy || detailBusy : view === 'home' && historyView ? recent.loading : busy;
+  const refreshBusy =
+    view === 'detail' ? busy || detailBusy : view === 'home' && historyView ? recent.loading : busy || refreshCooling;
   const refreshLabel =
     view === 'detail'
       ? 'Refresh match details and scores'
@@ -613,8 +575,15 @@ export default function App() {
     if (view === 'detail') {
       detailRefresh.current?.refresh();
       void doRefresh();
-    } else if (view === 'home' && historyView) recent.retry();
-    else void doRefresh();
+    } else if (view === 'home' && historyView) {
+      recent.retry();
+    } else if (!refreshCooling) {
+      // Rust coalesces fixture clicks closer than 15 seconds. Say so in the UI
+      // instead of letting a second click become a silent no-op.
+      setRefreshCooling(true);
+      setTimeout(() => setRefreshCooling(false), 15_000);
+      void doRefresh();
+    }
   };
   const retryFeed = (event: MouseEvent<HTMLButtonElement>) => {
     recoveryFocus.current = document.activeElement === event.currentTarget ? event.currentTarget : null;
@@ -1117,7 +1086,9 @@ export default function App() {
               className="icon-button"
               title={
                 refreshBusy
-                  ? 'Updating…'
+                  ? refreshCooling && !busy
+                    ? 'Just refreshed · wait a few seconds'
+                    : 'Updating…'
                   : limitedUntil
                     ? `${refreshLabel} · ESPN is rate limiting requests until ${timeLabel(limitedUntil)}`
                     : refreshLabel
