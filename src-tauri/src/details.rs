@@ -13,7 +13,7 @@ use std::{
 use tokio::sync::Mutex as AsyncMutex;
 #[path = "details_statistics.rs"]
 mod statistics;
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Event {
     id: String,
@@ -30,7 +30,12 @@ pub struct Event {
     #[serde(default)]
     reason: Option<String>,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone)]
+struct SequencedEvent {
+    event: Event,
+    sequence: Option<u64>,
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Statistic {
     team_id: String,
@@ -38,7 +43,7 @@ pub struct Statistic {
     label: String,
     value: String,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Player {
     team_id: String,
@@ -54,13 +59,13 @@ pub struct Player {
     #[serde(default)]
     subbed_out: bool,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Coach {
     team_id: String,
     name: String,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Scorer {
     team_id: String,
@@ -72,7 +77,7 @@ pub struct Scorer {
     #[serde(default)]
     penalty: bool,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Substitution {
     team_id: String,
@@ -80,7 +85,7 @@ pub struct Substitution {
     player_out: String,
     minute: String,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FormGame {
     opponent: String,
@@ -92,7 +97,7 @@ pub struct FormGame {
     #[serde(default)]
     date: Option<String>,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TeamLeader {
     team_id: String,
@@ -107,7 +112,7 @@ pub struct TeamLeader {
     #[serde(default)]
     apps: Option<u32>,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Weather {
     #[serde(default)]
@@ -115,7 +120,7 @@ pub struct Weather {
     #[serde(default)]
     pub condition: Option<String>,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Predictor {
     pub home: f64,
@@ -126,7 +131,7 @@ pub struct Predictor {
     #[serde(default)]
     pub provider: Option<String>,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Standing {
     pub team_id: String,
@@ -135,7 +140,7 @@ pub struct Standing {
     #[serde(default)]
     pub played: Option<u32>,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Details {
     pub match_id: String,
@@ -190,6 +195,35 @@ pub struct Details {
     pub updated_at: String,
     pub error: Option<String>,
     pub stale: bool,
+}
+impl Details {
+    #[allow(dead_code)]
+    pub fn content_eq(&self, other: &Self) -> bool {
+        self.match_id == other.match_id
+            && self.match_state == other.match_state
+            && self.league == other.league
+            && self.venue == other.venue
+            && self.venue_city == other.venue_city
+            && self.referee == other.referee
+            && self.capacity == other.capacity
+            && self.statistics_note == other.statistics_note
+            && self.attendance == other.attendance
+            && self.form == other.form
+            && self.leaders == other.leaders
+            && self.season_name == other.season_name
+            && self.matchweek == other.matchweek
+            && self.broadcasts == other.broadcasts
+            && self.weather == other.weather
+            && self.predictor == other.predictor
+            && self.standings == other.standings
+            && self.events == other.events
+            && self.statistics == other.statistics
+            && self.players == other.players
+            && self.scorers == other.scorers
+            && self.substitutions == other.substitutions
+            && self.formations == other.formations
+            && self.coaches == other.coaches
+    }
 }
 fn text(v: &Value, key: &str) -> String {
     v[key].as_str().unwrap_or("").chars().take(500).collect()
@@ -316,11 +350,22 @@ fn normalized_predictor(
     if total <= 0.0 {
         return None;
     }
-    let scale = |n: f64| (n * 100.0 / total * 10.0).round() / 10.0;
+    let mut tenths = raw.map(|n| (n * 1000.0 / total).round() as i64);
+    let largest = raw.iter().enumerate().fold(
+        0,
+        |largest, (index, n)| {
+            if *n > raw[largest] {
+                index
+            } else {
+                largest
+            }
+        },
+    );
+    tenths[largest] += 1000 - tenths.iter().sum::<i64>();
     Some(Predictor {
-        home: scale(home),
-        draw: scale(draw),
-        away: scale(away),
+        home: tenths[0] as f64 / 10.0,
+        draw: tenths[1] as f64 / 10.0,
+        away: tenths[2] as f64 / 10.0,
         source: source.to_owned(),
         provider,
     })
@@ -646,13 +691,39 @@ fn add_substitution(
 }
 
 fn scorer_from_text(body: &str) -> Option<(String, String)> {
-    let after = body
-        .rsplit_once(". ")
-        .map(|(_, rest)| rest)
-        .or_else(|| body.strip_prefix("Goal! "))
-        .unwrap_or(body);
-    let name = after.split(" (").next()?.trim();
-    let team = after.split(" (").nth(1)?.split(')').next()?.trim();
+    let mut clause = body.trim();
+    if let Some(rest) = clause.strip_prefix("Goal! ") {
+        clause = rest.trim();
+    }
+    let lower = clause.to_ascii_lowercase();
+    if lower.starts_with("own goal by ") {
+        let rest = &clause["own goal by ".len()..];
+        let head = rest.split_once(". ").map_or(rest, |(first, _)| first);
+        let (name, team) = head.split_once(',')?;
+        let name = name.trim();
+        let team = team.trim().trim_end_matches('.');
+        return (!name.is_empty() && !team.is_empty()).then(|| {
+            (
+                name.chars().take(120).collect(),
+                team.chars().take(120).collect(),
+            )
+        });
+    }
+    if let Some((prefix, rest)) = clause.split_once(". ") {
+        if !prefix.contains(" (") {
+            clause = rest.trim();
+        }
+    }
+    if let Some(index) = clause.to_ascii_lowercase().find(". assisted by") {
+        clause = clause[..index].trim();
+    }
+    if clause.to_ascii_lowercase().starts_with("assisted by") {
+        return None;
+    }
+    let (name, rest) = clause.split_once(" (")?;
+    let (team, _) = rest.split_once(')')?;
+    let name = name.trim();
+    let team = team.trim();
     (!name.is_empty() && !team.is_empty()).then(|| {
         (
             name.chars().take(120).collect(),
@@ -690,6 +761,60 @@ fn add_scorer(
             penalty: lower.contains("penalty"),
         },
     ));
+}
+
+const MAX_FORM_SCORE: u64 = 999;
+
+fn non_negative_integer(v: &Value) -> Option<u64> {
+    if let Some(raw) = v.as_str() {
+        let raw = raw.trim();
+        return (!raw.is_empty() && raw.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| raw.parse().ok())
+            .flatten()
+            .filter(|&n| n <= MAX_FORM_SCORE);
+    }
+    if let Some(n) = v.as_u64() {
+        return (n <= MAX_FORM_SCORE).then_some(n);
+    }
+    let n = v.as_f64()?;
+    (n.is_finite() && n >= 0.0 && n.fract() == 0.0 && n <= MAX_FORM_SCORE as f64)
+        .then_some(n as u64)
+}
+
+fn score_pair(raw: &str) -> Option<(u64, u64)> {
+    let (first, second) = raw.trim().split_once('-')?;
+    let parse = |part: &str| {
+        let part = part.trim();
+        (!part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| part.parse().ok())
+            .flatten()
+            .filter(|&n| n <= MAX_FORM_SCORE)
+    };
+    Some((parse(first)?, parse(second)?))
+}
+
+fn form_score(game: &Value, result: &str, at_home: bool) -> String {
+    if let (Some(home), Some(away)) = (
+        non_negative_integer(&game["homeTeamScore"]),
+        non_negative_integer(&game["awayTeamScore"]),
+    ) {
+        return format!("{home}-{away}");
+    }
+    let raw = text(game, "score");
+    let Some((first, second)) = score_pair(&raw) else {
+        return raw.chars().take(20).collect();
+    };
+    let (team, opponent) = match result {
+        "W" => (first.max(second), first.min(second)),
+        "L" => (first.min(second), first.max(second)),
+        _ => (first, second),
+    };
+    let (home, away) = if at_home {
+        (team, opponent)
+    } else {
+        (opponent, team)
+    };
+    format!("{home}-{away}")
 }
 
 pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, String> {
@@ -781,22 +906,26 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
                 seconds,
             );
         }
-        seen_text.insert(body.clone());
+        let minute = text(&e["clock"], "displayValue");
+        seen_text.insert((period, minute.trim().to_owned(), body.clone()));
         events.insert(
             eid.clone(),
-            Event {
-                id: eid,
-                minute: text(&e["clock"], "displayValue"),
-                seconds,
-                period,
-                reason: incident_reason(&kind, &body),
-                kind,
-                participants: event_participants(e, &body),
-                short_text: e["shortText"]
-                    .as_str()
-                    .map(|s| s.chars().take(160).collect()),
-                text: body,
-                team_id,
+            SequencedEvent {
+                event: Event {
+                    id: eid,
+                    minute,
+                    seconds,
+                    period,
+                    reason: incident_reason(&kind, &body),
+                    kind,
+                    participants: event_participants(e, &body),
+                    short_text: e["shortText"]
+                        .as_str()
+                        .map(|s| s.chars().take(160).collect()),
+                    text: body,
+                    team_id,
+                },
+                sequence: e["sequence"].as_u64(),
             },
         );
     }
@@ -853,7 +982,7 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
                     minute = "FT".into();
                     seconds = events
                         .values()
-                        .map(|event: &Event| event.seconds)
+                        .map(|entry: &SequencedEvent| entry.event.seconds)
                         .fold(5400.0, f64::max)
                         + 1.0;
                 }
@@ -877,16 +1006,15 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
             continue;
         };
         let raw_id = text(play, "id");
-        let fallback = entry["sequence"]
-            .as_u64()
-            .map(|n| n.to_string())
-            .unwrap_or_default();
+        let sequence = entry["sequence"].as_u64();
+        let fallback = sequence.map(|n| n.to_string()).unwrap_or_default();
         let eid = if events.contains_key(&raw_id) {
             raw_id
         } else {
             format!("c-{}", if raw_id.is_empty() { fallback } else { raw_id })
         };
-        if eid == "c-" || (!events.contains_key(&eid) && !seen_text.insert(body.clone())) {
+        let text_key = (period, minute.trim().to_owned(), body.clone());
+        if eid == "c-" || (!events.contains_key(&eid) && !seen_text.insert(text_key.clone())) {
             continue;
         }
         let team_id = event_team(&play["team"], &team_by_name).or_else(|| {
@@ -944,51 +1072,69 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
             );
         }
         if let Some(existing) = events.get_mut(&eid) {
-            if body.chars().count() > existing.text.chars().count() {
-                existing.text = body.clone();
+            if body.chars().count() > existing.event.text.chars().count() {
+                existing.event.text = body.clone();
             }
-            if existing.reason.is_none() {
-                existing.reason = incident_reason(&kind, &body);
+            if existing.event.reason.is_none() {
+                existing.event.reason = incident_reason(&kind, &body);
             }
-            if existing.participants.is_empty() {
-                existing.participants = event_participants(play, &body);
+            if existing.event.participants.is_empty() {
+                existing.event.participants = event_participants(play, &body);
             }
-            if existing.team_id.is_none() {
-                existing.team_id = team_id;
+            if existing.event.team_id.is_none() {
+                existing.event.team_id = team_id;
             }
-            seen_text.insert(body);
+            if let Some(sequence) = sequence {
+                existing.sequence = Some(
+                    existing
+                        .sequence
+                        .map_or(sequence, |current| current.min(sequence)),
+                );
+            }
+            seen_text.insert(text_key);
             continue;
         }
         events.insert(
             eid.clone(),
-            Event {
-                id: eid,
-                minute,
-                seconds,
-                period,
-                reason: incident_reason(&kind, &body),
-                kind,
-                participants: event_participants(play, &body),
-                short_text: play["shortText"]
-                    .as_str()
-                    .map(|s| s.chars().take(160).collect()),
-                text: body,
-                team_id,
+            SequencedEvent {
+                event: Event {
+                    id: eid,
+                    minute,
+                    seconds,
+                    period,
+                    reason: incident_reason(&kind, &body),
+                    kind,
+                    participants: event_participants(play, &body),
+                    short_text: play["shortText"]
+                        .as_str()
+                        .map(|s| s.chars().take(160).collect()),
+                    text: body,
+                    team_id,
+                },
+                sequence,
             },
         );
     }
     let mut events: Vec<_> = events.into_values().collect();
     events.sort_by(|a, b| {
-        a.period
-            .cmp(&b.period)
-            .then(a.seconds.total_cmp(&b.seconds))
-            .then(a.id.cmp(&b.id))
+        a.event
+            .period
+            .cmp(&b.event.period)
+            .then(a.event.seconds.total_cmp(&b.event.seconds))
+            .then_with(|| {
+                a.sequence
+                    .is_none()
+                    .cmp(&b.sequence.is_none())
+                    .then_with(|| a.sequence.cmp(&b.sequence))
+            })
+            .then(a.event.id.cmp(&b.event.id))
     });
     if events.len() > 1000 {
         // keyEvents and commentary each carry up to 1000 entries; the merged feed
         // must satisfy the cache/display cap itself or the whole panel is lost.
         events.drain(..events.len() - 1000);
     }
+    let events: Vec<_> = events.into_iter().map(|entry| entry.event).collect();
     scorer_rows.sort_by(|a, b| {
         a.0.total_cmp(&b.0)
             .then(a.1.name.cmp(&b.1.name))
@@ -1131,12 +1277,16 @@ pub fn normalize(v: &Value, id: &str, league: Competition) -> Result<Details, St
                 if opponent.is_empty() || !matches!(result.as_str(), "W" | "D" | "L") {
                     return None;
                 }
+                let at_home = text(game, "atVs") == "vs";
                 Some(FormGame {
                     opponent: opponent.chars().take(100).collect(),
                     opponent_id: text(&game["opponent"], "id"),
+                    score: form_score(game, &result, at_home)
+                        .chars()
+                        .take(20)
+                        .collect(),
                     result,
-                    score: text(game, "score").chars().take(20).collect(),
-                    at_home: text(game, "atVs") == "vs",
+                    at_home,
                     date: game["gameDate"]
                         .as_str()
                         .filter(|raw| {

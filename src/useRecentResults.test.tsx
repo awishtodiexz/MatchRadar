@@ -3,12 +3,16 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { resultsStatus } from './freshness';
 import { useRecentResults } from './useRecentResults';
+import { setNativeVisible } from './windowVisibility';
 import type { CompetitionView } from './types';
 const bridge = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: bridge.invoke }));
 afterEach(() => {
   cleanup();
+  setNativeVisible(true);
   vi.resetAllMocks();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 it('requests only when Results opens, retaining data after an error', async () => {
   bridge.invoke
@@ -96,6 +100,21 @@ it('stops reporting pending after a competition request fails so the error is ac
   await act(async () => requests[1].reject(new Error('offline')));
   expect(result.current.loading).toBe(false);
   expect(result.current.data.error).toBeTruthy();
+});
+
+it('pauses results polling while the native window is hidden even when the document stays visible', async () => {
+  vi.useFakeTimers();
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  bridge.invoke.mockResolvedValue({ matches: [], updatedAt: 'checked', error: null });
+  renderHook(() => useRecentResults(true));
+  await act(async () => {});
+  expect(bridge.invoke).toHaveBeenCalledTimes(1);
+  act(() => setNativeVisible(false));
+  await act(async () => vi.advanceTimersByTimeAsync(600000));
+  expect(bridge.invoke).toHaveBeenCalledTimes(1);
+  act(() => setNativeVisible(true));
+  await act(async () => {});
+  expect(bridge.invoke).toHaveBeenCalledTimes(2);
 });
 
 it('exposes a transport failure through the selected competition status and clears it on recovery', async () => {

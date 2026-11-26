@@ -141,3 +141,25 @@ it('explains what team defaults mean for this fixture', () => {
   );
   expect(screen.getByText(`Alerts for goals because you follow ${match.home.name}.`)).toBeTruthy();
 });
+
+it('closes the card menu when the match list scrolls or the window resizes', () => {
+  const { container } = render(
+    <div className="match-list">
+      <MatchCard match={mockMatches[2]} settings={defaults} onOpen={() => {}} />
+    </div>,
+  );
+  const open = () => {
+    fireEvent.contextMenu(screen.getByRole('button', { name: /Match details:/ }));
+    return screen.getByRole('menu');
+  };
+  const list = container.querySelector('.match-list');
+  if (!list) throw new Error('match list missing');
+
+  expect(open()).toBeTruthy();
+  fireEvent.scroll(list);
+  expect(screen.queryByRole('menu')).toBeNull();
+
+  expect(open()).toBeTruthy();
+  fireEvent(window, new Event('resize'));
+  expect(screen.queryByRole('menu')).toBeNull();
+});

@@ -71,6 +71,8 @@ export function useTickerMode() {
       if (mode.current === next) return true;
       if (isTauri()) {
         const win = getCurrentWindow();
+        let resized = false;
+        let tickerSize: { width: number; height: number } | null = null;
         try {
           if (next) {
             const size = (await win.innerSize()).toLogical(await win.scaleFactor());
@@ -79,13 +81,17 @@ export function useTickerMode() {
             await win.setMinSize(new LogicalSize(320, 112));
             await win.setSize(new LogicalSize(Math.max(320, Math.min(size.width, 420)), 112));
           } else {
+            tickerSize = (await win.innerSize()).toLogical(await win.scaleFactor());
             await win.setSize(new LogicalSize(restoreSize.current.width, restoreSize.current.height));
+            resized = true;
             await win.setMinSize(new LogicalSize(320, 460));
           }
         } catch {
           // The mode never flipped, so restore the minimum matching the mode we
           // are still in; a failed entry must not leave the 112px floor behind.
-          void win.setMinSize(new LogicalSize(320, mode.current ? 112 : 460)).catch(() => {});
+          await win.setMinSize(new LogicalSize(320, mode.current ? 112 : 460)).catch(() => {});
+          if (!next && resized && tickerSize)
+            await win.setSize(new LogicalSize(tickerSize.width, tickerSize.height)).catch(() => {});
           useApp.setState({ error: 'Could not resize the widget.' });
           return false;
         }

@@ -229,6 +229,36 @@ pub(crate) fn restore_target(
     };
     Some(persisted.unwrap_or(fallback).bounded())
 }
+
+/// Logical size needed after a live DPI change, when Tao can preserve the old
+/// physical client size and squeeze the viewport below the widget's minimum.
+/// Ticker strips are intentionally shorter than the expanded-size floor, so
+/// they are repaired to their exact strip dimensions rather than bounded.
+pub(crate) fn dpi_repair_target(
+    new_physical_width: u32,
+    new_physical_height: u32,
+    new_scale: f64,
+    compact: bool,
+    persisted_expanded: Option<ExpandedSize>,
+) -> Option<ExpandedSize> {
+    let logical =
+        ExpandedSize::from_physical_unbounded(new_physical_width, new_physical_height, new_scale)?;
+    if logical.height <= 160.0 {
+        return (logical.width < 320.0 || logical.height < 110.0).then_some(ExpandedSize {
+            width: logical.width.clamp(320.0, 420.0),
+            height: 112.0,
+        });
+    }
+    if logical.width >= 320.0 && logical.height >= 460.0 {
+        return None;
+    }
+    if compact {
+        Some(persisted_expanded.unwrap_or_default().compact())
+    } else {
+        restore_target(logical, persisted_expanded)
+    }
+}
+
 pub(crate) fn resize(window: &tauri::WebviewWindow, size: ExpandedSize) -> Result<(), String> {
     let size = size.bounded();
     window
@@ -340,6 +370,60 @@ mod tests {
             Some(ExpandedSize {
                 width: 390.0,
                 height: 1100.0
+            })
+        );
+    }
+
+    #[test]
+    fn dpi_repair_restores_the_clipped_controlled_measurement() {
+        assert_eq!(
+            dpi_repair_target(372, 691, 1.25, false, None),
+            Some(ExpandedSize {
+                width: 390.0,
+                height: 700.0
+            })
+        );
+    }
+
+    #[test]
+    fn dpi_repair_leaves_a_correctly_scaled_widget_untouched() {
+        assert_eq!(dpi_repair_target(470, 866, 1.25, false, None), None);
+    }
+
+    #[test]
+    fn dpi_repair_uses_the_compact_target_in_compact_mode() {
+        assert_eq!(
+            dpi_repair_target(372, 691, 1.25, true, None),
+            Some(ExpandedSize {
+                width: 390.0,
+                height: 460.0
+            })
+        );
+    }
+
+    #[test]
+    fn dpi_repair_restores_a_clipped_ticker_without_bounding_it() {
+        assert_eq!(
+            dpi_repair_target(372, 112, 1.25, false, None),
+            Some(ExpandedSize {
+                width: 320.0,
+                height: 112.0
+            })
+        );
+    }
+
+    #[test]
+    fn dpi_repair_leaves_an_unclipped_ticker_untouched() {
+        assert_eq!(dpi_repair_target(488, 140, 1.25, false, None), None);
+    }
+
+    #[test]
+    fn dpi_repair_restores_a_wide_ticker_with_clipped_height() {
+        assert_eq!(
+            dpi_repair_target(420, 112, 1.25, false, None),
+            Some(ExpandedSize {
+                width: 336.0,
+                height: 112.0
             })
         );
     }

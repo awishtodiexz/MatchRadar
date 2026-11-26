@@ -574,7 +574,10 @@ fn score_query_dates(
     }
     if cached.iter().any(|m| {
         m.league == league
-            && matches!(m.status.as_str(), "live" | "halftime" | "suspended")
+            && matches!(
+                m.status.as_str(),
+                "live" | "halftime" | "suspended" | "scheduled"
+            )
             && parse_kickoff(&m.kickoff)
                 .is_some_and(|d| d.date_naive() == today - Duration::days(1))
     }) {
@@ -1121,9 +1124,9 @@ mod score_date_tests {
     }
 
     #[test]
-    fn active_and_suspended_games_from_yesterday_query_that_day() {
+    fn active_and_unconfirmed_games_from_yesterday_query_that_day() {
         let today = NaiveDate::from_ymd_opt(2026, 11, 10).unwrap();
-        for status in ["live", "halftime", "suspended"] {
+        for status in ["live", "halftime", "suspended", "scheduled"] {
             let m = active("2026-11-09", status, Competition::PremierLeague);
             assert_eq!(
                 score_query_dates(today, today, &[m], Competition::PremierLeague),
@@ -1131,7 +1134,7 @@ mod score_date_tests {
                 "{status}"
             );
         }
-        for status in ["scheduled", "fulltime", "postponed", "cancelled", "unknown"] {
+        for status in ["fulltime", "postponed", "cancelled", "unknown"] {
             let m = active("2026-11-09", status, Competition::PremierLeague);
             assert_eq!(
                 score_query_dates(today, today, &[m], Competition::PremierLeague),
@@ -1139,12 +1142,15 @@ mod score_date_tests {
                 "{status}"
             );
         }
-        // A live game from two days ago is outside the daily score window.
-        let m = active("2026-11-08", "live", Competition::PremierLeague);
-        assert_eq!(
-            score_query_dates(today, today, &[m], Competition::PremierLeague),
-            ["20261110"]
-        );
+        // A game from two days ago is outside the daily score window.
+        for status in ["live", "scheduled"] {
+            let m = active("2026-11-08", status, Competition::PremierLeague);
+            assert_eq!(
+                score_query_dates(today, today, &[m], Competition::PremierLeague),
+                ["20261110"],
+                "{status}"
+            );
+        }
         // Another competition must not add this competition's date.
         let m = active("2026-11-09", "live", Competition::ChampionsLeague);
         assert_eq!(

@@ -34,7 +34,8 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_window_state::{StateFlags, WindowExt};
 use window::{
-    ensure_visible, logical_size, logical_size_unbounded, resize, restore_target, rollback_window,
+    dpi_repair_target, ensure_visible, logical_size, logical_size_unbounded, resize,
+    restore_target, rollback_window,
 };
 
 struct State {
@@ -99,6 +100,85 @@ fn append_log(path: &Path, message: &str) {
         let _ = writeln!(file, "{message}");
     }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DetailPersist {
+    None,
+    Periodic,
+    Immediate,
+}
+
+fn update_detail_cache(
+    snapshot: &mut Snapshot,
+    data: &details::Details,
+    phase: details::Phase,
+) -> DetailPersist {
+    let live_ids: std::collections::HashSet<&str> = snapshot
+        .matches
+        .iter()
+        .map(|m| m.id.as_str())
+        .chain(snapshot.recent_results.iter().map(|m| m.id.as_str()))
+        .collect();
+    let existing_position = snapshot
+        .detail_cache
+        .iter()
+        .position(|detail| detail.match_id == data.match_id);
+    if data.stale {
+        if existing_position.is_some() || !live_ids.contains(data.match_id.as_str()) {
+            return DetailPersist::None;
+        }
+        // Prune before applying the cap so dead matches cannot evict live ones.
+        snapshot
+            .detail_cache
+            .retain(|detail| live_ids.contains(detail.match_id.as_str()));
+        snapshot.detail_cache.push(data.clone());
+        snapshot
+            .detail_cache
+            .sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        snapshot.detail_cache.truncate(24);
+        return DetailPersist::Immediate;
+    }
+    let existing_clean = existing_position.is_some_and(|position| {
+        let existing = &snapshot.detail_cache[position];
+        !existing.stale && existing.error.is_none()
+    });
+    let unchanged = existing_clean
+        && existing_position
+            .is_some_and(|position| snapshot.detail_cache[position].content_eq(data));
+    if unchanged {
+        return DetailPersist::None;
+    }
+    snapshot
+        .detail_cache
+        .retain(|detail| detail.match_id != data.match_id);
+    snapshot
+        .detail_cache
+        .retain(|detail| live_ids.contains(detail.match_id.as_str()));
+    if live_ids.contains(data.match_id.as_str()) {
+        snapshot.detail_cache.push(data.clone());
+    }
+    snapshot
+        .detail_cache
+        .sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    snapshot.detail_cache.truncate(24);
+    if !existing_clean
+        || phase == details::Phase::Final
+        || data.match_state.as_deref() == Some("post")
+    {
+        DetailPersist::Immediate
+    } else {
+        DetailPersist::Periodic
+    }
+}
+
+fn attach_detail_persistence_error(data: &mut details::Details, error: &str) {
+    let message = format!("Details available, but offline cache could not be saved: {error}");
+    data.error = Some(match data.error.take() {
+        Some(existing) if !existing.is_empty() => format!("{existing}; {message}"),
+        _ => message,
+    });
+}
+
 #[tauri::command]
 async fn get_match_details(
     id: String,
@@ -135,37 +215,26 @@ async fn get_match_details(
     let mut data = cache
         .get(league, &id, phase, force.unwrap_or(false))
         .await?;
-    if !data.stale {
-        let state = app.state::<State>();
+    let state = app.state::<State>();
+    let persistence = {
         let mut snapshot = snapshot_lock(&state);
-        if !snapshot
-            .detail_cache
-            .iter()
-            .any(|d| d.match_id == id && d.updated_at == data.updated_at)
-        {
-            let mut next = snapshot.clone();
-            next.detail_cache.retain(|d| d.match_id != id);
-            next.detail_cache.push(data.clone());
-            next.detail_cache
-                .sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-            next.detail_cache.truncate(24);
-            // Drop cached details for matches that left the fixture/results window.
-            let live_ids: std::collections::HashSet<&str> = snapshot
-                .matches
-                .iter()
-                .map(|m| m.id.as_str())
-                .chain(snapshot.recent_results.iter().map(|m| m.id.as_str()))
-                .collect();
-            next.detail_cache
-                .retain(|detail| live_ids.contains(detail.match_id.as_str()));
-            match write_snapshot(&state, &next) {
-                Ok(()) => *snapshot = next,
-                Err(e) => {
-                    data.error = Some(format!(
-                        "Details available, but offline cache could not be saved: {e}"
-                    ));
-                }
+        let mut next = snapshot.clone();
+        let persistence = update_detail_cache(&mut next, &data, phase);
+        match persistence {
+            DetailPersist::None => {}
+            DetailPersist::Periodic => {
+                snapshot.detail_cache = next.detail_cache;
             }
+            DetailPersist::Immediate => match write_snapshot(&state, &next) {
+                Ok(()) => *snapshot = next,
+                Err(error) => attach_detail_persistence_error(&mut data, &error),
+            },
+        }
+        persistence
+    };
+    if persistence == DetailPersist::Periodic {
+        if let Err(error) = persist_periodic(&state) {
+            attach_detail_persistence_error(&mut data, &error);
         }
     }
     Ok(data)
@@ -176,10 +245,19 @@ fn get_snapshot(state: tauri::State<'_, State>) -> Result<WidgetSnapshot, String
     Ok(WidgetSnapshot::from(&*snapshot))
 }
 #[tauri::command]
-fn save_settings(
+async fn save_settings(settings: Settings, app: tauri::AppHandle) -> Result<Settings, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<State>();
+        save_settings_blocking(settings, &app, &state)
+    })
+    .await
+    .map_err(|e| format!("Save settings task failed: {e}"))?
+}
+
+fn save_settings_blocking(
     mut settings: Settings,
-    app: tauri::AppHandle,
-    state: tauri::State<'_, State>,
+    app: &tauri::AppHandle,
+    state: &State,
 ) -> Result<Settings, String> {
     // Ignore legacy clients attempting to select the removed mode.
     settings.mock = false;
@@ -225,12 +303,12 @@ fn save_settings(
     }
     let enable_start_hidden = settings.start_hidden && !old.settings.start_hidden;
     let saved = (|| {
-        let mut snapshot = snapshot_lock(&state);
+        let mut snapshot = snapshot_lock(state);
         // Clone after native calls so a completed poll cannot be lost while resizing.
         let mut next = snapshot.clone();
         apply_settings(&mut next, settings);
         next.expanded_size = expanded_size;
-        write_snapshot(&state, &next)?;
+        write_snapshot(state, &next)?;
         *snapshot = next;
         Ok::<_, String>(())
     })();
@@ -257,20 +335,32 @@ fn save_settings(
     app.emit("snapshot-updated", ())
         .map_err(|e| format!("Notify widget of saved settings: {e}"))?;
     // Return Rust's persisted normalization, rather than echoing the IPC payload.
-    let snapshot = snapshot_lock(&state);
+    let snapshot = snapshot_lock(state);
     Ok(snapshot.settings.clone())
 }
+
+fn manual_refresh_allowed(
+    last: Option<std::time::Instant>,
+    now: std::time::Instant,
+    has_error: bool,
+) -> bool {
+    has_error || last.is_none_or(|t| now.duration_since(t) >= Duration::from_secs(15))
+}
+
 #[tauri::command]
 fn refresh(app: tauri::AppHandle, state: tauri::State<'_, State>) {
     // Coalesce manual refresh clicks: each forced cycle burns fixture + scoreboard
     // requests outside the cadence, so clicks closer than 15s merge into one.
+    // A failed cycle is exempt: the user can retry immediately rather than wait
+    // out the coalescing window with stale data still on screen.
     {
+        let has_error = snapshot_lock(&state).error.is_some();
         let mut last = state
             .manual_refresh_at
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let now = std::time::Instant::now();
-        if last.is_some_and(|t| now.duration_since(t) < Duration::from_secs(15)) {
+        if !manual_refresh_allowed(*last, now, has_error) {
             return;
         }
         *last = Some(now);
@@ -364,6 +454,44 @@ fn submit_notification(
         })
 }
 
+fn deliver_notifications_step<S, W, L>(
+    snapshot: &mut Snapshot,
+    save_failures: &mut u32,
+    now: impl Fn() -> DateTime<Utc>,
+    submit: S,
+    mut save: W,
+    mut log: L,
+) where
+    S: FnMut(&model::PendingNotification) -> Result<(), delivery::SubmissionError>,
+    W: FnMut(&Snapshot) -> Result<(), String>,
+    L: FnMut(&str),
+{
+    // If an earlier post-submit acknowledgement save failed, flush the updated
+    // in-memory sent_notifications/queue before checking whether any new
+    // candidates are due, even when pending_notifications is now empty or only
+    // holds backed-off items.
+    if *save_failures > 0 {
+        if save(snapshot).is_err() {
+            *save_failures = save_failures.saturating_add(1);
+            return;
+        }
+        *save_failures = 0;
+    }
+    if snapshot.pending_notifications.is_empty() {
+        return;
+    }
+    let result = delivery::submit_due(snapshot, now, submit, save, &mut log);
+    if let Err(error) = result {
+        // Back off persistence failures too; never submit an unpersisted candidate.
+        if *save_failures == 0 {
+            log(&format!("Queue persistence failed: {error}"));
+        }
+        *save_failures = save_failures.saturating_add(1);
+    } else {
+        *save_failures = 0;
+    }
+}
+
 async fn deliver_notifications(app: tauri::AppHandle) {
     let mut save_failures = 0u32;
     let mut persistence_retry = None::<tokio::time::Instant>;
@@ -375,30 +503,20 @@ async fn deliver_notifications(app: tauri::AppHandle) {
             Some(deadline.saturating_duration_since(tokio::time::Instant::now()))
         } else {
             let mut snapshot = snapshot_lock(&state);
-            if !snapshot.pending_notifications.is_empty() || save_failures > 0 {
-                let result = delivery::submit_due(
-                    &mut snapshot,
-                    Utc::now,
-                    |event| submit_notification(&app, event),
-                    |next| write_snapshot(&state, next),
-                    |message| notification_log(&state, message),
-                );
-                if let Err(error) = result {
-                    // Back off persistence failures too; never submit an unpersisted candidate.
-                    if save_failures == 0 {
-                        notification_log(&state, &format!("Queue persistence failed: {error}"));
-                    }
-                    save_failures = save_failures.saturating_add(1);
-                } else {
-                    save_failures = 0;
-                    persistence_retry = None;
-                }
-            }
+            deliver_notifications_step(
+                &mut snapshot,
+                &mut save_failures,
+                Utc::now,
+                |event| submit_notification(&app, event),
+                |next| write_snapshot(&state, next),
+                |message| notification_log(&state, message),
+            );
             if save_failures > 0 {
                 let delay = Duration::from_secs((30 * 2u64.pow(save_failures.min(4))).min(300));
                 persistence_retry = Some(tokio::time::Instant::now() + delay);
                 Some(delay)
             } else {
+                persistence_retry = None;
                 delivery::next_due(&snapshot, Utc::now())
             }
         };
@@ -416,6 +534,10 @@ async fn deliver_notifications(app: tauri::AppHandle) {
 }
 fn fixtures_due(state: &tauri::State<'_, State>, league: Competition, now: DateTime<Utc>) -> bool {
     scheduling::fixtures_due(&snapshot_lock(state), league, now)
+}
+
+fn scores_due(state: &tauri::State<'_, State>, league: Competition, now: DateTime<Utc>) -> bool {
+    scheduling::scores_due(&snapshot_lock(state), league, now)
 }
 
 async fn poll(app: tauri::AppHandle) {
@@ -472,10 +594,11 @@ async fn poll(app: tauri::AppHandle) {
                         !force && fixture_retry[index].is_some_and(|until| now_instant < until);
                     let scores_cooling =
                         !force && score_retry[index].is_some_and(|until| now_instant < until);
-                    if fixtures_cooling && scores_cooling {
+                    let due = force || fixtures_due(&state, league, now);
+                    let scores_needed = force || scores_due(&state, league, now);
+                    if (!due || fixtures_cooling) && (!scores_needed || scores_cooling) {
                         continue;
                     }
-                    let due = force || fixtures_due(&state, league, now);
                     let fixtures = if due && !fixtures_cooling {
                         provider::fixtures(client, league, today).await
                     } else {
@@ -485,17 +608,7 @@ async fn poll(app: tauri::AppHandle) {
                         .error
                         .as_ref()
                         .is_some_and(provider::FetchError::rate_limited);
-                    let scores = if limited {
-                        provider::FetchOutcome::failed(provider::FetchError {
-                            message: format!(
-                                "{} daily requests deferred after fixture rate limit",
-                                league.name()
-                            ),
-                            retry_after: fixtures.error.as_ref().and_then(|e| e.retry_after),
-                        })
-                    } else if scores_cooling {
-                        provider::FetchOutcome::default()
-                    } else {
+                    let scores = if scores_needed && !scores_cooling && !limited {
                         // Check yesterday when cached or newly fetched data says it is live.
                         let mut relevant: Vec<_> = cached
                             .iter()
@@ -506,6 +619,8 @@ async fn poll(app: tauri::AppHandle) {
                             relevant.extend(matches.iter().cloned());
                         }
                         provider::scores(client, league, today, &relevant).await
+                    } else {
+                        provider::FetchOutcome::default()
                     };
                     let cooldown = provider::host_cooldown(&[&fixtures, &scores]);
                     if cooldown.is_some() {
@@ -524,10 +639,11 @@ async fn poll(app: tauri::AppHandle) {
                         !force && fixture_retry[index].is_some_and(|until| now_instant < until);
                     let scores_cooling =
                         !force && score_retry[index].is_some_and(|until| now_instant < until);
-                    if fixtures_cooling && scores_cooling {
+                    let due = force || fixtures_due(&state, league, now);
+                    let scores_needed = force || scores_due(&state, league, now);
+                    if (!due || fixtures_cooling) && (!scores_needed || scores_cooling) {
                         continue;
                     }
-                    let due = force || fixtures_due(&state, league, now);
                     outcomes.push((
                         index,
                         league,
@@ -536,10 +652,10 @@ async fn poll(app: tauri::AppHandle) {
                         } else {
                             provider::FetchOutcome::default()
                         },
-                        if scores_cooling {
-                            provider::FetchOutcome::default()
-                        } else {
+                        if scores_needed && !scores_cooling {
                             provider::FetchOutcome::failed(error.clone())
+                        } else {
+                            provider::FetchOutcome::default()
                         },
                         Utc::now(),
                     ));
@@ -735,10 +851,9 @@ async fn watch_resume(app: tauri::AppHandle) {
             }
         }
         let state = app.state::<State>();
-        let idle = !snapshot_lock(&state).refreshing;
-        if idle {
-            state.wake.notify_one();
-        }
+        // Notify even when a pre-sleep poll is still in flight: Notify stores the
+        // permit, so the loop starts a fresh post-resume cycle as soon as it can.
+        state.wake.notify_one();
     }
 }
 
@@ -751,6 +866,17 @@ fn show_main_window(window: &tauri::WebviewWindow) {
         eprintln!("MatchRadar window recovery: {error}");
     }
     let _ = window.set_focus();
+    let _ = window.app_handle().emit("window-visibility", true);
+}
+
+fn hide_main_window(window: &tauri::WebviewWindow) {
+    let _ = window.hide();
+    let _ = window.app_handle().emit("window-visibility", false);
+}
+
+fn hide_window(window: &tauri::Window) {
+    let _ = window.hide();
+    let _ = window.app_handle().emit("window-visibility", false);
 }
 
 /// A sign-in launch (`--hidden`) stays in the tray only when the user asked to
@@ -785,7 +911,7 @@ fn toggle_main_window(app: &tauri::AppHandle) {
         && window.is_visible().unwrap_or(false)
         && !window.is_minimized().unwrap_or(false)
     {
-        let _ = window.hide();
+        hide_main_window(&window);
     } else {
         show_main_window(&window);
     }
@@ -987,7 +1113,7 @@ fn main() {
                     }
                     "hide" => {
                         if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.hide();
+                            hide_main_window(&window);
                         }
                     }
                     "settings" => {
@@ -1027,17 +1153,48 @@ fn main() {
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
-                let _ = window.hide();
+                hide_window(window);
             }
             // The window is tray-only: a minimize from any source (for example
             // Win+Down) hides it instead of leaving it minimized off-screen.
             tauri::WindowEvent::Resized(_) => {
                 if window.is_minimized().unwrap_or(false) {
-                    let _ = window.hide();
+                    hide_window(window);
                 }
             }
-            // DPI changes and restored focus are cheap moments to confirm placement.
-            tauri::WindowEvent::Focused(true) | tauri::WindowEvent::ScaleFactorChanged { .. } => {
+            tauri::WindowEvent::ScaleFactorChanged {
+                scale_factor,
+                new_inner_size,
+                ..
+            } => {
+                if let Some(window) = window.app_handle().get_webview_window("main") {
+                    let (compact, expanded_size) = {
+                        let state = window.app_handle().state::<State>();
+                        let snapshot = snapshot_lock(&state);
+                        (snapshot.settings.compact, snapshot.expanded_size)
+                    };
+                    if let Some(target) = dpi_repair_target(
+                        new_inner_size.width,
+                        new_inner_size.height,
+                        *scale_factor,
+                        compact,
+                        expanded_size,
+                    ) {
+                        // Ticker mode is deliberately shorter than ExpandedSize's floor,
+                        // so repair with the exact logical target instead of resize().
+                        if let Err(error) =
+                            window.set_size(tauri::LogicalSize::new(target.width, target.height))
+                        {
+                            eprintln!("MatchRadar DPI size repair: {error}");
+                        }
+                    }
+                    if let Err(error) = ensure_visible(&window) {
+                        eprintln!("MatchRadar window recovery: {error}");
+                    }
+                }
+            }
+            // Restored focus is a cheap moment to confirm placement.
+            tauri::WindowEvent::Focused(true) => {
                 if let Some(window) = window.app_handle().get_webview_window("main") {
                     if let Err(error) = ensure_visible(&window) {
                         eprintln!("MatchRadar window recovery: {error}");
@@ -1128,6 +1285,254 @@ mod persistence_tests {
 }
 
 #[cfg(test)]
+mod detail_cache_tests {
+    use super::*;
+
+    fn detail(id: &str, minute: u32) -> details::Details {
+        details::Details {
+            match_id: id.into(),
+            match_state: Some("in".into()),
+            league: Competition::PremierLeague,
+            venue: None,
+            venue_city: None,
+            referee: None,
+            capacity: None,
+            statistics_note: None,
+            attendance: None,
+            form: Default::default(),
+            leaders: Vec::new(),
+            season_name: None,
+            matchweek: None,
+            broadcasts: Vec::new(),
+            weather: None,
+            predictor: None,
+            standings: Vec::new(),
+            events: Vec::new(),
+            statistics: Vec::new(),
+            players: Vec::new(),
+            scorers: Vec::new(),
+            substitutions: Vec::new(),
+            formations: Default::default(),
+            coaches: Vec::new(),
+            updated_at: format!("2026-01-01T00:{minute:02}:00Z"),
+            error: None,
+            stale: false,
+        }
+    }
+
+    fn snapshot_with_live_ids(ids: &[String]) -> Snapshot {
+        let template = demo::mock().remove(0);
+        let matches = ids
+            .iter()
+            .map(|id| {
+                let mut m = template.clone();
+                m.id = id.clone();
+                m
+            })
+            .collect();
+        Snapshot {
+            matches,
+            ..Snapshot::default()
+        }
+    }
+
+    #[test]
+    fn dead_entries_are_pruned_before_the_cache_cap() {
+        let valid_ids: Vec<String> = (1..=14).map(|i| format!("10{i:02}")).collect();
+        let new_id = "2000".to_string();
+        let live_ids: Vec<String> = valid_ids
+            .iter()
+            .cloned()
+            .chain(std::iter::once(new_id.clone()))
+            .collect();
+        let mut snapshot = snapshot_with_live_ids(&live_ids);
+        for i in 0..10 {
+            snapshot
+                .detail_cache
+                .push(detail(&format!("30{i:02}"), 40 + i));
+        }
+        for (i, id) in valid_ids.iter().enumerate() {
+            snapshot.detail_cache.push(detail(id, 20 + i as u32));
+        }
+        assert_eq!(snapshot.detail_cache.len(), 24);
+
+        let incoming = detail(&new_id, 50);
+        assert_eq!(
+            update_detail_cache(&mut snapshot, &incoming, details::Phase::Live),
+            DetailPersist::Immediate
+        );
+
+        assert_eq!(snapshot.detail_cache.len(), 15);
+        assert!(live_ids.iter().all(|id| snapshot
+            .detail_cache
+            .iter()
+            .any(|detail| detail.match_id == *id)));
+        assert!(!snapshot
+            .detail_cache
+            .iter()
+            .any(|detail| detail.match_id.starts_with("30")));
+    }
+
+    #[test]
+    fn unchanged_live_detail_does_not_request_a_disk_write() {
+        let id = "1001".to_string();
+        let mut snapshot = snapshot_with_live_ids(std::slice::from_ref(&id));
+        let cached = detail(&id, 10);
+        snapshot.detail_cache.push(cached.clone());
+        let mut incoming = cached;
+        incoming.updated_at = "2026-01-01T00:11:00Z".into();
+        let before = snapshot.detail_cache.clone();
+
+        assert_eq!(
+            update_detail_cache(&mut snapshot, &incoming, details::Phase::Live),
+            DetailPersist::None
+        );
+        assert_eq!(snapshot.detail_cache, before);
+    }
+
+    #[test]
+    fn changed_live_detail_for_a_cached_match_is_periodic() {
+        let id = "1001".to_string();
+        let mut snapshot = snapshot_with_live_ids(std::slice::from_ref(&id));
+        snapshot.detail_cache.push(detail(&id, 10));
+        let mut incoming = detail(&id, 11);
+        incoming.venue = Some("Changed venue".into());
+
+        assert_eq!(
+            update_detail_cache(&mut snapshot, &incoming, details::Phase::Live),
+            DetailPersist::Periodic
+        );
+        assert_eq!(snapshot.detail_cache.len(), 1);
+        assert_eq!(
+            snapshot.detail_cache[0].venue.as_deref(),
+            Some("Changed venue")
+        );
+        assert_eq!(snapshot.detail_cache[0].updated_at, incoming.updated_at);
+    }
+
+    #[test]
+    fn first_time_and_final_details_are_immediate() {
+        let first_id = "1001".to_string();
+        let final_id = "1002".to_string();
+        let live_ids = vec![first_id.clone(), final_id.clone()];
+        let mut snapshot = snapshot_with_live_ids(&live_ids);
+
+        let first = detail(&first_id, 10);
+        assert_eq!(
+            update_detail_cache(&mut snapshot, &first, details::Phase::Live),
+            DetailPersist::Immediate
+        );
+
+        snapshot.detail_cache.push(detail(&final_id, 11));
+        let mut final_detail = detail(&final_id, 12);
+        final_detail.match_state = Some("post".into());
+        final_detail.venue = Some("Final venue".into());
+        assert_eq!(
+            update_detail_cache(&mut snapshot, &final_detail, details::Phase::Final),
+            DetailPersist::Immediate
+        );
+    }
+
+    #[test]
+    fn missing_stale_detail_recovers_a_transiently_failed_first_write() {
+        let id = "1001".to_string();
+        let mut snapshot = snapshot_with_live_ids(std::slice::from_ref(&id));
+        let mut stale = detail(&id, 10);
+        stale.stale = true;
+        stale.error = Some("offline".into());
+
+        assert_eq!(
+            update_detail_cache(&mut snapshot, &stale, details::Phase::Live),
+            DetailPersist::Immediate
+        );
+        assert_eq!(snapshot.detail_cache.len(), 1);
+        assert!(snapshot.detail_cache[0].stale);
+
+        assert_eq!(
+            update_detail_cache(&mut snapshot, &stale, details::Phase::Live),
+            DetailPersist::None
+        );
+        assert_eq!(snapshot.detail_cache.len(), 1);
+    }
+
+    #[test]
+    fn stale_detail_outside_the_fixture_window_is_not_cached() {
+        let live_id = "1001".to_string();
+        let mut snapshot = snapshot_with_live_ids(std::slice::from_ref(&live_id));
+        let mut stale = detail("9999", 10);
+        stale.stale = true;
+
+        assert_eq!(
+            update_detail_cache(&mut snapshot, &stale, details::Phase::Live),
+            DetailPersist::None
+        );
+        assert!(snapshot.detail_cache.is_empty());
+    }
+
+    #[test]
+    fn clean_detail_heals_a_persisted_stale_entry_immediately() {
+        let id = "1001".to_string();
+        let mut snapshot = snapshot_with_live_ids(std::slice::from_ref(&id));
+        let mut stale = detail(&id, 10);
+        stale.stale = true;
+        stale.error = Some("offline".into());
+        assert_eq!(
+            update_detail_cache(&mut snapshot, &stale, details::Phase::Live),
+            DetailPersist::Immediate
+        );
+        assert!(snapshot.detail_cache[0].stale);
+
+        let recovered = detail(&id, 15);
+        assert_eq!(
+            update_detail_cache(&mut snapshot, &recovered, details::Phase::Live),
+            DetailPersist::Immediate
+        );
+        assert!(!snapshot.detail_cache[0].stale);
+        assert!(snapshot.detail_cache[0].error.is_none());
+        assert_eq!(snapshot.detail_cache[0].updated_at, recovered.updated_at);
+    }
+
+    #[test]
+    fn notification_retry_flushes_in_memory_ack_when_queue_is_empty() {
+        let now = DateTime::parse_from_rfc3339("2026-10-29T15:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut snapshot = Snapshot::default();
+        snapshot.sent_notifications.push("1001:score:1:0".into());
+        let mut save_failures = 1u32;
+        let mut saves = 0usize;
+
+        deliver_notifications_step(
+            &mut snapshot,
+            &mut save_failures,
+            || now,
+            |_| panic!("empty queue should not submit"),
+            |_| {
+                saves += 1;
+                Err("disk temporarily locked".into())
+            },
+            |_| {},
+        );
+        assert_eq!(saves, 1);
+        assert_eq!(save_failures, 2);
+
+        deliver_notifications_step(
+            &mut snapshot,
+            &mut save_failures,
+            || now,
+            |_| panic!("empty queue should not submit"),
+            |_| {
+                saves += 1;
+                Ok(())
+            },
+            |_| {},
+        );
+        assert_eq!(saves, 2);
+        assert_eq!(save_failures, 0);
+    }
+}
+
+#[cfg(test)]
 mod native_tests {
     use super::*;
 
@@ -1137,6 +1542,20 @@ mod native_tests {
         assert!(!starts_in_tray(true, false));
         assert!(!starts_in_tray(false, true));
         assert!(!starts_in_tray(false, false));
+    }
+
+    #[test]
+    fn manual_refresh_coalesces_only_successful_recent_cycles() {
+        let now = std::time::Instant::now();
+        let recent = now - Duration::from_secs(5);
+        assert!(manual_refresh_allowed(None, now, false));
+        assert!(!manual_refresh_allowed(Some(recent), now, false));
+        assert!(manual_refresh_allowed(
+            Some(now - Duration::from_secs(15)),
+            now,
+            false
+        ));
+        assert!(manual_refresh_allowed(Some(recent), now, true));
     }
 
     #[test]

@@ -138,6 +138,16 @@ pub fn plan(snapshot: &mut Snapshot, now: DateTime<Utc>) -> Vec<(String, String)
                 {
                     alerts.push((format!("{}:start", m.id), format!("{name} is underway")));
                 }
+                let goal_baseline = if previous.status == "scheduled" {
+                    matches!(m.status.as_str(), "live" | "halftime" | "suspended")
+                        && kickoff.is_some_and(|k| {
+                            now >= k && now - k <= Duration::minutes(START_GRACE_MINUTES)
+                        })
+                } else {
+                    matches!(previous.status.as_str(), "live" | "halftime" | "suspended")
+                        && previous.home.is_some()
+                        && previous.away.is_some()
+                };
                 if (subscribed || snapshot.settings.goals)
                     && fresh_score
                     // A late goal can first appear in the same confirmed response
@@ -146,13 +156,11 @@ pub fn plan(snapshot: &mut Snapshot, now: DateTime<Utc>) -> Vec<(String, String)
                         m.status.as_str(),
                         "live" | "halftime" | "fulltime" | "suspended"
                     )
-                    && matches!(previous.status.as_str(), "live" | "halftime" | "suspended")
+                    && goal_baseline
                     // An awarded forfeit score is not a goal.
                     && m.detail != crate::provider::FORFEIT_DETAIL
                 {
-                    if let (Some(home), Some(away), Some(_), Some(_)) =
-                        (m.home_score, m.away_score, previous.home, previous.away)
-                    {
+                    if let (Some(home), Some(away)) = (m.home_score, m.away_score) {
                         if u64::from(home) + u64::from(away) > previous.high_water {
                             alerts.push((
                                 format!("{}:score:{home}:{away}", m.id),
@@ -302,6 +310,69 @@ mod tests {
         let alerts = plan(&mut s, now() + Duration::minutes(20));
         assert_eq!(alerts.len(), 1);
         assert!(alerts[0].0.ends_with(":start"));
+    }
+
+    #[test]
+    fn first_goal_survives_a_scheduled_to_live_provider_jump() {
+        let mut s = fixture();
+        s.matches[0].kickoff = (now() + Duration::minutes(2)).to_rfc3339();
+        s.matches[0].home_score = None;
+        s.matches[0].away_score = None;
+        subscribe(&mut s, true);
+        plan(&mut s, now());
+        s.matches[0].status = "live".into();
+        s.matches[0].home_score = Some(1);
+        s.matches[0].away_score = Some(0);
+        let alerts = plan(&mut s, now() + Duration::minutes(3));
+        assert!(
+            alerts.iter().any(|(id, _)| id == "match-1:score:1:0"),
+            "{alerts:?}"
+        );
+    }
+
+    #[test]
+    fn stale_or_forfeit_scheduled_jumps_do_not_invent_a_goal() {
+        for case in ["stale", "forfeit"] {
+            let mut s = fixture();
+            s.matches[0].kickoff = (now() + Duration::minutes(2)).to_rfc3339();
+            s.matches[0].home_score = None;
+            s.matches[0].away_score = None;
+            subscribe(&mut s, true);
+            plan(&mut s, now());
+            s.matches[0].status = "live".into();
+            s.matches[0].home_score = Some(1);
+            s.matches[0].away_score = Some(0);
+            if case == "forfeit" {
+                s.matches[0].detail = crate::provider::FORFEIT_DETAIL.into();
+            }
+            let at = if case == "stale" {
+                now() + Duration::minutes(6)
+            } else {
+                now() + Duration::minutes(3)
+            };
+            assert!(
+                !plan(&mut s, at)
+                    .iter()
+                    .any(|(id, _)| id.contains(":score:")),
+                "{case}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_scheduled_to_fulltime_jump_does_not_create_a_goal() {
+        let mut s = fixture();
+        s.matches[0].kickoff = (now() + Duration::minutes(2)).to_rfc3339();
+        s.matches[0].home_score = None;
+        s.matches[0].away_score = None;
+        subscribe(&mut s, true);
+        plan(&mut s, now());
+        s.matches[0].status = "fulltime".into();
+        s.matches[0].home_score = Some(1);
+        s.matches[0].away_score = Some(0);
+        assert!(!plan(&mut s, now() + Duration::minutes(3))
+            .iter()
+            .any(|(id, _)| id.contains(":score:")));
     }
 
     #[test]

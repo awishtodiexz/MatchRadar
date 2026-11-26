@@ -548,6 +548,7 @@ pub(crate) fn apply_settings_at(
     let effects = SettingsEffects::between(&snapshot.settings, &settings);
     snapshot.settings = settings;
     crate::delivery::cleanup(snapshot, now);
+    crate::delivery::queue_cached_reminders(snapshot, now);
     effects
 }
 // Feed completion only updates feed fields, preserving preferences saved during I/O.

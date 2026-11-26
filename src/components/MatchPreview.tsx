@@ -8,11 +8,15 @@ type Leader = NonNullable<MatchSummary['leaders']>[number];
 type FormGame = NonNullable<MatchSummary['form']>[string][number];
 type Predictor = NonNullable<MatchSummary['predictor']>;
 
-const formScore = (score: string, atHome: boolean) => {
+const formScore = (score: string, atHome: boolean, result?: string) => {
   const parts = score.split('-').map(Number);
   if (parts.length !== 2 || parts.some((n) => !Number.isFinite(n))) return score;
-  return atHome ? `${parts[0]}–${parts[1]}` : `${parts[1]}–${parts[0]}`;
+  let [team, opp] = atHome ? [parts[0], parts[1]] : [parts[1], parts[0]];
+  if ((result === 'W' && team < opp) || (result === 'L' && team > opp)) [team, opp] = [opp, team];
+  return `${team}–${opp}`;
 };
+
+const formDay = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
 
 /** Plain figures only: "1,024" and " 38 " parse; anything else (n/a, 12%, empty) is NaN and not comparable. */
 const numeric = (value: unknown): number => {
@@ -74,9 +78,7 @@ function predictorShares(predictor: Predictor | null | undefined): [number, numb
 
 const dayLabel = (value?: string | null) => {
   const date = value ? new Date(value) : null;
-  return date && !Number.isNaN(date.getTime())
-    ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date)
-    : undefined;
+  return date && !Number.isNaN(date.getTime()) ? formDay.format(date) : undefined;
 };
 
 const tally = (games: FormGame[]) => {
@@ -86,7 +88,7 @@ const tally = (games: FormGame[]) => {
 
 function FormPill({ game, latest }: { game: FormGame; latest: boolean }) {
   const opponent = (game.opponent ?? '').trim() || 'Unknown opponent';
-  const score = game.score ? formScore(game.score, game.atHome) : '';
+  const score = game.score ? formScore(game.score, game.atHome, game.result) : '';
   const day = dayLabel(game.date);
   const outcome = game.result === 'W' ? 'Win' : game.result === 'L' ? 'Loss' : 'Draw';
   const summary = [`${game.atHome ? 'vs' : '@'} ${opponent}`, score, day].filter(Boolean).join(' · ');
@@ -117,7 +119,7 @@ function FormRow({ team, games }: { team: Team; games: FormGame[] }) {
         {latest && (
           <small>
             Last: {latest.atHome ? 'vs' : '@'} {latest.opponent}{' '}
-            {latest.score && formScore(latest.score, latest.atHome)}
+            {latest.score && formScore(latest.score, latest.atHome, latest.result)}
           </small>
         )}
       </div>

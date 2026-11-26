@@ -1,8 +1,8 @@
 //! Durable candidates are independent of observation baselines and native submission.
-use crate::model::{Match, NotificationKind, PendingNotification, Snapshot};
+use crate::model::{AlertBaseline, Match, NotificationKind, PendingNotification, Snapshot};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Deserializer};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 const MAX_PENDING: usize = 64;
 const MAX_ATTEMPTS: u8 = 5;
@@ -211,8 +211,9 @@ fn queue_candidates(
     observed: &Snapshot,
     candidates: Vec<(String, String)>,
     now: DateTime<Utc>,
-) -> usize {
+) -> (usize, HashSet<String>) {
     let mut overflow = 0;
+    let mut overflowed = HashSet::new();
     for (event_id, body) in candidates {
         if snapshot
             .pending_notifications
@@ -236,9 +237,50 @@ fn queue_candidates(
             snapshot.pending_notifications.push(event);
         } else {
             overflow += 1;
+            overflowed.insert(event.match_id.clone());
         }
     }
-    overflow
+    (overflow, overflowed)
+}
+
+fn restore_overflowed_state(
+    snapshot: &mut Snapshot,
+    pre_baselines: &HashMap<String, AlertBaseline>,
+    pre_sent: &[String],
+    overflowed: &HashSet<String>,
+) {
+    for match_id in overflowed {
+        if let Some(baseline) = pre_baselines.get(match_id) {
+            snapshot
+                .alert_baselines
+                .insert(match_id.clone(), baseline.clone());
+        } else {
+            snapshot.alert_baselines.remove(match_id);
+        }
+    }
+    let overflowed_id = |id: &str| {
+        overflowed.iter().any(|match_id| {
+            id.len() > match_id.len()
+                && id.starts_with(match_id)
+                && id.as_bytes()[match_id.len()] == b':'
+        })
+    };
+    let post_sent = snapshot.sent_notifications.clone();
+    let mut restored = pre_sent.to_vec();
+    for id in pre_sent {
+        if !overflowed_id(id) && !post_sent.contains(id) {
+            if let Some(position) = restored.iter().position(|candidate| candidate == id) {
+                restored.remove(position);
+            }
+        }
+    }
+    for id in post_sent
+        .iter()
+        .filter(|id| !pre_sent.contains(id) && !overflowed_id(id))
+    {
+        restored.push(id.clone());
+    }
+    snapshot.sent_notifications = restored;
 }
 
 /// Called only with newly confirmed observations; retries never re-run the planner.
@@ -246,10 +288,15 @@ pub fn enqueue(snapshot: &mut Snapshot, score_ids: &[String], now: DateTime<Utc>
     crate::alerts::cleanup(snapshot, now);
     cleanup(snapshot, now);
     let mut observed = crate::refresh::notification_view(snapshot, score_ids);
+    let pre_baselines = observed.alert_baselines.clone();
+    let pre_sent = observed.sent_notifications.clone();
     let candidates = crate::alerts::plan(&mut observed, now);
     snapshot.alert_baselines = observed.alert_baselines.clone();
     snapshot.sent_notifications = observed.sent_notifications.clone();
-    let overflow = queue_candidates(snapshot, &observed, candidates, now);
+    let (overflow, overflowed) = queue_candidates(snapshot, &observed, candidates, now);
+    if !overflowed.is_empty() {
+        restore_overflowed_state(snapshot, &pre_baselines, &pre_sent, &overflowed);
+    }
     cleanup(snapshot, now);
     overflow
 }
@@ -408,11 +455,14 @@ pub fn submit_due(
 // a poll cycle that failed both fixtures and scores still has everything a reminder
 // needs. Score events stay out of this path because only a newly confirmed response
 // may advance their baselines.
-fn queue_cached_reminders(snapshot: &mut Snapshot, now: DateTime<Utc>) {
+pub(crate) fn queue_cached_reminders(snapshot: &mut Snapshot, now: DateTime<Utc>) {
     let mut observed = snapshot.clone();
     observed
         .matches
         .retain(|m| m.status == "scheduled" && !m.score_stale);
+    crate::alerts::cleanup(&mut observed, now);
+    let pre_baselines = observed.alert_baselines.clone();
+    let pre_sent = observed.sent_notifications.clone();
     let candidates: Vec<_> = crate::alerts::plan(&mut observed, now)
         .into_iter()
         .filter(|(event_id, _)| event_id.ends_with(":reminder"))
@@ -423,7 +473,10 @@ fn queue_cached_reminders(snapshot: &mut Snapshot, now: DateTime<Utc>) {
         return;
     }
     cleanup(snapshot, now);
-    queue_candidates(snapshot, &observed, candidates, now);
+    let (_, overflowed) = queue_candidates(snapshot, &observed, candidates, now);
+    if !overflowed.is_empty() {
+        restore_overflowed_state(snapshot, &pre_baselines, &pre_sent, &overflowed);
+    }
     cleanup(snapshot, now);
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { competitionLeagues, competitionSlug } from './freshness';
+import { isAppVisible, subscribeVisibility } from './windowVisibility';
 import type { CompetitionView, LeagueResults, Match } from './types';
 
 export interface RecentResults {
@@ -31,7 +32,7 @@ export function useRecentResults(enabled: boolean, view: CompetitionView = 'prem
     let timer: ReturnType<typeof setInterval> | undefined;
     const load = (initial: boolean) => {
       if (disposed || inFlight) return;
-      if (document.visibilityState === 'hidden') {
+      if (!isAppVisible()) {
         if (initial && !attemptedRef.current) {
           attemptedRef.current = true;
           setAttempted(true);
@@ -76,17 +77,18 @@ export function useRecentResults(enabled: boolean, view: CompetitionView = 'prem
         });
     };
     const visible = () => {
-      if (document.visibilityState !== 'hidden' && enabled) load(false);
+      if (isAppVisible() && enabled) load(false);
     };
+    let unsubscribe: (() => void) | undefined;
     if (enabled) {
       load(!attemptedRef.current);
       timer = setInterval(() => load(false), REFRESH_MS);
-      document.addEventListener('visibilitychange', visible);
+      unsubscribe = subscribeVisibility(visible);
     } else setLoading(false);
     return () => {
       disposed = true;
       if (timer) clearInterval(timer);
-      document.removeEventListener('visibilitychange', visible);
+      unsubscribe?.();
     };
   }, [enabled, revision, view]);
   const pendingView = requestedView !== null && requestedView !== view;

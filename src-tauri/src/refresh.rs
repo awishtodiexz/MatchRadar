@@ -193,7 +193,36 @@ pub fn apply_league(
             .iter()
             .filter_map(|m| m.shootout.map(|s| ((m.id.clone(), m.kickoff.clone()), s)))
             .collect();
-        base = provider::merge(base, updates);
+        // Do not let a stale yesterday scheduled record overwrite a match that
+        // was already postponed/cancelled or rescheduled to a future kickoff.
+        let existing_by_id: std::collections::HashMap<&str, &Match> =
+            base.iter().map(|m| (m.id.as_str(), m)).collect();
+        let filtered_updates: Vec<Match> = updates
+            .into_iter()
+            .filter(|update| {
+                if update.status != "scheduled" {
+                    return true;
+                }
+                let Some(existing) = existing_by_id.get(update.id.as_str()) else {
+                    return true;
+                };
+                let (Ok(existing_kickoff), Ok(update_kickoff)) = (
+                    DateTime::parse_from_rfc3339(&existing.kickoff),
+                    DateTime::parse_from_rfc3339(&update.kickoff),
+                ) else {
+                    return true;
+                };
+                let existing_kickoff = existing_kickoff.with_timezone(&Utc);
+                let update_kickoff = update_kickoff.with_timezone(&Utc);
+                if matches!(existing.status.as_str(), "postponed" | "cancelled")
+                    && update_kickoff <= existing_kickoff
+                {
+                    return false;
+                }
+                !(update_kickoff < now && existing_kickoff > now)
+            })
+            .collect();
+        base = provider::merge(base, filtered_updates);
         for m in &mut base {
             if m.status == "fulltime" && m.shootout.is_none() {
                 if let Some(tally) = tallies.get(&(m.id.clone(), m.kickoff.clone())) {
@@ -769,5 +798,22 @@ mod tests {
             s.matches.iter().find(|m| m.id == "pen").unwrap().shootout,
             Some(crate::model::Shootout { home: 4, away: 3 })
         );
+    }
+    #[test]
+    fn stale_yesterday_scheduled_daily_record_does_not_overwrite_rescheduled_fixture() {
+        let rescheduled = fixture("resched", "scheduled", 5, 0);
+        let mut stale_yesterday = rescheduled.clone();
+        stale_yesterday.kickoff = (now() - Duration::hours(12)).to_rfc3339();
+        let mut s = Snapshot::default();
+        apply_league(
+            &mut s,
+            Competition::PremierLeague,
+            good(vec![rescheduled.clone()]),
+            good(vec![stale_yesterday]),
+            now(),
+        );
+        let saved = s.matches.iter().find(|m| m.id == "resched").unwrap();
+        assert_eq!(saved.kickoff, rescheduled.kickoff);
+        assert_eq!(saved.status, "scheduled");
     }
 }

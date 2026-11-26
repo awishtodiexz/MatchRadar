@@ -63,10 +63,7 @@ const minuteSeconds = (minute: string) => {
 };
 const eventSeconds = (event: Event) => minuteSeconds(event.minute) ?? event.seconds;
 const chronological = (events: Event[]) =>
-  [...events].sort(
-    (a, b) =>
-      a.period - b.period || eventSeconds(a) - eventSeconds(b) || a.seconds - b.seconds || a.id.localeCompare(b.id),
-  );
+  [...events].sort((a, b) => a.period - b.period || eventSeconds(a) - eventSeconds(b) || a.seconds - b.seconds);
 
 export function FootballIcon({ size = 14 }: { size?: number }) {
   return (
