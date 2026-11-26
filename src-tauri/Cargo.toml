@@ -1,6 +1,6 @@
 [package]
 name = "matchradar"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2021"
 description = "A compact Premier League and Champions League widget for Windows."
 repository = "https://github.com/awishtodiexz/MatchRadar"

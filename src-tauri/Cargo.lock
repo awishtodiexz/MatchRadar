@@ -2177,7 +2177,7 @@ dependencies = [
 
 [[package]]
 name = "matchradar"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "chrono",
  "reqwest 0.12.28",
