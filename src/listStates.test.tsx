@@ -95,6 +95,23 @@ describe('list states', () => {
     expect(screen.getByText('NOT CONNECTED')).toBeTruthy();
     expect(document.querySelector('.error-banner')).toBeNull();
   });
+  it('omits the dead retry action in the browser-only preview', async () => {
+    useApp.setState({ snapshot: null, loading: false, error: 'Match data is available in the desktop app.' });
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Unable to load matches' })).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toContain('Match data is available in the desktop app.');
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+  it('says fixtures are being checked when switching to an unchecked competition', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: /Competition: Premier League.*Change competition/ }));
+    fireEvent.click(screen.getByRole('option', { name: /^Champions League/ }));
+    expect(await screen.findByRole('heading', { name: 'Checking Champions League fixtures' })).toBeTruthy();
+    expect(screen.getByText('Fixtures will appear when the first check completes.')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'No fixtures in this window' })).toBeNull();
+    expect(screen.queryByText(/No Champions League matches are available/)).toBeNull();
+    expect(screen.getByText('CONNECTING')).toBeTruthy();
+  });
   it('returns focus to the first recovered card after showing filtered-out matches', async () => {
     await load({
       ...structuredClone(mockSnapshot),
@@ -360,6 +377,28 @@ describe('list states', () => {
     );
     expect(document.querySelector('.detail-score')?.textContent).toContain('4 – 1');
     expect(document.querySelector('.detail-score')?.textContent).not.toContain('Saved');
+  });
+
+  it('marks a scheduled match saved when it disappears while open, but not a full-time result', () => {
+    render(<App />);
+    fireEvent.click(document.querySelector('[data-match-id="demo-3"] .match-open')!);
+    expect(screen.getByRole('heading', { name: 'Match details' })).toBeTruthy();
+    act(() =>
+      useApp.setState({
+        snapshot: { ...mockSnapshot, matches: mockSnapshot.matches.filter((m) => m.id !== 'demo-3') },
+      }),
+    );
+    expect(document.querySelector('.detail-status')?.textContent).toContain('Kick-off');
+    expect(document.querySelector('.detail-status')?.textContent).toContain('Saved');
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    fireEvent.click(document.querySelector('[data-match-id="demo-5"] .match-open')!);
+    act(() =>
+      useApp.setState({
+        snapshot: { ...mockSnapshot, matches: mockSnapshot.matches.filter((m) => m.id !== 'demo-5') },
+      }),
+    );
+    expect(document.querySelector('.detail-status')?.textContent).toContain('FULL-TIME');
+    expect(document.querySelector('.detail-status')?.textContent).not.toContain('Saved');
   });
 
   it('announces selected tabs, implements arrow/Home/End navigation and restores Settings focus', () => {

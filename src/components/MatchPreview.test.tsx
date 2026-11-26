@@ -228,3 +228,21 @@ it('never renders undefined or NaN in a full summary', () => {
   );
   expect(container.textContent).not.toMatch(/undefined|NaN/);
 });
+
+it.each(['1-0', '0-1'])('renders a home-loss form score %s from the team perspective', (score) => {
+  const form = {
+    h: [{ opponent: 'Arsenal', opponentId: 'ars', result: 'L', score, atHome: true, date: null }],
+  };
+  const { container } = show(summary({ form }));
+  expect(container.querySelector('.form-tip')?.textContent).toContain('vs Arsenal · 0–1');
+  expect(container.querySelector('.form-name small')?.textContent).toContain('Last: vs Arsenal 0–1');
+});
+
+it.each(['2-1', '1-2'])('renders an away-win form score %s from the team perspective', (score) => {
+  const form = {
+    h: [{ opponent: 'Arsenal', opponentId: 'ars', result: 'W', score, atHome: false, date: null }],
+  };
+  const { container } = show(summary({ form }));
+  expect(container.querySelector('.form-tip')?.textContent).toContain('@ Arsenal · 2–1');
+  expect(container.querySelector('.form-name small')?.textContent).toContain('Last: @ Arsenal 2–1');
+});

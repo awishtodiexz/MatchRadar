@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { isAppVisible, subscribeVisibility } from './windowVisibility';
 export interface MatchScorer {
   teamId: string;
   teamName: string;
@@ -102,7 +103,7 @@ export function useMatchSummary(id: string, active: boolean, finished = false) {
     let disposed = false;
     let inFlight = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const visible = () => document.visibilityState !== 'hidden';
+    const visible = () => isAppVisible();
     const native = isTauri();
     setState((old) => ({
       id,
@@ -137,11 +138,11 @@ export function useMatchSummary(id: string, active: boolean, finished = false) {
       if (visible() && native) void read();
     };
     if (native) void read();
-    document.addEventListener('visibilitychange', visibility);
+    const unsubscribe = subscribeVisibility(visibility);
     return () => {
       disposed = true;
       clearTimeout(timer);
-      document.removeEventListener('visibilitychange', visibility);
+      unsubscribe();
     };
   }, [id, active, finished, retry]);
   // Manual refresh bypasses the 15-minute provider cache (Rust enforces a 30s floor).

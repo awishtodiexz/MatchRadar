@@ -241,14 +241,18 @@ function CardMenu({
     const outside = (event: Event) => {
       if (!(event.target instanceof Node) || !menu.current?.contains(event.target)) latestClose.current(false);
     };
-    const blurred = () => latestClose.current(false);
+    const dismissed = () => latestClose.current(false);
     document.addEventListener('mousedown', outside);
     document.addEventListener('focusin', outside);
-    window.addEventListener('blur', blurred);
+    window.addEventListener('blur', dismissed);
+    window.addEventListener('scroll', dismissed, true);
+    window.addEventListener('resize', dismissed);
     return () => {
       document.removeEventListener('mousedown', outside);
       document.removeEventListener('focusin', outside);
-      window.removeEventListener('blur', blurred);
+      window.removeEventListener('blur', dismissed);
+      window.removeEventListener('scroll', dismissed, true);
+      window.removeEventListener('resize', dismissed);
     };
   }, []);
   const run = (action: () => void) => () => {

@@ -3,10 +3,12 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { useMatchSummary } from './useMatchSummary';
 import type { MatchSummary } from './useMatchSummary';
+import { setNativeVisible } from './windowVisibility';
 const bridge = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => true, invoke: bridge.invoke }));
 afterEach(() => {
   cleanup();
+  setNativeVisible(true);
   vi.resetAllMocks();
   vi.restoreAllMocks();
   vi.useRealTimers();
@@ -80,6 +82,22 @@ it('pauses detail polling while hidden and reconciles on visibility return', asy
   expect(bridge.invoke).toHaveBeenCalledTimes(1);
   visibility = 'visible';
   await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+  expect(bridge.invoke).toHaveBeenCalledTimes(2);
+  unmount();
+});
+
+it('pauses detail polling while the native window is hidden even when the document stays visible', async () => {
+  vi.useFakeTimers();
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  bridge.invoke.mockResolvedValue(detail('1'));
+  const { unmount } = renderHook(() => useMatchSummary('1', true));
+  await act(async () => {});
+  expect(bridge.invoke).toHaveBeenCalledTimes(1);
+  act(() => setNativeVisible(false));
+  await act(async () => vi.advanceTimersByTimeAsync(180000));
+  expect(bridge.invoke).toHaveBeenCalledTimes(1);
+  act(() => setNativeVisible(true));
+  await act(async () => {});
   expect(bridge.invoke).toHaveBeenCalledTimes(2);
   unmount();
 });

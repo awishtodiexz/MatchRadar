@@ -77,6 +77,16 @@ describe('score tracking', () => {
     expect(trackScores([match('a', 1)], unavailable, 2000).scoreChanges).toEqual({});
   });
 
+  it('returns the same state object when neither scores nor highlights change', () => {
+    const initial = trackScores([match('a', 1), match('b', 2)], emptyTracking(), 1000);
+    expect(trackScores([match('a', 1), match('b', 2)], initial, 31_000)).toBe(initial);
+    const changed = trackScores([match('a', 2), match('b', 2)], initial, 32_000);
+    expect(changed.scoreChanges.a).toEqual({ at: 32_000, home: true, away: false });
+    const expired = trackScores([match('a', 2), match('b', 2)], changed, 32_000 + lifetime);
+    expect(expired).not.toBe(changed);
+    expect(expired.scoreChanges).toEqual({});
+  });
+
   it('preserves scores through a missing snapshot and flags changes after recovery', async () => {
     const snapshot = structuredClone(mockSnapshot);
     useApp.setState({ snapshot, loading: false, error: null });

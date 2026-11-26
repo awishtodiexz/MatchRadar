@@ -53,6 +53,34 @@ pub fn fixtures_due(snapshot: &Snapshot, league: Competition, now: DateTime<Utc>
             !(0..360).contains(&minutes)
         })
 }
+#[allow(dead_code)]
+pub fn scores_due(snapshot: &Snapshot, league: Competition, now: DateTime<Utc>) -> bool {
+    let per_league = snapshot
+        .league_status
+        .get(league.slug())
+        .and_then(|status| status.updated_at.clone());
+    let legacy = (league == Competition::PremierLeague && snapshot.league_status.is_empty())
+        .then(|| snapshot.updated_at.clone())
+        .flatten();
+    let Some(updated) = per_league.or(legacy) else {
+        return true;
+    };
+    let Ok(updated) = DateTime::parse_from_rfc3339(&updated) else {
+        return true;
+    };
+    let updated = updated.with_timezone(&Utc);
+    if updated > now {
+        return true;
+    }
+    let league_matches: Vec<_> = snapshot
+        .matches
+        .iter()
+        .filter(|m| m.league == league)
+        .cloned()
+        .collect();
+    let cadence = base_poll_seconds(&league_matches, now);
+    now.signed_duration_since(updated).num_seconds() >= cadence.saturating_sub(5) as i64
+}
 pub fn failure_delay(failures: u32, retry_after: Option<u64>) -> u64 {
     // A server-requested cooldown is honoured, but a bogus header must not freeze
     // updates for days. 60s..1h keeps Retry-After useful and recoverable.
@@ -152,6 +180,109 @@ mod tests {
         assert_eq!(base_poll_seconds(&[at("fulltime", -120, now)], now), 1800);
         assert_eq!(base_poll_seconds(&[], now), 1800);
     }
+    #[test]
+    fn scores_due_uses_each_leagues_own_cadence() {
+        let now = Utc::now();
+        let mut s = Snapshot::default();
+        let mut ucl = at("live", -20, now);
+        ucl.league = Competition::ChampionsLeague;
+        let pl = at("fulltime", -120, now);
+        s.matches = vec![ucl, pl];
+        for league in Competition::ALL {
+            s.league_status.insert(
+                league.slug().into(),
+                crate::model::LeagueStatus {
+                    updated_at: Some(now.to_rfc3339()),
+                    ..crate::model::LeagueStatus::default()
+                },
+            );
+        }
+        assert!(!scores_due(
+            &s,
+            Competition::ChampionsLeague,
+            now + chrono::Duration::seconds(30)
+        ));
+        assert!(scores_due(
+            &s,
+            Competition::ChampionsLeague,
+            now + chrono::Duration::seconds(60)
+        ));
+        assert!(!scores_due(
+            &s,
+            Competition::PremierLeague,
+            now + chrono::Duration::seconds(60)
+        ));
+        assert!(!scores_due(
+            &s,
+            Competition::PremierLeague,
+            now + chrono::Duration::seconds(1790)
+        ));
+        assert!(scores_due(
+            &s,
+            Competition::PremierLeague,
+            now + chrono::Duration::seconds(1800)
+        ));
+    }
+
+    #[test]
+    fn scores_due_uses_matchday_cadence_and_recovers_bad_timestamps() {
+        let now = Utc::now();
+        let mut s = Snapshot::default();
+        assert!(scores_due(&s, Competition::PremierLeague, now));
+        s.matches = vec![at("scheduled", 120, now)];
+        s.league_status.insert(
+            Competition::PremierLeague.slug().into(),
+            crate::model::LeagueStatus {
+                updated_at: Some(now.to_rfc3339()),
+                ..crate::model::LeagueStatus::default()
+            },
+        );
+        assert!(!scores_due(
+            &s,
+            Competition::PremierLeague,
+            now + chrono::Duration::seconds(240)
+        ));
+        assert!(scores_due(
+            &s,
+            Competition::PremierLeague,
+            now + chrono::Duration::seconds(300)
+        ));
+        s.league_status
+            .get_mut(Competition::PremierLeague.slug())
+            .unwrap()
+            .updated_at = Some("not a timestamp".into());
+        assert!(scores_due(&s, Competition::PremierLeague, now));
+        s.league_status
+            .get_mut(Competition::PremierLeague.slug())
+            .unwrap()
+            .updated_at = Some((now + chrono::Duration::minutes(1)).to_rfc3339());
+        assert!(scores_due(&s, Competition::PremierLeague, now));
+    }
+
+    #[test]
+    fn scores_due_uses_legacy_premier_league_timestamp_only_without_rows() {
+        let now = Utc::now();
+        let s = Snapshot {
+            updated_at: Some(now.to_rfc3339()),
+            ..Snapshot::default()
+        };
+        assert!(!scores_due(
+            &s,
+            Competition::PremierLeague,
+            now + chrono::Duration::seconds(60)
+        ));
+        assert!(scores_due(
+            &s,
+            Competition::PremierLeague,
+            now + chrono::Duration::seconds(1800)
+        ));
+        assert!(scores_due(
+            &s,
+            Competition::ChampionsLeague,
+            now + chrono::Duration::seconds(1800)
+        ));
+    }
+
     #[test]
     fn wakes_and_mode_changes_do_not_advance_deadline() {
         let now = Instant::now();

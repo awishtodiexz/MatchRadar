@@ -81,6 +81,19 @@ fn incidents_keep_card_reasons_names_and_substitution_context() {
     ));
 }
 #[test]
+fn assisted_goal_text_still_identifies_the_scorer() {
+    let body = "Goal! Arsenal 1, Chelsea 0. Bukayo Saka (Arsenal) left footed shot. Assisted by Martin Odegaard.";
+    assert_eq!(
+        scorer_from_text(body),
+        Some(("Bukayo Saka".to_owned(), "Arsenal".to_owned()))
+    );
+    assert_eq!(
+        event_participants(&serde_json::json!({}), body),
+        vec!["Bukayo Saka"]
+    );
+}
+
+#[test]
 fn shootout_penalties_are_timeline_events_not_goalscorers() {
     // Captured from uefa.champions summary?event=401862897 (2026 final,
     // Paris Saint-Germain 1-1 Arsenal, PSG won 4-3 on penalties).
@@ -298,6 +311,54 @@ fn commentary_merges_provider_ids_preserves_long_text_and_does_not_make_goal_kic
         "ambiguous commentary must remain neutral"
     );
 }
+#[test]
+fn repeated_commentary_events_at_different_minutes_are_kept() {
+    let v: Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/summary-live-compact.json"
+    ))
+    .unwrap();
+    let d = normalize(&v, "401879244", Competition::PremierLeague).unwrap();
+    let minutes_for = |text: &str| {
+        d.events
+            .iter()
+            .filter(|event| event.text == text)
+            .map(|event| event.minute.as_str())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        minutes_for("Offside, Brentford. Kevin Schade is caught offside."),
+        ["3'", "72'"]
+    );
+    assert_eq!(
+        minutes_for("Foul by Chema Andrés (Brighton and Hove Albion)."),
+        ["8'", "21'"]
+    );
+}
+
+#[test]
+fn same_minute_commentary_keeps_espn_sequence_order() {
+    let v: Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/summary-live-compact.json"
+    ))
+    .unwrap();
+    let d = normalize(&v, "401879244", Competition::PremierLeague).unwrap();
+    let texts: Vec<_> = d
+        .events
+        .iter()
+        .filter(|event| event.period == 2 && event.seconds == 2700.0)
+        .map(|event| event.text.as_str())
+        .collect();
+    assert_eq!(
+        texts,
+        [
+            "Substitution, Brentford. Yehor Yarmoliuk replaces Dango Ouattara.",
+            "Second Half begins Brighton and Hove Albion 2, Brentford 0.",
+            "Substitution, Brentford. Nathan Collins replaces Aaron Hickey.",
+            "Substitution, Brighton and Hove Albion. Mats Wieffer replaces Chema Andrés."
+        ]
+    );
+}
+
 #[test]
 fn live_summary_keeps_compact_participants_and_accepts_old_photo_caches() {
     let mut v: Value = serde_json::from_str(include_str!(
@@ -1122,6 +1183,18 @@ async fn final_phase_bypasses_live_pregame_and_legacy_cache_until_provider_confi
 }
 
 #[test]
+fn content_equality_ignores_only_freshness_and_error_metadata() {
+    let a = example();
+    let mut b = a.clone();
+    b.updated_at = "2027-01-01T00:00:00Z".into();
+    b.stale = true;
+    b.error = Some("offline".into());
+    assert!(a.content_eq(&b));
+    b.events[0].text.push_str(" changed");
+    assert!(!a.content_eq(&b));
+}
+
+#[test]
 fn recorded_summary_exposes_final_provider_phase_and_rejects_invalid_cached_phase() {
     let mut d = example();
     assert_eq!(d.match_state.as_deref(), Some("post"));
@@ -1275,6 +1348,30 @@ fn predictor_falls_back_to_bookmaker_moneylines() {
 }
 
 #[test]
+fn normalized_predictor_rounding_drift_goes_to_the_largest_share() {
+    let p = normalized_predictor(1.0, 1.0, 1.0, "espn", None).unwrap();
+    assert!((p.home - 33.4).abs() < 1e-9, "{p:?}");
+    assert!((p.draw - 33.3).abs() < 1e-9, "{p:?}");
+    assert!((p.away - 33.3).abs() < 1e-9, "{p:?}");
+    assert!((p.home + p.draw + p.away - 100.0).abs() < 1e-9);
+
+    let mut v = pregame();
+    v["odds"] = serde_json::json!([{
+        "homeTeamOdds": {"moneyLine": 100},
+        "drawOdds": {"moneyLine": 250},
+        "awayTeamOdds": {"moneyLine": 250}
+    }]);
+    let p = normalize(&v, "1", Competition::PremierLeague)
+        .unwrap()
+        .predictor
+        .unwrap();
+    assert!((p.home - 46.6).abs() < 1e-9, "{p:?}");
+    assert!((p.draw - 26.7).abs() < 1e-9, "{p:?}");
+    assert!((p.away - 26.7).abs() < 1e-9, "{p:?}");
+    assert!((p.home + p.draw + p.away - 100.0).abs() < 1e-9);
+}
+
+#[test]
 fn predictor_is_absent_without_all_three_usable_moneylines() {
     let mut v = pregame();
     v["odds"] = serde_json::json!([{
@@ -1334,6 +1431,40 @@ fn standings_keep_only_the_two_clubs_across_every_group() {
             ("20".to_owned(), 4, 12, None)
         ]
     );
+}
+
+#[test]
+fn form_scores_use_home_away_order_from_structured_espn_scores() {
+    let mut v = pregame();
+    v["lastFiveGames"] = serde_json::json!([{
+        "team": {"id": "10"},
+        "events": [
+            {"opponent": {"id": "1", "displayName": "Alpha"}, "gameResult": "L", "score": "1-0", "homeTeamScore": "0", "awayTeamScore": "1", "atVs": "vs"},
+            {"opponent": {"id": "2", "displayName": "Beta"}, "gameResult": "W", "score": "2-1", "homeTeamScore": 1, "awayTeamScore": 2, "atVs": "@"}
+        ]
+    }]);
+    let d = normalize(&v, "1", Competition::PremierLeague).unwrap();
+    let games = &d.form["10"];
+    assert_eq!(games[0].score, "0-1");
+    assert_eq!(games[1].score, "1-2");
+}
+
+#[test]
+fn form_score_fallback_orients_winner_first_text_as_home_away() {
+    let mut v = pregame();
+    v["lastFiveGames"] = serde_json::json!([{
+        "team": {"id": "10"},
+        "events": [
+            {"opponent": {"id": "1", "displayName": "Alpha"}, "gameResult": "L", "score": "1-0", "atVs": "vs"},
+            {"opponent": {"id": "2", "displayName": "Beta"}, "gameResult": "W", "score": "2-1", "atVs": "@"},
+            {"opponent": {"id": "3", "displayName": "Gamma"}, "gameResult": "L", "score": "3-2", "homeTeamScore": -1, "awayTeamScore": "2", "atVs": "vs"}
+        ]
+    }]);
+    let d = normalize(&v, "1", Competition::PremierLeague).unwrap();
+    let games = &d.form["10"];
+    assert_eq!(games[0].score, "0-1");
+    assert_eq!(games[1].score, "1-2");
+    assert_eq!(games[2].score, "2-3");
 }
 
 #[test]
@@ -1505,4 +1636,95 @@ async fn forced_refresh_bypasses_only_entries_at_least_thirty_seconds_old() {
         .await
         .unwrap();
     assert!(cooled.stale);
+}
+
+#[test]
+fn scorer_from_text_handles_initials_own_goals_and_assists() {
+    assert_eq!(
+        scorer_from_text(
+            "Goal! Arsenal 1, Chelsea 0. J. Doe (Arsenal) header from the centre of the box. Assisted by Bukayo Saka (Arsenal)."
+        ),
+        Some(("J. Doe".into(), "Arsenal".into()))
+    );
+    assert_eq!(
+        scorer_from_text("Own Goal by Marc Cucurella, Chelsea. Arsenal 1, Chelsea 0."),
+        Some(("Marc Cucurella".into(), "Chelsea".into()))
+    );
+    assert_eq!(
+        scorer_from_text("Goal! Own Goal by Marc Cucurella, Chelsea. Arsenal 1, Chelsea 0."),
+        Some(("Marc Cucurella".into(), "Chelsea".into()))
+    );
+    assert_eq!(
+        scorer_from_text("Goal! Arsenal 1, Chelsea 0. Assisted by Martin Odegaard (Arsenal)."),
+        None
+    );
+}
+
+#[test]
+fn form_score_rejects_out_of_range_integers_and_falls_back_cleanly() {
+    let huge = serde_json::json!({
+        "homeTeamScore": "99999999999999999999",
+        "awayTeamScore": 1,
+        "score": "2-1",
+    });
+    assert_eq!(form_score(&huge, "L", true), "1-2");
+}
+
+#[test]
+fn mixed_sequenced_and_unsequenced_same_minute_events_sort_transitively() {
+    let payload = serde_json::json!({
+        "header": {
+            "id": "401879268",
+            "competitions": [{
+                "status": { "type": { "state": "in" } },
+                "competitors": [
+                    { "homeAway": "home", "team": { "id": "359", "displayName": "Arsenal" } },
+                    { "homeAway": "away", "team": { "id": "363", "displayName": "Chelsea" } }
+                ]
+            }]
+        },
+        "keyEvents": [
+            {
+                "id": "2",
+                "clock": { "displayValue": "45'", "value": 2700 },
+                "period": { "number": 1 },
+                "type": { "type": "yellow-card", "text": "Yellow Card" },
+                "text": "Card without sequence"
+            }
+        ],
+        "commentary": [
+            {
+                "sequence": 20,
+                "time": { "displayValue": "45'", "value": 2700 },
+                "play": {
+                    "id": "1",
+                    "period": { "number": 1 },
+                    "clock": { "displayValue": "45'", "value": 2700 },
+                    "type": { "type": "foul", "text": "Foul" }
+                },
+                "text": "Later sequenced play"
+            },
+            {
+                "sequence": 10,
+                "time": { "displayValue": "45'", "value": 2700 },
+                "play": {
+                    "id": "3",
+                    "period": { "number": 1 },
+                    "clock": { "displayValue": "45'", "value": 2700 },
+                    "type": { "type": "foul", "text": "Foul" }
+                },
+                "text": "Earlier sequenced play"
+            }
+        ]
+    });
+    let details = normalize(&payload, "401879268", Competition::PremierLeague).unwrap();
+    let texts: Vec<&str> = details.events.iter().map(|e| e.text.as_str()).collect();
+    assert_eq!(
+        texts,
+        vec![
+            "Earlier sequenced play",
+            "Later sequenced play",
+            "Card without sequence",
+        ]
+    );
 }

@@ -32,6 +32,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { CompetitionPicker } from './components/CompetitionPicker';
 import { TickerView } from './components/TickerView';
 import { tickerMatches } from './ticker';
+import { setNativeVisible } from './windowVisibility';
 import type { MatchDetailsHandle } from './components/MatchDetails';
 import type { MatchMemory } from './matchMemory';
 
@@ -51,9 +52,11 @@ type ScoreTracking = {
 export function trackScores(matches: Match[], current: ScoreTracking, now: number): ScoreTracking {
   const previousScores: ScoreTracking['previousScores'] = new Map();
   const scoreChanges: ScoreTracking['scoreChanges'] = {};
+  let changed = matches.length !== current.previousScores.size;
   for (const match of matches) {
     const previous = current.previousScores.get(match.id);
     const change = current.scoreChanges[match.id];
+    if (!previous || previous[0] !== match.homeScore || previous[1] !== match.awayScore) changed = true;
     if (change && now - change.at < SCORE_CHANGE_MS) scoreChanges[match.id] = change;
     if (
       previous &&
@@ -62,15 +65,23 @@ export function trackScores(matches: Match[], current: ScoreTracking, now: numbe
       match.homeScore != null &&
       match.awayScore != null &&
       (previous[0] !== match.homeScore || previous[1] !== match.awayScore)
-    )
+    ) {
       scoreChanges[match.id] = {
         at: now,
         home: previous[0] !== match.homeScore,
         away: previous[1] !== match.awayScore,
       };
+      changed = true;
+    }
     previousScores.set(match.id, [match.homeScore, match.awayScore]);
   }
-  return { previousScores, scoreChanges };
+  for (const id of Object.keys(current.scoreChanges)) {
+    if (scoreChanges[id] !== current.scoreChanges[id]) {
+      changed = true;
+      break;
+    }
+  }
+  return changed ? { previousScores, scoreChanges } : current;
 }
 
 const followsTeam = (match: Match, favorites: string[]) =>
@@ -110,6 +121,7 @@ export default function App() {
   const [tickerBrowseId, setTickerBrowseId] = useState<string | null>(null);
   const [tickerPinned, setTickerPinned] = useState<Match | null>(null);
   const detailRefresh = useRef<MatchDetailsHandle>(null);
+  const refreshCooldownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const matchSessions = useRef(new Map<string, MatchMemory>());
   const settingsReturn = useRef<'home' | 'detail'>('home');
   const [detailBusy, setDetailBusy] = useState(false);
@@ -206,6 +218,7 @@ export default function App() {
   };
   const back = () => setView(view === 'settings' ? settingsReturn.current : 'home');
   const openSettings = () => {
+    if (!settings) return;
     if (view === 'home') {
       rememberHome();
       restoreFocus.current = 'settings-control';
@@ -244,7 +257,9 @@ export default function App() {
     setSelected((current) => {
       if (!current) return current;
       const fresh = allMatches?.find((m) => m.id === current.id);
-      return fresh ?? (isInProgress(current) && !current.scoreStale ? { ...current, scoreStale: true } : current);
+      if (fresh) return fresh;
+      const missing = current.status !== 'fulltime' && (allMatches != null || isInProgress(current));
+      return missing && !current.scoreStale ? { ...current, scoreStale: true } : current;
     });
   }, [allMatches]);
   useEffect(() => {
@@ -263,53 +278,88 @@ export default function App() {
       return current.scoreStale ? current : { ...current, scoreStale: true };
     });
   }, [allMatches]);
+  const mounted = useRef(true);
   useEffect(() => {
-    void load();
-    if (!native) return;
-    let disposed = false;
-    const listeners: Array<() => void> = [];
-    for (const [event, callback] of [
-      [
-        'snapshot-updated',
-        () => {
-          void load();
-        },
-      ],
-      [
-        'open-settings',
-        () => {
-          homeScroll.current = root.current?.querySelector('.match-list')?.scrollTop ?? homeScroll.current;
-          if (previousView.current !== 'settings')
-            settingsReturn.current = previousView.current === 'detail' ? 'detail' : 'home';
-          if (previousView.current === 'home') restoreFocus.current = 'settings-control';
-          setView('settings');
-          void setTickerMode(false);
-        },
-      ],
-      [
-        'shortcut-unavailable',
-        () => {
-          let shown = false;
-          try {
-            shown = localStorage.getItem(SHORTCUT_NOTICE_KEY) === '1';
-            localStorage.setItem(SHORTCUT_NOTICE_KEY, '1');
-          } catch {
-            /* Storage unavailable: show the notice this session. */
-          }
-          if (!shown) useApp.setState({ error: SHORTCUT_MESSAGE });
-        },
-      ],
-    ] as const) {
-      void listen(event, callback)
-        .then((fn) => {
-          if (disposed) fn();
-          else listeners.push(fn);
-        })
-        .catch(() => useApp.setState({ error: 'Could not subscribe to desktop updates.' }));
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      setNativeVisible(true);
+      if (refreshCooldownTimer.current) clearTimeout(refreshCooldownTimer.current);
+    };
+  }, []);
+  useEffect(() => {
+    if (!native) {
+      void load();
+      return;
     }
+    let disposed = false;
+    let visibilityReceived = false;
+    const listeners: Array<() => void> = [];
+    const registrations = [
+      listen('snapshot-updated', () => {
+        void load();
+      }),
+      listen('open-settings', () => {
+        homeScroll.current = root.current?.querySelector('.match-list')?.scrollTop ?? homeScroll.current;
+        if (previousView.current !== 'settings')
+          settingsReturn.current = previousView.current === 'detail' ? 'detail' : 'home';
+        if (previousView.current === 'home') restoreFocus.current = 'settings-control';
+        setView('settings');
+        void setTickerMode(false);
+      }),
+      listen('shortcut-unavailable', () => {
+        let shown = false;
+        try {
+          shown = localStorage.getItem(SHORTCUT_NOTICE_KEY) === '1';
+          localStorage.setItem(SHORTCUT_NOTICE_KEY, '1');
+        } catch {
+          /* Storage unavailable: show the notice this session. */
+        }
+        if (!shown) useApp.setState({ error: SHORTCUT_MESSAGE });
+      }),
+      listen<boolean>('window-visibility', (event) => {
+        visibilityReceived = true;
+        setNativeVisible(Boolean(event.payload));
+      }),
+    ].map((registration) =>
+      registration.then((unlisten) => {
+        if (disposed) unlisten();
+        else listeners.push(unlisten);
+        return unlisten;
+      }),
+    );
+    const reconcileInitialVisibility = () => {
+      try {
+        const win = getCurrentWindow();
+        if (typeof win?.isVisible !== 'function') return;
+        void win
+          .isVisible()
+          .then((visible) => {
+            if (!disposed && !visibilityReceived && typeof visible === 'boolean') setNativeVisible(visible);
+          })
+          .catch(() => {});
+      } catch {
+        /* Native window metadata is unavailable outside the desktop webview. */
+      }
+    };
+    void Promise.all(registrations)
+      .then(() => {
+        if (!disposed) {
+          reconcileInitialVisibility();
+          void load();
+        }
+      })
+      .catch(() => {
+        useApp.setState({ error: 'Could not subscribe to desktop updates.' });
+        if (!disposed) {
+          reconcileInitialVisibility();
+          void load();
+        }
+      });
     return () => {
       disposed = true;
       listeners.forEach((fn) => fn());
+      listeners.length = 0;
     };
   }, [load, native, setTickerMode]);
   useEffect(() => {
@@ -450,6 +500,13 @@ export default function App() {
     ? competitionLeagues(competitionView).some((league) => !snapshot.leagueStatus?.[competitionSlug(league)]?.updatedAt)
     : !viewStatus.updatedAt;
   const feedUnavailable = !snapshot && !loading;
+  const fixturesUnconfirmed =
+    !feedUnavailable &&
+    !competitionMatches.length &&
+    !viewStatus.updatedAt &&
+    !viewStatus.fixtureUpdatedAt &&
+    !viewStatus.error &&
+    (snapshot?.leagueStatus != null || !!allMatches?.length || (!snapshot?.updatedAt && !snapshot?.fixtureUpdatedAt));
   // No confirmed score timestamp and no recorded failure means the first score
   // check for this competition has not completed. That is a checking state, not
   // an unavailable one, even when no refresh happens to be in flight (for
@@ -489,55 +546,74 @@ export default function App() {
     competition: competitionView === 'both' ? 'live' : competitionName(competitionView),
     both: competitionView === 'both',
   });
-  const emptyTitle = feedUnavailable
-    ? 'Unable to load matches'
-    : (liveEmpty?.title ??
-      (listError
-        ? historyView
-          ? 'Unable to update results'
-          : viewStatus.partial
-            ? 'Some updates are unavailable'
-            : 'Unable to update matches'
-        : followingEmpty
-          ? 'No matches involving followed clubs'
-          : upcomingEmpty
-            ? 'No upcoming matches'
-            : historyView
-              ? 'No recent results'
-              : viewEmpty
-                ? 'No fixtures in this window'
-                : 'No matches'));
-  const emptyMessage = feedUnavailable
-    ? (error ?? 'The widget’s saved fixtures could not be loaded. Try again in a moment.')
-    : (liveEmpty?.message ??
-      (listError
-        ? historyView
-          ? 'Could not update results. Any saved results remain available.'
-          : viewStatus.partial
-            ? 'Available data was saved, but some updates could not be confirmed.'
-            : 'Could not update the feed. Any saved fixtures remain available.'
-        : followingEmpty
-          ? settings?.favorites.length
-            ? 'Your followed clubs have no matches in this competition window.'
-            : 'Follow a club in Settings to see its matches here.'
-          : upcomingEmpty
-            ? `No ${competitionMatchesLabel} are scheduled in the next ${windowLabel} days.`
-            : historyView
-              ? `No completed ${competitionMatchesLabel} were found recently.`
-              : `No ${competitionMatchesLabel} are available for the next ${windowLabel} days.`));
-  const emptyAction = feedUnavailable
-    ? 'retry'
-    : liveEmpty?.canShowAll || followingEmpty || upcomingEmpty
-      ? 'show'
-      : (liveEmpty && liveStatusUnavailable) || listError
-        ? 'retry'
-        : null;
   const waiting = historyView
     ? recent.loading && !matches.length
-    : !allMatches?.length &&
+    : !competitionMatches.length &&
       (loading ||
         (!!snapshot?.refreshing && !viewStatus.updatedAt && !viewStatus.fixtureUpdatedAt && !viewStatus.error));
+  const checkingFixtures = !historyView && !waiting && fixturesUnconfirmed && matchView !== 'Live';
+  const emptyTitle = feedUnavailable
+    ? 'Unable to load matches'
+    : checkingFixtures
+      ? competitionView === 'both'
+        ? 'Checking fixtures'
+        : `Checking ${competitionName(competitionView)} fixtures`
+      : (liveEmpty?.title ??
+        (listError
+          ? historyView
+            ? 'Unable to update results'
+            : viewStatus.partial
+              ? 'Some updates are unavailable'
+              : 'Unable to update matches'
+          : followingEmpty
+            ? 'No matches involving followed clubs'
+            : upcomingEmpty
+              ? 'No upcoming matches'
+              : historyView
+                ? 'No recent results'
+                : viewEmpty
+                  ? 'No fixtures in this window'
+                  : 'No matches'));
+  const emptyMessage = feedUnavailable
+    ? (error ?? 'The widget’s saved fixtures could not be loaded. Try again in a moment.')
+    : checkingFixtures
+      ? 'Fixtures will appear when the first check completes.'
+      : (liveEmpty?.message ??
+        (listError
+          ? historyView
+            ? 'Could not update results. Any saved results remain available.'
+            : viewStatus.partial
+              ? 'Available data was saved, but some updates could not be confirmed.'
+              : 'Could not update the feed. Any saved fixtures remain available.'
+          : followingEmpty
+            ? settings?.favorites.length
+              ? 'Your followed clubs have no matches in this competition window.'
+              : 'Follow a club in Settings to see its matches here.'
+            : upcomingEmpty
+              ? `No ${competitionMatchesLabel} are scheduled in the next ${windowLabel} days.`
+              : historyView
+                ? `No completed ${competitionMatchesLabel} were found recently.`
+                : `No ${competitionMatchesLabel} are available for the next ${windowLabel} days.`));
+  const emptyAction = feedUnavailable
+    ? !native && error === 'Match data is available in the desktop app.'
+      ? null
+      : 'retry'
+    : checkingFixtures
+      ? null
+      : liveEmpty?.canShowAll || followingEmpty || upcomingEmpty
+        ? 'show'
+        : (liveEmpty && liveStatusUnavailable) || listError
+          ? 'retry'
+          : null;
   const busy = refreshing || !!snapshot?.refreshing;
+  useEffect(() => {
+    if (busy || !refreshCooling || (!viewStatus.error && !error)) return;
+    if (refreshCooldownTimer.current) {
+      clearTimeout(refreshCooldownTimer.current);
+      refreshCooldownTimer.current = null;
+    }
+    setRefreshCooling(false);
+  }, [busy, refreshCooling, viewStatus.error, error]);
   // Only claim completeness for windowed views whose data is confirmed fresh.
   const listComplete =
     !waiting &&
@@ -545,8 +621,9 @@ export default function App() {
     matchView !== 'Live' &&
     !listError &&
     (historyView ? !recent.loading : !viewStatus.partial);
-  const refreshBusy =
-    view === 'detail' ? busy || detailBusy : view === 'home' && historyView ? recent.loading : busy || refreshCooling;
+  const refreshSpinning =
+    view === 'detail' ? busy || detailBusy : view === 'home' && historyView ? recent.loading : busy;
+  const refreshBusy = refreshSpinning || (view === 'home' && !historyView && refreshCooling);
   const refreshLabel =
     view === 'detail'
       ? 'Refresh match details and scores'
@@ -582,9 +659,13 @@ export default function App() {
       // instead of letting a successful second click become a silent no-op; a
       // failed refresh stays retryable.
       void doRefresh().then((ok) => {
-        if (!ok) return;
+        if (!ok || !mounted.current) return;
+        if (refreshCooldownTimer.current) clearTimeout(refreshCooldownTimer.current);
         setRefreshCooling(true);
-        setTimeout(() => setRefreshCooling(false), 15_000);
+        refreshCooldownTimer.current = setTimeout(() => {
+          refreshCooldownTimer.current = null;
+          setRefreshCooling(false);
+        }, 15_000);
       });
     }
   };
@@ -721,6 +802,7 @@ export default function App() {
       event.preventDefault();
       refreshCurrent();
     } else if (key === '/' && view !== 'settings') {
+      if (!settings) return;
       event.preventDefault();
       focusClubSearch.current = true;
       openSettings();
@@ -817,6 +899,7 @@ export default function App() {
             onClick={() =>
               void getCurrentWindow()
                 .hide()
+                .then(() => setNativeVisible(false))
                 .catch(() => useApp.setState({ error: 'Could not hide the widget.' }))
             }
             aria-label="Hide widget"
@@ -1080,6 +1163,7 @@ export default function App() {
                   : 'Open Settings'
               }
               onClick={() => (view === 'settings' ? back() : openSettings())}
+              disabled={!settings}
               aria-label="Settings"
               aria-pressed={view === 'settings'}
             >
@@ -1099,9 +1183,9 @@ export default function App() {
               onClick={refreshCurrent}
               disabled={refreshBusy}
               aria-label="Refresh"
-              aria-busy={refreshBusy}
+              aria-busy={refreshSpinning}
             >
-              <RefreshCw size={16} className={refreshBusy ? 'spin' : ''} />
+              <RefreshCw size={16} className={refreshSpinning ? 'spin' : ''} />
             </button>
           </div>
         </footer>

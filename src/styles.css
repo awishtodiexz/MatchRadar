@@ -2330,6 +2330,7 @@ footer {
   display: grid;
 }
 .form-row {
+  position: relative;
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: center;
@@ -2813,15 +2814,15 @@ footer {
 }
 
 /* @slot:T5 form, leaders, predictor */
-.form-pill {
-  position: relative;
-}
 .form-tip {
   position: absolute;
-  bottom: calc(100% + 6px);
+  bottom: calc(100% + 4px);
   right: 0;
   z-index: 20;
-  white-space: nowrap;
+  width: max-content;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: break-word;
   padding: 5px 8px;
   border-radius: 6px;
   background: var(--surface-solid);

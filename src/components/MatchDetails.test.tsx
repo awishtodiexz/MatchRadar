@@ -4,13 +4,19 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { MatchDetails } from './MatchDetails';
 import { defaults, mockMatches } from '../test-fixtures/fixtures';
 import { dateLabel, timeLabel } from '../presentation';
+import { timezoneLabel } from '../countdown';
 const summary = vi.hoisted(() => ({ data: null as unknown }));
 vi.mock('../useMatchSummary', () => ({
   useMatchSummary: () => ({ data: summary.data, loading: false, error: null, retry: vi.fn() }),
 }));
+vi.mock('../countdown', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../countdown')>();
+  return { ...actual, timezoneLabel: vi.fn(() => 'Local') };
+});
 afterEach(() => {
   cleanup();
   summary.data = null;
+  vi.mocked(timezoneLabel).mockReturnValue('Local');
 });
 
 it('uses a compact scoreboard for lineups and restores the full header on Overview', () => {
@@ -143,4 +149,19 @@ it('renders no standings pill when the summary has no standings or only invalid 
   render(<MatchDetails match={match} settings={defaults} back={() => {}} />);
   expect(document.querySelectorAll('.table-pill')).toHaveLength(0);
   expect(document.body.textContent).not.toMatch(/NaN|undefined|null/);
+});
+
+it('never labels an unnamed local time zone as Local time · Local', () => {
+  const kickoff = new Date(Date.now() + (8 * 24 + 4) * 3600_000).toISOString();
+  const match = { ...mockMatches[2], kickoff };
+  const zone = vi.mocked(timezoneLabel);
+
+  zone.mockReturnValue('Local');
+  const { unmount } = render(<MatchDetails match={match} settings={defaults} back={() => {}} />);
+  expect(document.querySelector('.detail-date .tz-badge')?.textContent).toBe('Local time');
+  unmount();
+
+  zone.mockReturnValue('BST');
+  render(<MatchDetails match={match} settings={defaults} back={() => {}} />);
+  expect(document.querySelector('.detail-date .tz-badge')?.textContent).toBe('Local time · BST');
 });

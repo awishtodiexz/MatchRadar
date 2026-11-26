@@ -236,3 +236,20 @@ it('gives a VAR row in compact view a headline and its detail', () => {
   expect(screen.getByText('VAR · No penalty')).toBeTruthy();
   expect(screen.getByText('VAR Decision: No penalty.')).toBeTruthy();
 });
+
+it('preserves backend order for events tied on period, minute and second', () => {
+  const ids = ['55075315', 'c-49', '55075585', '55075391'];
+  const tied: MatchSummary['events'] = ids.map((id) => ({
+    id,
+    minute: "49'",
+    period: 2,
+    seconds: 2940,
+    kind: 'commentary',
+    text: `Tied event ${id}`,
+    teamId: null,
+  }));
+  render(<MatchEvents match={match} events={tied} commentary newestFirst={false} />);
+  expect(screen.getAllByRole('listitem').map((row) => row.querySelector('p')?.textContent)).toEqual(
+    ids.map((id) => `Tied event ${id}`),
+  );
+});

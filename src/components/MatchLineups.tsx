@@ -116,7 +116,8 @@ function buildPitch(players: MatchSummary['players'], formation?: string): Pitch
     const code = positionCode(position);
     if (positionGroup(code) === 'Defenders') return 1;
     if (/^(DM|CDM)/.test(code)) return 2;
-    if (/^(AM|CAM|LW|RW)/.test(code)) return 4;
+    if (/^(AM|CAM|AML|AMR|LW|RW)/.test(code)) return 4;
+    if (/^(F|FW|CF|ST|SS)-(L|R)$/.test(code)) return 4.5;
     return positionGroup(code) === 'Forwards' ? 5 : 3;
   };
   const outfield = xi

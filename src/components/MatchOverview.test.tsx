@@ -298,3 +298,18 @@ it('clamps a long broadcast value to two lines with the full list in a tooltip i
   expect(value.closest('dd')?.classList.contains('ov-clamp')).toBe(true);
   expect(value.closest('dd')?.getAttribute('title')).toBe('USA Network · Telemundo Deportes');
 });
+
+it.each([
+  ['fulltime', 'No goals in this match.'],
+  ['live', 'No goals yet.'],
+] as const)('distinguishes an unknown %s score from a confirmed goalless one', (status, goallessCopy) => {
+  const { unmount } = show({ ...base, status, homeScore: null, awayScore: null }, data);
+  expect(screen.getByText('Score unavailable.')).toBeTruthy();
+  expect(screen.queryByText('No goals in this match.')).toBeNull();
+  expect(screen.queryByText('No goals yet.')).toBeNull();
+  unmount();
+
+  show({ ...base, status, homeScore: 0, awayScore: 0 }, data);
+  expect(screen.getByText(goallessCopy)).toBeTruthy();
+  expect(screen.queryByText('Score unavailable.')).toBeNull();
+});

@@ -169,3 +169,21 @@ it('explains an unavailable squad without inventing players or a formation', () 
   expect(screen.getAllByRole('tab').every((tab) => tab.textContent?.includes('No lineup'))).toBe(true);
   expect(container.querySelector('.pitch-player')).toBeNull();
 });
+
+it('keeps mirrored side forwards together behind a central striker in a 3-4-2-1', () => {
+  const positions = ['G', 'CB', 'CB', 'CB', 'CM', 'CM', 'CM', 'CM', 'F', 'CF-R', 'CF-L'];
+  const squad = positions.map((position, index) => ({
+    teamId: match.home.id,
+    name: `Player ${index + 1}`,
+    position,
+    starter: true,
+    jersey: String(index + 1),
+    formationPlace: index + 1,
+  }));
+  const { container } = renderLineups({ players: squad, formations: { [match.home.id]: '3-4-2-1' } });
+  const rows = [...container.querySelectorAll('.pitch-row')];
+  const names = (row: Element) =>
+    [...row.querySelectorAll('button')].map((button) => button.getAttribute('aria-label'));
+  expect(names(rows[0])).toEqual([expect.stringContaining('Player 9')]);
+  expect(names(rows[1])).toEqual([expect.stringContaining('Player 11'), expect.stringContaining('Player 10')]);
+});

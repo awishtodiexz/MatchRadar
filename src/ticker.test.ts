@@ -37,3 +37,19 @@ it('shows games being played before suspended games, even if the suspended club 
     paused.id,
   ]);
 });
+
+it('keeps scheduled matches in the ticker through the kickoff confirmation grace period', () => {
+  const now = Date.parse('2026-01-01T12:00:00Z');
+  const base = mockSnapshot.matches[2];
+  const at = (id: string, kickoff: string) => ({ ...base, id, kickoff, status: 'scheduled' as const });
+  const twoMinutesPast = at('two-minutes-past', '2026-01-01T11:58:00Z');
+  const tenMinutesPast = at('ten-minutes-past', '2026-01-01T11:50:00Z');
+  const later = at('later', '2026-01-01T12:30:00Z');
+  const fortyFiveMinutesPast = at('forty-five-minutes-past', '2026-01-01T11:15:00Z');
+  const ancient = at('ancient', '2000-01-01T12:00:00Z');
+  expect(
+    tickerMatches([later, fortyFiveMinutesPast, twoMinutesPast, ancient, tenMinutesPast], [], now).map(
+      (match) => match.id,
+    ),
+  ).toEqual(['ten-minutes-past', 'two-minutes-past', 'later']);
+});

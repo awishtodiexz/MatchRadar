@@ -719,6 +719,60 @@ fn full_queue_stays_bounded_and_rescheduled_reminders_are_discarded() {
 }
 
 #[test]
+fn enabling_a_match_bell_inside_the_reminder_window_queues_immediately() {
+    let mut s = subscribed("scheduled");
+    s.matches[0].kickoff = (now() + Duration::minutes(4)).to_rfc3339();
+    s.settings.match_alerts.get_mut("match-1").unwrap().enabled = false;
+    let mut settings = s.settings.clone();
+    settings.match_alerts.get_mut("match-1").unwrap().enabled = true;
+    crate::model::apply_settings_at(&mut s, settings, now());
+    assert!(s
+        .pending_notifications
+        .iter()
+        .any(|event| event.id == "match-1:reminder"));
+}
+
+#[test]
+fn an_overflowed_candidate_keeps_its_baseline_until_queue_space_opens() {
+    let mut s = subscribed("scheduled");
+    s.matches[0].kickoff = (now() + Duration::minutes(10)).to_rfc3339();
+    s.settings.reminder_minutes = 15;
+    s.settings.reminders = true;
+    s.settings.favorites = vec![s.matches[0].home.id.clone()];
+    for i in 0..MAX_PENDING {
+        let match_id = format!("extra-{i}");
+        s.pending_notifications.push(PendingNotification {
+            id: format!("{match_id}:reminder"),
+            match_id,
+            home_team: s.matches[0].home.id.clone(),
+            away_team: s.matches[0].away.id.clone(),
+            body: "queued reminder".into(),
+            kind: NotificationKind::Reminder,
+            created_at: now().to_rfc3339(),
+            expires_at: (now() + Duration::minutes(10)).to_rfc3339(),
+            next_attempt_at: now().to_rfc3339(),
+            attempts: 0,
+        });
+    }
+    assert_eq!(enqueue(&mut s, &[], now()), 1);
+    assert_eq!(s.pending_notifications.len(), MAX_PENDING);
+    assert!(!s
+        .pending_notifications
+        .iter()
+        .any(|event| event.id == "match-1:reminder"));
+    assert!(s
+        .alert_baselines
+        .get("match-1")
+        .is_none_or(|baseline| baseline.reminder_kickoff.is_none()));
+    s.pending_notifications.remove(0);
+    assert_eq!(enqueue(&mut s, &[], now()), 0);
+    assert!(s
+        .pending_notifications
+        .iter()
+        .any(|event| event.id == "match-1:reminder"));
+}
+
+#[test]
 fn cached_kickoff_reminders_are_planned_without_a_provider_response() {
     let mut s = subscribed("scheduled");
     s.matches[0].kickoff = (now() + Duration::minutes(10)).to_rfc3339();

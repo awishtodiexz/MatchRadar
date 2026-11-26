@@ -76,6 +76,7 @@ export function MatchOverview({ match, data }: { match: Match; data: MatchSummar
   // An awarded forfeit score has no goalscorers to report.
   const playing = ['live', 'halftime', 'fulltime', 'suspended'].includes(match.status) && !isForfeit(match);
   const hasGoals = scorers.length > 0 || (match.homeScore ?? 0) + (match.awayScore ?? 0) > 0;
+  const scoresKnown = match.homeScore != null && match.awayScore != null;
   const incidents = (data?.events ?? []).filter((event) => isIncident(event.kind));
   // Only show facts the provider supplied; a column of "Not provided" is noise.
   const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
@@ -207,7 +208,11 @@ export function MatchOverview({ match, data }: { match: Match; data: MatchSummar
             </div>
           ) : (
             <p className="overview-goalless">
-              {match.status === 'fulltime' ? 'No goals in this match.' : 'No goals yet.'}
+              {!scoresKnown
+                ? 'Score unavailable.'
+                : match.status === 'fulltime'
+                  ? 'No goals in this match.'
+                  : 'No goals yet.'}
             </p>
           )}
         </OverviewCard>

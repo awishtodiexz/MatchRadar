@@ -113,3 +113,16 @@ it('does not persist a failed native transition', async () => {
   expect(localStorage.getItem('matchradar.ticker')).toBeNull();
   expect(bridge.setState).toHaveBeenCalledWith({ error: 'Could not resize the widget.' });
 });
+
+it('rolls back the expanded size when ticker exit fails after resizing', async () => {
+  localStorage.setItem('matchradar.ticker', 'true');
+  const { result } = renderHook(useTickerMode);
+  await waitFor(() => expect(bridge.setSize).toHaveBeenCalledWith(new LogicalSize(390, 112)));
+  bridge.setMinSize.mockRejectedValueOnce(new Error('Unavailable'));
+  await act(async () => {
+    expect(await result.current.toggleTicker()).toBe(false);
+  });
+  expect(result.current.ticker).toBe(true);
+  expect(bridge.setSize).toHaveBeenLastCalledWith(new LogicalSize(390, 112));
+  expect(localStorage.getItem('matchradar.ticker')).toBe('true');
+});

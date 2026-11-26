@@ -31,13 +31,14 @@ const ordinal = (n: number) =>
 function Countdown({ kickoff }: { kickoff: string }) {
   const now = useNow(15000);
   const label = countdownLabel(kickoff, now);
+  const tz = timezoneLabel(now);
   return label ? (
     <>
       <span className="countdown" aria-live="off">
         {label}
       </span>
       <span className="tz-badge" title={`Times shown in your local time zone (${zone})`}>
-        Local time · {timezoneLabel(now)}
+        {tz === 'Local' ? 'Local time' : `Local time · ${tz}`}
       </span>
     </>
   ) : (
